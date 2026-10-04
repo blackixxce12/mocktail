@@ -129,6 +129,8 @@ class RowBinding {
                                   Markup(spec_.title).c_str());
     if (ADW_IS_ACTION_ROW(row)) {
       adw_action_row_set_subtitle_lines(ADW_ACTION_ROW(row), 0);
+    } else if (ADW_IS_EXPANDER_ROW(row)) {
+      adw_expander_row_set_subtitle_lines(ADW_EXPANDER_ROW(row), 0);
     }
     env_badge_ = NewEnvBadge();
     gtk_widget_set_visible(env_badge_, FALSE);
@@ -274,11 +276,15 @@ class RowBinding {
       adw_entry_row_add_suffix(ADW_ENTRY_ROW(row_), widget);
     } else if (ADW_IS_ACTION_ROW(row_)) {
       adw_action_row_add_suffix(ADW_ACTION_ROW(row_), widget);
+    } else if (ADW_IS_EXPANDER_ROW(row_)) {
+      adw_expander_row_add_suffix(ADW_EXPANDER_ROW(row_), widget);
     }
   }
   virtual void SetSubtitle(const std::string& markup) {
     if (ADW_IS_ACTION_ROW(row_)) {
       adw_action_row_set_subtitle(ADW_ACTION_ROW(row_), markup.c_str());
+    } else if (ADW_IS_EXPANDER_ROW(row_)) {
+      adw_expander_row_set_subtitle(ADW_EXPANDER_ROW(row_), markup.c_str());
     }
   }
 
@@ -510,6 +516,7 @@ class ComboBinding final : public RowBinding {
 
  protected:
   void SyncControl(const std::string& value) override {
+    if (combo_.options_for) combo_.options = combo_.options_for(*context_);
     Rebuild(value);
     const int position = PositionOf(value);
     if (position >= 0 && adw_combo_row_get_selected(ADW_COMBO_ROW(row_)) !=
@@ -574,18 +581,21 @@ class ComboBinding final : public RowBinding {
       visible.push_back(-1);
       custom_value = value;
     }
+    std::vector<std::string> labels;
+    for (const int index : visible) {
+      labels.push_back(
+          index < 0 ? Format(_("%s (from config.yaml)"), custom_value.c_str())
+                    : combo_.options[static_cast<std::size_t>(index)].label);
+    }
+    // Computed options (ComboSpec::options_for) may relabel an entry.
     if (visible == visible_ && custom_value == custom_value_ &&
+        labels == labels_ &&
         g_list_model_get_n_items(G_LIST_MODEL(model_)) == visible.size()) {
       return;
     }
     visible_ = std::move(visible);
     custom_value_ = std::move(custom_value);
-    std::vector<std::string> labels;
-    for (const int index : visible_) {
-      labels.push_back(
-          index < 0 ? Format(_("%s (from config.yaml)"), custom_value_.c_str())
-                    : combo_.options[static_cast<std::size_t>(index)].label);
-    }
+    labels_ = labels;
     std::vector<const char*> pointers;
     for (const std::string& label : labels) pointers.push_back(label.c_str());
     pointers.push_back(nullptr);
@@ -727,6 +737,7 @@ class ComboBinding final : public RowBinding {
   ComboSpec combo_;
   GtkStringList* model_ = nullptr;
   std::vector<int> visible_;
+  std::vector<std::string> labels_;
   std::string custom_value_;
 };
 

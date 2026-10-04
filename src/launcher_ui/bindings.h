@@ -124,6 +124,10 @@ struct ComboSpec {
   bool enable_search = false;
   // The "Custom…" option was chosen (reveal a spin row, open a dialog).
   std::function<void(LauncherContext& context)> on_custom;
+  // Options that depend on this computer or on other settings (audio
+  // devices, the display's refresh rate). When set, the list is computed
+  // again on every refresh and replaces `options`.
+  std::function<std::vector<ComboOption>(LauncherContext& context)> options_for;
 };
 
 struct SpinSpec {
@@ -162,8 +166,8 @@ GtkWidget* BindEntryRow(LauncherContext* context, RowSpec spec,
 
 // For rows the page drives itself (navigation rows, buttons, read-only
 // information): adds the subtitle, the info button and the search entry the
-// bound rows get. `row` is an AdwActionRow (or subclass); spec.key may be
-// empty. Returns `row`.
+// bound rows get. `row` is an AdwActionRow (or subclass) or an
+// AdwExpanderRow; spec.key may be empty. Returns `row`.
 GtkWidget* DecorateRow(LauncherContext* context, GtkWidget* row, RowSpec spec);
 
 // Re-evaluates every row's subtitle, badges and value (after a page changed
