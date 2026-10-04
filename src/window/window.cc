@@ -30,6 +30,7 @@
 #include "window/video_driver_policy.h"
 #include "window/vulkan_present_progress_gate.h"
 #include "window/vulkan_surface_recovery_gate.h"
+#include "window/web_surface_fullscreen_guard.h"
 #include "window/window_fullscreen_request_gate.h"
 #include "window/window_fullscreen_state_sync.h"
 #include "window/window_creation_policy.h"
@@ -160,6 +161,7 @@ static MainThreadCommandGate g_pre_text_input_pump_gate;
 static WindowFullscreenRequestGate g_fullscreen_request_gate;
 static RobloxFullscreenMenuRequestGate g_fullscreen_menu_request_gate;
 static WindowFullscreenStateSync g_fullscreen_state_sync;
+static WebSurfaceFullscreenGuard g_web_surface_fullscreen_guard;
 static std::unique_ptr<WindowResizeReadinessGate> g_resize_readiness_gate;
 static std::unique_ptr<SdlTextInputBackend> g_text_input_backend;
 static std::unique_ptr<WindowTextInputOwner> g_text_input_owner;
@@ -1097,6 +1099,7 @@ bool Init(int width, int height, const char* title) {
   g_state.fullscreen_readiness_present_baseline = 0;
   g_fullscreen_request_gate.Reset();
   g_fullscreen_menu_request_gate.Reset();
+  g_web_surface_fullscreen_guard.ResetWindow();
   g_real_swap_count.store(0, std::memory_order_relaxed);
 
   if (!ConfigureGraphicsBackendBeforeSDL()) {
@@ -1514,6 +1517,8 @@ std::string GetParentWindowHandleForHelpers() {
   SDL_UnlockProperties(properties);
   return handle;
 }
+void NoteWebSurfaceOpened() { g_web_surface_fullscreen_guard.SurfaceOpened(); }
+void NoteWebSurfaceClosed() { g_web_surface_fullscreen_guard.SurfaceClosed(); }
 bool UsesDirectVulkan() { return g_state.direct_vulkan; }
 bool PollWindowSurfaceEvent(WindowSurfaceEvent* event) {
   return g_window_surface_lifecycle.Poll(event);
@@ -1988,6 +1993,7 @@ bool RequestFullscreenState(bool fullscreen, const char* reason) {
   if (g_state.sdl_window == nullptr) {
     return false;
   }
+  g_web_surface_fullscreen_guard.NoteGameRequest(fullscreen);
   const bool current_fullscreen =
       (SDL_GetWindowFlags(g_state.sdl_window) & SDL_WINDOW_FULLSCREEN) != 0;
   if (current_fullscreen != fullscreen) {
@@ -2048,6 +2054,19 @@ void MaybeApplyRobloxFullscreenMenuRequest() {
   }
   if (!RequestFullscreenToggle("Roblox menu")) {
     fprintf(stderr, "  [fullscreen] rejected Roblox menu toggle request\n");
+  }
+}
+
+// The compositor took the game out of fullscreen to tile a web surface beside
+// it; that surface is gone now.
+void MaybeRestoreFullscreenAfterWebSurfaces() {
+  if (!g_web_surface_fullscreen_guard.TakeRestore()) {
+    return;
+  }
+  if (!RequestFullscreenState(true, "web surface closed")) {
+    fprintf(stderr,
+            "  [fullscreen] could not return to fullscreen after the web "
+            "surface\n");
   }
 }
 
@@ -2193,6 +2212,7 @@ bool PumpEvents() {
   MaybeSynchronizeRestoredFullscreenState();
   MaybeApplyRobloxFullscreenMenuRequest();
   MaybeApplyAndroidFullscreenRequest();
+  MaybeRestoreFullscreenAfterWebSurfaces();
   MaybeRequestResizeReadiness();
   MaybeRequestFullscreenReadiness();
   MaybeQueueInputReadinessSequence();
@@ -2282,6 +2302,8 @@ bool PumpEvents() {
       if (fullscreen_changed) {
         g_state.persisted_window.fullscreen =
             event.type == SDL_EVENT_WINDOW_ENTER_FULLSCREEN;
+        g_web_surface_fullscreen_guard.NoteFullscreenChanged(
+            event.type == SDL_EVENT_WINDOW_ENTER_FULLSCREEN);
       }
       MarkWindowStateDirty(fullscreen_changed);
     }
@@ -2513,6 +2535,7 @@ void Shutdown() {
   g_state.persisted_window = {};
   g_fullscreen_request_gate.Reset();
   g_fullscreen_menu_request_gate.Reset();
+  g_web_surface_fullscreen_guard.ResetWindow();
   g_real_swap_count.store(0, std::memory_order_relaxed);
   g_first_present_ticks_ns.store(0, std::memory_order_relaxed);
   g_resize_readiness_gate.reset();

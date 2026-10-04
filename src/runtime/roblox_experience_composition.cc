@@ -252,6 +252,32 @@ WebViewHelperLaunchOptions ResolveWebSurfaceParent(const char* transport) {
   return options;
 }
 
+// Counts a WebView helper as an open surface of the game window for as long as
+// its exit observer lives: the detached reaper drops the observer once the
+// helper has exited, and a launch that spawns no helper drops it at once.
+struct GameWindowSurfaceClaim {
+  GameWindowSurfaceClaim() { window::NoteWebSurfaceOpened(); }
+  ~GameWindowSurfaceClaim() { window::NoteWebSurfaceClosed(); }
+  GameWindowSurfaceClaim(const GameWindowSurfaceClaim&) = delete;
+  GameWindowSurfaceClaim& operator=(const GameWindowSurfaceClaim&) = delete;
+
+  WebViewHelperExitObserver observer;
+};
+
+void GameWindowSurfaceExited(void* context) {
+  auto* claim = static_cast<GameWindowSurfaceClaim*>(context);
+  if (claim != nullptr && claim->observer.valid()) {
+    claim->observer.on_exit(claim->observer.context.get());
+  }
+}
+
+WebViewHelperExitObserver ClaimGameWindowSurface(
+    WebViewHelperExitObserver observer) {
+  auto claim = std::make_shared<GameWindowSurfaceClaim>();
+  claim->observer = std::move(observer);
+  return WebViewHelperExitObserver{std::move(claim), &GameWindowSurfaceExited};
+}
+
 Status LaunchRobloxWebSurface(
     const std::string& url, const char* transport,
     WebViewHelperExitObserver exit_observer = {},
@@ -272,7 +298,8 @@ Status LaunchRobloxWebSurface(
   std::fprintf(stderr, "  [%s] opening validated Roblox web surface\n",
                transport);
   const WebViewHelperLaunchResult launched =
-      LaunchWebViewHelper(helper, url, std::move(exit_observer),
+      LaunchWebViewHelper(helper, url,
+                          ClaimGameWindowSurface(std::move(exit_observer)),
                           ResolveWebSurfaceParent(transport));
   if (!launched) {
     return Unavailable("could not display Roblox web surface: " +

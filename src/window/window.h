@@ -114,6 +114,14 @@ void* GetBackendWindow();
 // the window is hidden or the compositor exports no handle. Any thread.
 std::string GetParentWindowHandleForHelpers();
 
+// A WebView helper process of the game started or ended. Any thread; every
+// opened surface must be closed exactly once. If the compositor takes the
+// game out of fullscreen while one runs (it tiled the surface beside the game
+// because it could not be told the surface is the game's child), PumpEvents
+// asks for fullscreen again once the last one has closed.
+void NoteWebSurfaceOpened();
+void NoteWebSurfaceClosed();
+
 bool UsesDirectVulkan();
 
 // Returns nullptr before Init() or without a GL backend.

@@ -587,6 +587,15 @@ target_link_libraries(window_fullscreen_request_gate_test PRIVATE
 )
 mocktail_apply_compile_options(window_fullscreen_request_gate_test)
 
+add_executable(web_surface_fullscreen_guard_test
+  web_surface_fullscreen_guard_test.cc
+)
+target_link_libraries(web_surface_fullscreen_guard_test PRIVATE
+  mocktail_window
+  GTest::gtest_main
+)
+mocktail_apply_compile_options(web_surface_fullscreen_guard_test)
+
 add_executable(window_state_store_test
   window_state_store_test.cc
 )
@@ -1004,6 +1013,7 @@ gtest_discover_tests(window_creation_policy_test)
 gtest_discover_tests(window_game_surface_bridge_test)
 gtest_discover_tests(window_resize_readiness_gate_test)
 gtest_discover_tests(window_fullscreen_request_gate_test)
+gtest_discover_tests(web_surface_fullscreen_guard_test)
 gtest_discover_tests(window_state_store_test)
 gtest_discover_tests(roblox_fullscreen_menu_request_gate_test)
 gtest_discover_tests(roblox_fullscreen_runtime_bridge_test)

@@ -473,6 +473,7 @@ endforeach()
 add_library(mocktail_window STATIC
   src/window/roblox_fullscreen_menu_request_gate.cc
   src/window/video_driver_policy.cc
+  src/window/web_surface_fullscreen_guard.cc
   src/window/window.cc
   src/window/window_creation_policy.cc
   src/window/window_fullscreen_request_gate.cc
