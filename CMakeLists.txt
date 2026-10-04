@@ -666,6 +666,7 @@ if(MOCKTAIL_BUILD_LAUNCHER_UI)
     src/launcher_ui/network_updates_page.cc
     src/launcher_ui/pages.cc
     src/launcher_ui/performance_page.cc
+    src/launcher_ui/selftest.cc
     src/launcher_ui/style.cc
     src/launcher_ui/window.cc
   )

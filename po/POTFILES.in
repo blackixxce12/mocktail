@@ -12,4 +12,5 @@ src/launcher_ui/launcher_context.cc
 src/launcher_ui/network_updates_page.cc
 src/launcher_ui/pages.cc
 src/launcher_ui/performance_page.cc
+src/launcher_ui/selftest.cc
 src/launcher_ui/window.cc

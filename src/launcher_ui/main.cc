@@ -8,6 +8,7 @@
 
 #include <cerrno>
 #include <charconv>
+#include <clocale>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -18,6 +19,7 @@
 
 #include "launcher_ui/i18n.h"
 #include "launcher_ui/launcher_context.h"
+#include "launcher_ui/selftest.h"
 #include "launcher_ui/style.h"
 #include "launcher_ui/window.h"
 #include "runtime/launcher_ui_launch.h"
@@ -27,9 +29,11 @@ namespace {
 using mocktail::launcher_ui::LauncherContext;
 using mocktail::launcher_ui::LauncherOptions;
 using mocktail::launcher_ui::LauncherWindow;
+using mocktail::launcher_ui::Selftest;
 using mocktail::launcher_ui::WindowOptions;
 
 struct Arguments {
+  std::filesystem::path selftest_directory;
   std::filesystem::path config_file;
   WindowOptions window;
   std::string section;
@@ -38,6 +42,7 @@ struct Arguments {
 constexpr char kUsage[] =
     "Usage: mocktail_launcher_ui [--size WxH] [--section ID] "
     "[--config FILE]\n"
+    "       mocktail_launcher_ui --selftest OUT_DIR [--size WxH]\n"
     "Mocktail runs this window itself before Roblox starts; run\n"
     "`mocktail --launcher` to open it.\n";
 
@@ -68,7 +73,9 @@ bool ParseArguments(int argc, char** argv, Arguments* arguments) {
   for (int index = 1; index < argc; ++index) {
     const std::string_view argument = argv[index];
     const bool has_value = index + 1 < argc;
-    if (argument == "--size" && has_value) {
+    if (argument == "--selftest" && has_value) {
+      arguments->selftest_directory = std::filesystem::absolute(argv[++index]);
+    } else if (argument == "--size" && has_value) {
       if (!ParseSize(argv[++index], &arguments->window)) return false;
     } else if (argument == "--config" && has_value) {
       arguments->config_file = std::filesystem::absolute(argv[++index]);
@@ -123,6 +130,7 @@ struct Application {
   Arguments arguments;
   LauncherContext* context = nullptr;
   std::unique_ptr<LauncherWindow> window;
+  std::unique_ptr<Selftest> selftest;
 };
 
 void Activate(GApplication* application, gpointer data) {
@@ -142,6 +150,13 @@ void Activate(GApplication* application, gpointer data) {
   // seconds on a cold start.
   app->context->StartMachineDetection();
   app->context->StartFileMonitor();
+  if (!app->arguments.selftest_directory.empty()) {
+    app->selftest = std::make_unique<Selftest>(
+        ADW_APPLICATION(application), app->context, app->window.get(),
+        app->arguments.selftest_directory);
+    Selftest* selftest = app->selftest.get();
+    app->window->OnReady([selftest] { selftest->Start(); });
+  }
   app->window->Present();
 }
 
@@ -154,15 +169,32 @@ int main(int argc, char** argv) {
     std::fputs(kUsage, stderr);
     return 2;
   }
+  const bool selftest = !app.arguments.selftest_directory.empty();
+  if (selftest) {
+    std::string error;
+    if (!mocktail::launcher_ui::PrepareSelftestEnvironment(
+            app.arguments.selftest_directory, &error)) {
+      std::fprintf(stderr, "mocktail-launcher-ui selftest: %s\n",
+                   error.c_str());
+      return 1;
+    }
+  }
   mocktail::launcher_ui::InitTranslations(argv[0]);
   // Settle the theme before libadwaita starts (KDE sets this and libadwaita
   // warns about it, as in the failure dialog).
   if (!gtk_init_check()) {
     std::fputs("mocktail-launcher-ui: cannot open a display\n", stderr);
     // No window: let Roblox start as if Play was pressed.
-    Report(result_descriptor, mocktail::runtime::LauncherUiResult::kPlay);
+    if (!selftest) {
+      Report(result_descriptor, mocktail::runtime::LauncherUiResult::kPlay);
+    }
     return 1;
   }
+  // gtk_init set every category from the environment. Numbers are parsed
+  // and printed by runtime code (config values, JSON) that expects '.' as
+  // the decimal point, as in the game process; only messages and text
+  // follow the user's locale.
+  setlocale(LC_NUMERIC, "C");
   g_object_set(gtk_settings_get_default(), "gtk-application-prefer-dark-theme",
                FALSE, nullptr);
   g_set_application_name("Mocktail");
@@ -180,6 +212,7 @@ int main(int argc, char** argv) {
   const char* created = std::getenv(
       std::string(mocktail::runtime::kLauncherUiConfigCreatedVariable).c_str());
   options.config_created = created != nullptr && std::strcmp(created, "1") == 0;
+  options.selftest = selftest;
   auto context = std::make_unique<LauncherContext>(options);
   context->Load();
   app.context = context.get();
@@ -190,10 +223,16 @@ int main(int argc, char** argv) {
   char* run_argv[] = {argv[0], nullptr};
   const int status = g_application_run(G_APPLICATION(application), 1, run_argv);
   const mocktail::runtime::LauncherUiResult outcome = context->outcome();
+  const int selftest_status =
+      app.selftest != nullptr ? app.selftest->exit_code() : 1;
+  app.selftest.reset();
   app.window.reset();
   g_object_unref(application);
   context.reset();
 
+  if (selftest) {
+    return status != 0 ? status : selftest_status;
+  }
   Report(result_descriptor, outcome);
   return status;
 }

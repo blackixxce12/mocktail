@@ -1,0 +1,673 @@
+#include "launcher_ui/selftest.h"
+
+#include <clocale>
+#include <cstdio>
+#include <cstdlib>
+#include <fstream>
+#include <nlohmann/json.hpp>
+#include <string>
+#include <system_error>
+#include <utility>
+
+#include "launcher/config_document.h"
+#include "launcher/window_state_file.h"
+#include "launcher_ui/bindings.h"
+#include "launcher_ui/i18n.h"
+#include "runtime/launcher_ui_launch.h"
+#include "runtime/runtime_config_bootstrap.h"
+
+namespace mocktail::launcher_ui {
+namespace {
+
+constexpr char kBindingPageName[] = "selftest-bindings";
+constexpr guint kSettleMilliseconds = 450;
+constexpr guint kResizeMilliseconds = 1800;
+constexpr int kMachineWaitLimit = 150;  // x 100 ms
+
+// The rows the self-test adds on its hidden page; they have no hints.
+constexpr const char* kSelftestKeys[] = {"launcher.show_on_start",
+                                         "performance.memory_limit_mb",
+                                         "window.title", "appearance.theme"};
+
+// Every icon the window and the pages use.
+constexpr const char* kIcons[] = {
+    "video-display-symbolic",
+    "view-fullscreen-symbolic",
+    "power-profile-performance-symbolic",
+    "audio-speakers-symbolic",
+    "avatar-default-symbolic",
+    "application-x-addon-symbolic",
+    "network-transmit-receive-symbolic",
+    "preferences-other-symbolic",
+    "help-about-symbolic",
+    "system-search-symbolic",
+    "open-menu-symbolic",
+    "media-playback-start-symbolic",
+    "dialog-information-symbolic",
+    "dialog-warning-symbolic",
+    "edit-undo-symbolic",
+    "go-next-symbolic",
+};
+
+std::string Quote(const std::string& text) {
+  return nlohmann::json(text).dump(-1, ' ', false,
+                                   nlohmann::json::error_handler_t::replace);
+}
+
+bool WriteFile(const std::filesystem::path& path, const std::string& bytes,
+               std::string* error) {
+  std::ofstream output(path, std::ios::binary | std::ios::trunc);
+  output << bytes;
+  if (!output) {
+    *error = "cannot write " + path.string();
+    return false;
+  }
+  return true;
+}
+
+guint FindModelPosition(GtkWidget* combo_row, const std::string& label) {
+  GListModel* model = adw_combo_row_get_model(ADW_COMBO_ROW(combo_row));
+  const guint count = g_list_model_get_n_items(model);
+  for (guint position = 0; position < count; ++position) {
+    GtkStringObject* item =
+        GTK_STRING_OBJECT(g_list_model_get_item(model, position));
+    const std::string text = gtk_string_object_get_string(item);
+    g_object_unref(item);
+    if (text == label) return position;
+  }
+  return GTK_INVALID_LIST_POSITION;
+}
+
+}  // namespace
+
+bool PrepareSelftestEnvironment(const std::filesystem::path& out_dir,
+                                std::string* error) {
+  std::error_code filesystem_error;
+  const std::filesystem::path home = out_dir / "home";
+  for (const char* directory :
+       {"config/mocktail", "data", "state/mocktail", "cache"}) {
+    std::filesystem::create_directories(home / directory, filesystem_error);
+    if (filesystem_error) {
+      *error = "cannot create " + (home / directory).string() + ": " +
+               filesystem_error.message();
+      return false;
+    }
+  }
+  // Every Mocktail path follows these; nothing may reach the real ones.
+  for (const char* name :
+       {"MOCKTAIL_CONFIG_ROOT", "MOCKTAIL_DATA_ROOT", "MOCKTAIL_STATE_ROOT",
+        "MOCKTAIL_CACHE_ROOT", "MOCKTAIL_AUTH_ROOT", "MOCKTAIL_COOKIE_FILE",
+        "MOCKTAIL_ROBLOX_COOKIES", "MOCKTAIL_LAUNCHER_RESULT_FD"}) {
+    unsetenv(name);
+  }
+  setenv("XDG_CONFIG_HOME", (home / "config").c_str(), 1);
+  setenv("XDG_DATA_HOME", (home / "data").c_str(), 1);
+  setenv("XDG_STATE_HOME", (home / "state").c_str(), 1);
+  setenv("XDG_CACHE_HOME", (home / "cache").c_str(), 1);
+  const std::filesystem::path config = home / "config/mocktail/config.yaml";
+  setenv(std::string(runtime::kLauncherUiConfigFileVariable).c_str(),
+         config.c_str(), 1);
+  // A fresh template each run, mode 0600 like the bootstrap writes it.
+  std::filesystem::remove(config, filesystem_error);
+  std::filesystem::remove(launcher::ConfigDocument::BackupPath(config),
+                          filesystem_error);
+  if (!WriteFile(config, std::string(runtime::DefaultRuntimeConfigYaml()),
+                 error)) {
+    return false;
+  }
+  std::filesystem::permissions(
+      config,
+      std::filesystem::perms::owner_read | std::filesystem::perms::owner_write,
+      filesystem_error);
+  // A remembered windowed size, so Save has to update it.
+  if (!WriteFile(home / "state/mocktail/window-state.json",
+                 "{\"schema_version\":1,\"fullscreen\":false,"
+                 "\"maximized\":false,\"windowed\":{\"has_position\":false,"
+                 "\"width\":1600,\"height\":900}}\n",
+                 error)) {
+    return false;
+  }
+  // One override, so the banner and the ENV badge are exercised.
+  setenv("MOCKTAIL_GRAPHICS_BACKEND", "direct-vulkan", 1);
+  setenv(std::string(runtime::kLauncherUiEnvOverridesVariable).c_str(),
+         "MOCKTAIL_GRAPHICS_BACKEND", 1);
+  setenv(std::string(runtime::kLauncherUiConfigCreatedVariable).c_str(), "1",
+         1);
+  return true;
+}
+
+Selftest::Selftest(AdwApplication* application, LauncherContext* context,
+                   LauncherWindow* window, std::filesystem::path out_dir)
+    : application_(application),
+      context_(context),
+      window_(window),
+      out_dir_(std::move(out_dir)) {}
+
+void Selftest::Start() {
+  steps_.push_back([this] { return WaitForMachine(); });
+  steps_.push_back([this] { return RecordWindow(); });
+  for (const SectionInfo& info : Sections()) {
+    const Section section = info.section;
+    steps_.push_back([this, section] {
+      window_->ShowSection(section);
+      return kSettleMilliseconds;
+    });
+    steps_.push_back([this, section] { return RenderSection(section, ""); });
+  }
+  steps_.push_back([this] {
+    window_->ShowSection(Section::kGraphics);
+    return kSettleMilliseconds;
+  });
+  steps_.push_back([this] { return OpenHint(); });
+  steps_.push_back([this] { return RenderHint(); });
+  steps_.push_back([this] { return BuildBindingPage(); });
+  steps_.push_back([this] { return ChangeRows(); });
+  steps_.push_back([this] { return RenderBindingPage(); });
+  steps_.push_back([this] { return SearchStep(); });
+  steps_.push_back([this] { return SaveStep(); });
+  steps_.push_back([this] { return Resize(480, 720); });
+  steps_.push_back([this] { return RecordResize(480); });
+  for (const SectionInfo& info : Sections()) {
+    const Section section = info.section;
+    steps_.push_back([this, section] {
+      window_->ShowSection(section);
+      return kSettleMilliseconds;
+    });
+    steps_.push_back(
+        [this, section] { return RenderSection(section, "narrow"); });
+  }
+  steps_.push_back([this] { return Resize(980, 700); });
+  steps_.push_back([this] { return RecordResize(980); });
+  steps_.push_back([this] { return CheckHints(); });
+  steps_.push_back([this] { return Finish(); });
+  RunNext();
+}
+
+void Selftest::RunNext() {
+  if (next_step_ >= steps_.size()) return;
+  // A copy: a step may insert further steps, moving the vector.
+  const Step step = steps_[next_step_++];
+  const guint delay = step();
+  if (next_step_ >= steps_.size()) return;
+  g_timeout_add(
+      delay,
+      [](gpointer data) -> gboolean {
+        static_cast<Selftest*>(data)->RunNext();
+        return G_SOURCE_REMOVE;
+      },
+      this);
+}
+
+void Selftest::Error(std::string message) {
+  std::fprintf(stderr, "mocktail-launcher-ui selftest: error: %s\n",
+               message.c_str());
+  errors_.push_back(std::move(message));
+}
+
+void Selftest::Note(std::string key, std::string json_value) {
+  notes_.emplace_back(std::move(key), std::move(json_value));
+}
+
+guint Selftest::WaitForMachine() {
+  if (!context_->machine().detected && ++machine_waits_ < kMachineWaitLimit) {
+    --next_step_;  // run this step again
+    return 100;
+  }
+  if (!context_->machine().detected) {
+    Error("machine profile detection did not finish");
+  }
+  return 50;
+}
+
+guint Selftest::RecordWindow() {
+  GtkWidget* widget = window_->widget();
+  GdkSurface* surface = gtk_native_get_surface(GTK_NATIVE(widget));
+  GskRenderer* renderer = gtk_native_get_renderer(GTK_NATIVE(widget));
+  const MonitorInfo& monitor = context_->machine().monitor;
+  const MachineProfile& machine = context_->machine();
+  Note("window_mapped", gtk_widget_get_mapped(widget) ? "true" : "false");
+  if (!gtk_widget_get_mapped(widget)) Error("window is not mapped");
+  Note("window_width", std::to_string(gtk_widget_get_width(widget)));
+  Note("window_height", std::to_string(gtk_widget_get_height(widget)));
+  Note("surface_scale",
+       surface != nullptr
+           ? nlohmann::json(gdk_surface_get_scale(surface)).dump()
+           : "null");
+  Note("renderer",
+       Quote(renderer != nullptr ? G_OBJECT_TYPE_NAME(renderer) : "none"));
+  Note("collapsed", window_->collapsed() ? "true" : "false");
+  nlohmann::json monitor_json = {
+      {"valid", monitor.valid}, {"connector", monitor.connector},
+      {"width", monitor.width}, {"height", monitor.height},
+      {"scale", monitor.scale}, {"refresh_hz", monitor.RefreshHz()},
+  };
+  Note("monitor", monitor_json.dump(-1, ' ', false,
+                                    nlohmann::json::error_handler_t::replace));
+  nlohmann::json machine_json = {
+      {"detected", machine.detected},
+      {"gpu", machine.GpuVendorsLabel()},
+      {"nvidia_kernel_driver", machine.gpu.nvidia_kernel_driver},
+      {"desktop", machine.desktop},
+      {"wayland", machine.wayland_available},
+      {"x11", machine.x11_available},
+      {"physical_cores", machine.physical_cores},
+      {"memory_mib", machine.memory_bytes / (1024U * 1024U)},
+      {"gamemode_library", machine.gamemode_library},
+      {"vulkan_icd", machine.vulkan_icd},
+      {"angle", machine.angle.has_value() ? machine.angle->directory.string()
+                                          : std::string()},
+  };
+  Note("machine", machine_json.dump(-1, ' ', false,
+                                    nlohmann::json::error_handler_t::replace));
+  const char* messages = setlocale(LC_MESSAGES, nullptr);
+  Note("locale", Quote(messages != nullptr ? messages : ""));
+  Note("translation_sample", Quote(_("Graphics")));
+  if (messages != nullptr && std::string(messages).rfind("ru", 0) == 0 &&
+      std::string(_("Graphics")) == "Graphics") {
+    Error("Russian locale but the catalogue is not loaded");
+  }
+  BannerKind kind = BannerKind::kConfigError;
+  const Banner* banner = context_->TopBanner(&kind);
+  Note("banner", Quote(banner != nullptr ? banner->title : ""));
+  if (banner == nullptr || kind != BannerKind::kEnvironmentOverrides) {
+    Error("the environment override banner is not shown");
+  }
+  Note("read_only", context_->read_only() ? "true" : "false");
+  if (context_->read_only()) Error("scratch config.yaml loaded read-only");
+  return 50;
+}
+
+bool Selftest::Render(GtkWidget* content, const std::filesystem::path& path,
+                      std::string* detail) {
+  GtkNative* native = gtk_widget_get_native(content);
+  GskRenderer* renderer = gtk_native_get_renderer(native);
+  GdkSurface* surface = gtk_native_get_surface(native);
+  const double scale = surface != nullptr ? gdk_surface_get_scale(surface) : 1;
+  const int width = gtk_widget_get_width(content);
+  const int height = gtk_widget_get_height(content);
+  if (renderer == nullptr || width <= 0 || height <= 0) {
+    *detail = "nothing to render";
+    return false;
+  }
+  GdkPaintable* paintable = gtk_widget_paintable_new(content);
+  GtkSnapshot* snapshot = gtk_snapshot_new();
+  gtk_snapshot_scale(snapshot, static_cast<float>(scale),
+                     static_cast<float>(scale));
+  // The window draws the background, not the content.
+  GdkRGBA background;
+  gdk_rgba_parse(&background, "#222226");
+  const graphene_rect_t bounds = GRAPHENE_RECT_INIT(
+      0, 0, static_cast<float>(width), static_cast<float>(height));
+  gtk_snapshot_append_color(snapshot, &background, &bounds);
+  gdk_paintable_snapshot(paintable, snapshot, width, height);
+  GskRenderNode* node = gtk_snapshot_free_to_node(snapshot);
+  bool ok = false;
+  if (node != nullptr) {
+    const graphene_rect_t viewport =
+        GRAPHENE_RECT_INIT(0, 0, static_cast<float>(width * scale),
+                           static_cast<float>(height * scale));
+    GdkTexture* texture =
+        gsk_renderer_render_texture(renderer, node, &viewport);
+    if (texture != nullptr) {
+      ok = gdk_texture_save_to_png(texture, path.c_str());
+      *detail = std::to_string(gdk_texture_get_width(texture)) + "x" +
+                std::to_string(gdk_texture_get_height(texture));
+      g_object_unref(texture);
+    }
+    gsk_render_node_unref(node);
+  }
+  g_object_unref(paintable);
+  return ok;
+}
+
+guint Selftest::RenderSection(Section section, const std::string& suffix) {
+  const SectionInfo& info = GetSectionInfo(section);
+  const int width = gtk_widget_get_width(window_->widget());
+  const std::filesystem::path path =
+      out_dir_ / (std::string(info.id) + "-" + std::to_string(width) +
+                  (suffix.empty() ? "" : "-" + suffix) + ".png");
+  std::string detail;
+  if (window_->current_section() != section) {
+    Error(std::string("section did not open: ") + info.id);
+  }
+  if (!Render(window_->content(), path, &detail)) {
+    Error("cannot render " + path.string() + ": " + detail);
+  } else {
+    rendered_.push_back(path.filename().string() + " " + detail);
+  }
+  return 50;
+}
+
+namespace {
+
+GtkWidget* FindInfoButton(GtkWidget* widget) {
+  for (GtkWidget* child = gtk_widget_get_first_child(widget); child != nullptr;
+       child = gtk_widget_get_next_sibling(child)) {
+    if (GTK_IS_MENU_BUTTON(child) &&
+        gtk_widget_has_css_class(child, "info-button")) {
+      return child;
+    }
+    if (GtkWidget* found = FindInfoButton(child)) return found;
+  }
+  return nullptr;
+}
+
+}  // namespace
+
+// Opens the worked example's "Learn more" popover and renders it, so the
+// hint text can be checked by eye.
+guint Selftest::OpenHint() {
+  GtkWidget* backend = nullptr;
+  for (const RowRecord& record : context_->rows()) {
+    if (record.key == "graphics.backend") backend = record.row;
+  }
+  hint_button_ = backend != nullptr ? FindInfoButton(backend) : nullptr;
+  if (hint_button_ == nullptr) {
+    Error("the graphics backend row has no info button");
+    return 50;
+  }
+  gtk_menu_button_popup(GTK_MENU_BUTTON(hint_button_));
+  return kSettleMilliseconds * 2;
+}
+
+guint Selftest::RenderHint() {
+  if (hint_button_ == nullptr) return 50;
+  GtkPopover* popover =
+      gtk_menu_button_get_popover(GTK_MENU_BUTTON(hint_button_));
+  // The scrolled window's content, so text below its fold is rendered too.
+  GtkWidget* child =
+      popover != nullptr ? gtk_popover_get_child(popover) : nullptr;
+  if (child != nullptr && GTK_IS_SCROLLED_WINDOW(child)) {
+    child = gtk_scrolled_window_get_child(GTK_SCROLLED_WINDOW(child));
+  }
+  if (child != nullptr && GTK_IS_VIEWPORT(child)) {
+    child = gtk_viewport_get_child(GTK_VIEWPORT(child));
+  }
+  const std::filesystem::path path = out_dir_ / "hint-graphics-backend.png";
+  std::string detail;
+  if (child == nullptr || !gtk_widget_get_mapped(GTK_WIDGET(popover))) {
+    Error("the hint popover did not open");
+  } else if (!Render(child, path, &detail)) {
+    Error("cannot render " + path.string() + ": " + detail);
+  } else {
+    rendered_.push_back(path.filename().string() + " " + detail);
+  }
+  gtk_menu_button_popdown(GTK_MENU_BUTTON(hint_button_));
+  return kSettleMilliseconds;
+}
+
+guint Selftest::BuildBindingPage() {
+  // One row of each kind on a page the sidebar does not show.
+  context_->BeginSection(Section::kAdvanced);
+  binding_page_ = NewPage(context_, Section::kAdvanced, "Self-test rows");
+  GtkWidget* group = AddGroup(binding_page_, "Bindings", "");
+  RowSpec show;
+  show.key = "launcher.show_on_start";
+  show.title = "Show this window on start";
+  switch_row_ = BindSwitchRow(context_, show);
+  AddRow(group, switch_row_);
+  RowSpec memory;
+  memory.key = "performance.memory_limit_mb";
+  memory.title = "Memory limit (MiB)";
+  SpinSpec spin;
+  spin.maximum = 1048576;
+  spin.step = 256;
+  spin_row_ = BindSpinRow(context_, memory, spin);
+  AddRow(group, spin_row_);
+  RowSpec title;
+  title.key = "window.title";
+  title.title = "Window title";
+  EntrySpec entry;
+  entry.validate = [](const std::string& text) {
+    return text.empty() ? std::string("must not be empty") : std::string();
+  };
+  entry_row_ = BindEntryRow(context_, title, entry);
+  AddRow(group, entry_row_);
+  RowSpec theme;
+  theme.key = "appearance.theme";
+  theme.title = "Theme";
+  ComboSpec combo;
+  combo.options = {{"roblox", "Roblox", "", {}, nullptr, nullptr, false, false},
+                   {"system", "System", "", {}, nullptr, nullptr, false, false},
+                   {"light", "Light", "", {}, nullptr, nullptr, false, false},
+                   {"dark", "Dark", "", {}, nullptr, nullptr, false, false}};
+  combo_row_ = BindComboRow(context_, theme, combo);
+  AddRow(group, combo_row_);
+  window_->AddHiddenPage(kBindingPageName, binding_page_);
+  return 100;
+}
+
+guint Selftest::ChangeRows() {
+  const auto expect = [this](const char* key, const std::string& value) {
+    const std::optional<std::string> actual = context_->Value(key);
+    if (actual != value) {
+      Error(std::string(key) + " is " + actual.value_or("(absent)") +
+            " after the change, expected " + value);
+    }
+  };
+  const bool show = adw_switch_row_get_active(ADW_SWITCH_ROW(switch_row_));
+  adw_switch_row_set_active(ADW_SWITCH_ROW(switch_row_), !show);
+  expect("launcher.show_on_start", show ? "false" : "true");
+  adw_spin_row_set_value(ADW_SPIN_ROW(spin_row_), 2048);
+  expect("performance.memory_limit_mb", "2048");
+
+  // An invalid entry blocks Save until it is fixed.
+  gtk_editable_set_text(GTK_EDITABLE(entry_row_), "");
+  if (context_->problem_count() != 1 || context_->can_play()) {
+    Error("an invalid entry did not block Play");
+  }
+  gtk_editable_set_text(GTK_EDITABLE(entry_row_), "Roblox self-test");
+  if (context_->problem_count() != 0) Error("the entry problem stayed");
+  expect("window.title", "Roblox self-test");
+
+  const guint dark = FindModelPosition(combo_row_, "Dark");
+  if (dark == GTK_INVALID_LIST_POSITION) {
+    Error("theme combo has no Dark option");
+  } else {
+    adw_combo_row_set_selected(ADW_COMBO_ROW(combo_row_), dark);
+    expect("appearance.theme", "dark");
+  }
+
+  GtkWidget* backend = nullptr;
+  for (const RowRecord& record : context_->rows()) {
+    if (record.key == "graphics.backend") backend = record.row;
+  }
+  if (backend == nullptr) {
+    Error("the graphics backend row is missing");
+  } else {
+    const guint opengl = FindModelPosition(backend, _("OpenGL ES"));
+    if (opengl == GTK_INVALID_LIST_POSITION) {
+      Error("the graphics backend row has no OpenGL ES option");
+    } else {
+      adw_combo_row_set_selected(ADW_COMBO_ROW(backend), opengl);
+      expect("graphics.backend", "opengl");
+    }
+  }
+  context_->SetValue("window.width", "1366");
+  context_->SetValue("window.height", "768");
+  Note("unsaved_before_save", std::to_string(context_->unsaved_count()));
+  if (context_->unsaved_count() < 7) {
+    Error("expected at least 7 unsaved changes, have " +
+          std::to_string(context_->unsaved_count()));
+  }
+  return 100;
+}
+
+guint Selftest::RenderBindingPage() {
+  window_->ShowHiddenPage(kBindingPageName);
+  steps_.insert(
+      steps_.begin() + static_cast<std::ptrdiff_t>(next_step_), [this] {
+        const int width = gtk_widget_get_width(window_->widget());
+        const std::filesystem::path path =
+            out_dir_ / ("bindings-" + std::to_string(width) + ".png");
+        std::string detail;
+        if (!Render(window_->content(), path, &detail)) {
+          Error("cannot render " + path.string());
+        } else {
+          rendered_.push_back(path.filename().string() + " " + detail);
+        }
+        return guint{50};
+      });
+  return kSettleMilliseconds;
+}
+
+guint Selftest::SearchStep() {
+  window_->Search("vulkan");
+  Note("search_vulkan_results", std::to_string(window_->search_result_count()));
+  if (window_->search_result_count() < 1) {
+    Error("searching for vulkan found nothing");
+  }
+  steps_.insert(
+      steps_.begin() + static_cast<std::ptrdiff_t>(next_step_), [this] {
+        const int width = gtk_widget_get_width(window_->widget());
+        const std::filesystem::path path =
+            out_dir_ / ("search-" + std::to_string(width) + ".png");
+        std::string detail;
+        if (!Render(window_->content(), path, &detail)) {
+          Error("cannot render " + path.string());
+        } else {
+          rendered_.push_back(path.filename().string() + " " + detail);
+        }
+        // A variable name finds the setting it overrides.
+        window_->Search("MOCKTAIL_GRAPHICS_BACKEND");
+        Note("search_variable_results",
+             std::to_string(window_->search_result_count()));
+        if (window_->search_result_count() < 1) {
+          Error("searching for a variable name found nothing");
+        }
+        window_->Search("");
+        return kSettleMilliseconds;
+      });
+  return kSettleMilliseconds;
+}
+
+guint Selftest::SaveStep() {
+  if (!context_->Save()) {
+    Error("Save failed");
+    return 50;
+  }
+  if (context_->unsaved_count() != 0) Error("changes left after Save");
+  launcher::ConfigDocument saved;
+  std::string error;
+  if (!launcher::ConfigDocument::Load(context_->config_file(), &saved,
+                                      &error)) {
+    Error("cannot read the saved config.yaml: " + error);
+    return 50;
+  }
+  const bool valid = saved.Validate(&error);
+  Note("save_validated", valid ? "true" : "false");
+  if (!valid) Error("the saved config.yaml does not load: " + error);
+  const auto expect = [this, &saved](const char* key,
+                                     const std::string& value) {
+    if (saved.Get(key) != value) {
+      Error(std::string("saved ") + key + " is " +
+            saved.Get(key).value_or("(absent)") + ", expected " + value);
+    }
+  };
+  expect("performance.memory_limit_mb", "2048");
+  expect("window.title", "Roblox self-test");
+  expect("appearance.theme", "dark");
+  expect("graphics.backend", "opengl");
+  expect("window.width", "1366");
+  if (saved.bytes().rfind("# Mocktail configuration.", 0) != 0) {
+    Error("the template's comments did not survive Save");
+  }
+  launcher::RememberedWindowState state;
+  if (!launcher::ReadRememberedWindowState(context_->window_state_file(),
+                                           &state, &error) ||
+      !state.found || state.width != 1366 || state.height != 768) {
+    Error("window-state.json does not hold the saved window size");
+  }
+  Note("window_state_updated", state.width == 1366 ? "true" : "false");
+  return 100;
+}
+
+guint Selftest::Resize(int width, int height) {
+  GtkWindow* window = GTK_WINDOW(window_->widget());
+  gtk_window_unmaximize(window);
+  gtk_window_set_default_size(window, width, height);
+  return kResizeMilliseconds;
+}
+
+guint Selftest::RecordResize(int requested_width) {
+  const int width = gtk_widget_get_width(window_->widget());
+  const bool collapsed = window_->collapsed();
+  // AdwBreakpoint max-width: 640sp; sp follows the text scale (1 here).
+  const bool expected = width <= 640;
+  resize_observations_.push_back(
+      nlohmann::json({{"requested", requested_width},
+                      {"width", width},
+                      {"collapsed", collapsed},
+                      {"narrow", context_->narrow()}})
+          .dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
+  if (collapsed != expected) {
+    Error("at width " + std::to_string(width) + " collapsed is " +
+          (collapsed ? "true" : "false"));
+  }
+  if (width != requested_width) {
+    warnings_.push_back("the compositor kept the window at " +
+                        std::to_string(width) + " px instead of " +
+                        std::to_string(requested_width));
+  }
+  return 100;
+}
+
+guint Selftest::CheckHints() {
+  std::string missing_details;
+  for (const RowRecord& record : context_->rows()) {
+    bool selftest_row = false;
+    for (const char* key : kSelftestKeys) {
+      if (record.key == key) selftest_row = true;
+    }
+    if (selftest_row) continue;
+    if (!record.has_details || !record.has_subtitle) {
+      warnings_.push_back(
+          "row without " +
+          std::string(!record.has_details ? "details" : "subtitle") + ": " +
+          record.title);
+    }
+  }
+  GtkIconTheme* theme =
+      gtk_icon_theme_get_for_display(gtk_widget_get_display(window_->widget()));
+  for (const char* icon : kIcons) {
+    if (!gtk_icon_theme_has_icon(theme, icon)) {
+      Error(std::string("missing icon ") + icon);
+    }
+  }
+  Note("rows", std::to_string(context_->rows().size()));
+  return 50;
+}
+
+guint Selftest::Finish() {
+  nlohmann::json report;
+  for (const auto& [key, value] : notes_) {
+    report[key] = nlohmann::json::parse(value, nullptr, false);
+  }
+  report["pages_rendered"] = rendered_;
+  nlohmann::json resizes = nlohmann::json::array();
+  for (const std::string& observation : resize_observations_) {
+    resizes.push_back(nlohmann::json::parse(observation, nullptr, false));
+  }
+  report["resize"] = resizes;
+  report["warnings"] = warnings_;
+  report["errors"] = errors_;
+  report["ok"] = errors_.empty();
+  std::string error;
+  if (!WriteFile(
+          out_dir_ / "report.json",
+          report.dump(2, ' ', false, nlohmann::json::error_handler_t::replace) +
+              "\n",
+          &error)) {
+    std::fprintf(stderr, "%s\n", error.c_str());
+    errors_.push_back(error);
+  }
+  std::printf(
+      "mocktail-launcher-ui selftest: %zu pages rendered, %zu "
+      "warnings, %zu errors\n",
+      rendered_.size(), warnings_.size(), errors_.size());
+  std::fflush(stdout);
+  window_->Finish();
+  return 0;
+}
+
+}  // namespace mocktail::launcher_ui
