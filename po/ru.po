@@ -19,12 +19,6 @@ msgstr ""
 msgid "Versions, this computer, and help when something goes wrong"
 msgstr "Версии, сведения об этом компьютере и помощь, если что-то пошло не так"
 
-msgid "Coming soon"
-msgstr "Скоро"
-
-msgid "These settings arrive in a later step. Until then they can be changed in config.yaml."
-msgstr "Эти настройки появятся позже. Пока их можно изменить в config.yaml."
-
 msgid "The Roblox accounts saved on this computer and how you sign in"
 msgstr "Аккаунты Roblox, сохранённые на этом компьютере, и способ входа"
 
