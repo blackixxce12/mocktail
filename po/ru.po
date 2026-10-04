@@ -777,7 +777,6 @@ msgid "How many frames Roblox draws and when they reach the screen"
 msgstr "Сколько кадров рисует Roblox и когда они попадают на экран"
 
 # Display page.
-
 msgid "In X11 pixels; native resolution has no effect"
 msgstr "В пикселях X11; чёткое изображение не действует"
 
@@ -1167,7 +1166,6 @@ msgid "How Roblox's own menus look"
 msgstr "Как выглядят меню самого Roblox"
 
 # Performance page.
-
 #, c-format
 msgid "%.1f GiB"
 msgstr "%.1f ГиБ"
@@ -1410,7 +1408,6 @@ msgid "Help from the operating system, and a safety cap on memory"
 msgstr "Помощь от операционной системы и страховочный предел памяти"
 
 # Audio page.
-
 msgid "Look for sound devices again"
 msgstr "Поискать звуковые устройства заново"
 
@@ -2220,3 +2217,268 @@ msgstr "Режим прокси Fleasion нельзя сочетать с дру
 
 msgid "Fleasion's hosts mode cannot be combined with a manual proxy"
 msgstr "Режим hosts у Fleasion нельзя сочетать с прокси, заданным вручную"
+
+# Network & Updates page (network_updates_page.cc, network_updates_status.cc).
+msgid "Update Roblox automatically"
+msgstr "Обновлять Roblox автоматически"
+
+msgid "New versions are tested first; the working one is kept if a test fails"
+msgstr "Новые версии сначала проверяются; если проверка не пройдена, остаётся рабочая"
+
+msgid "Off: Roblox stays at the installed version"
+msgstr "Выключено: Roblox остаётся на установленной версии"
+
+msgid "At each start Mocktail asks APKPure for the newest Roblox for Android. A new version gets a matching compatibility profile and must pass two test starts with your graphics backend, in a separate profile, before it replaces the current one."
+msgstr "При каждом запуске Mocktail узнаёт у APKPure, какая версия Roblox для Android самая новая. Новая версия получает подходящий профиль совместимости и должна пройти два пробных запуска с вашим графическим движком в отдельном профиле — только тогда она заменит текущую."
+
+msgid "If a test fails, you keep playing the version that works. Checking and testing add some time to a start; the progress window shows it."
+msgstr "Если проверка не пройдена, вы продолжаете играть на рабочей версии. Проверка и пробные запуски немного удлиняют запуск; их ход видно в окне прогресса."
+
+msgid "Turn it off to stay on the installed version, for example while a new one misbehaves. Roblox's servers may eventually require a newer version. With nothing installed yet, Roblox cannot start while this is off."
+msgstr "Выключите, чтобы остаться на установленной версии, например пока новая работает с ошибками. Со временем серверы Roblox могут потребовать версию поновее. Если ничего ещё не установлено, при выключенном обновлении Roblox не запустится."
+
+msgid "No Roblox is installed yet, so Roblox cannot start while this is off"
+msgstr "Roblox ещё не установлен, поэтому при выключенном обновлении он не запустится"
+
+msgid "Download source"
+msgstr "Источник загрузки"
+
+msgid "Where Mocktail downloads Roblox for Android from. Both choices use the same list of providers, which currently starts with APKPure, so there is nothing else to pick yet."
+msgstr "Откуда Mocktail скачивает Roblox для Android. Оба варианта используют один и тот же список источников, который сейчас начинается с APKPure, так что выбирать пока не из чего."
+
+msgid "APKPure"
+msgstr "APKPure"
+
+msgid "Downloads Roblox for Android from APKPure"
+msgstr "Скачивать Roblox для Android с APKPure"
+
+msgid "Lets Mocktail choose; today the same APKPure source"
+msgstr "Пусть выбирает Mocktail; сейчас это тот же APKPure"
+
+msgid "Proxy: enter the proxy's host, or choose another proxy"
+msgstr "Прокси: укажите хост прокси или выберите другой вариант"
+
+msgid "Proxy: the host is not valid"
+msgstr "Прокси: недопустимый хост"
+
+msgid "Proxy: enter a port from 1 to 65535"
+msgstr "Прокси: укажите порт от 1 до 65535"
+
+msgid "No proxy"
+msgstr "Без прокси"
+
+msgid "Connect directly"
+msgstr "Подключаться напрямую"
+
+msgid "System proxy"
+msgstr "Системный прокси"
+
+msgid "Use the desktop's proxy setting, read at every start"
+msgstr "Брать прокси из настроек рабочего стола при каждом запуске"
+
+msgid "Manual"
+msgstr "Вручную"
+
+msgid "An HTTP proxy at the host and port below"
+msgstr "HTTP-прокси с хостом и портом ниже"
+
+msgid "Proxy"
+msgstr "Прокси"
+
+msgid "Mocktail and Roblox connect directly"
+msgstr "Mocktail и Roblox подключаются напрямую"
+
+msgid "The desktop's proxy, read at every start"
+msgstr "Прокси из настроек рабочего стола, при каждом запуске"
+
+msgid "The HTTP proxy below"
+msgstr "HTTP-прокси, указанный ниже"
+
+msgid "Which proxy Roblox's own web requests, Mocktail's sign-in, the web sign-in window and the Discord status lookups use. Roblox downloads and update checks do not use it."
+msgstr "Через какой прокси идут веб-запросы самого Roblox, вход в аккаунт в Mocktail, окно входа через браузер и запросы для статуса в Discord. Скачивание Roblox и проверка обновлений его не используют."
+
+msgid "• No proxy: connect directly."
+msgstr "• Без прокси: подключение напрямую."
+
+msgid "• System proxy: at every start Mocktail asks the desktop which proxy to use for roblox.com (HTTP, HTTPS or SOCKS5), so a changing port is followed. Proxies that need a password are not supported, and Mocktail stops at start when the desktop's proxy cannot be used."
+msgstr "• Системный прокси: при каждом запуске Mocktail спрашивает у рабочего стола, какой прокси использовать для roblox.com (HTTP, HTTPS или SOCKS5), поэтому меняющийся порт тоже подхватывается. Прокси с паролем не поддерживаются; если системный прокси использовать нельзя, Mocktail остановится при запуске."
+
+msgid "• Manual: an HTTP proxy at the host and port below."
+msgstr "• Вручную: HTTP-прокси с хостом и портом ниже."
+
+msgid "Leave it at No proxy unless your network needs one. Fleasion, when on, sets up its own proxy instead."
+msgstr "Оставьте «Без прокси», если ваша сеть его не требует. Включённый Fleasion настраивает собственный прокси."
+
+msgid "Proxy host"
+msgstr "Хост прокси"
+
+msgid "Choose “Manual” above to set a host"
+msgstr "Чтобы указать хост, выберите выше «Вручную»"
+
+msgid "Host name or IP address, without http://"
+msgstr "Имя хоста или IP-адрес, без http://"
+
+msgid "The proxy server's host name or IP address, without a scheme or a port, for example 127.0.0.1 or proxy.example.org."
+msgstr "Имя хоста или IP-адрес прокси-сервера, без схемы и порта, например 127.0.0.1 или proxy.example.org."
+
+msgid "Host and port are saved together: Save and Play wait until both are filled in."
+msgstr "Хост и порт сохраняются вместе: «Сохранить» и «Играть» станут доступны, когда заполнены оба."
+
+msgid "Leave out http:// or https://"
+msgstr "Уберите http:// или https://"
+
+msgid "A host cannot contain spaces or / \\ @ [ ] ? #"
+msgstr "В хосте не может быть пробелов и символов / \\ @ [ ] ? #"
+
+msgid "Proxy port"
+msgstr "Порт прокси"
+
+msgid "Choose “Manual” above to set a port"
+msgstr "Чтобы указать порт, выберите выше «Вручную»"
+
+msgid "Connects to http://%s:%s"
+msgstr "Подключение к http://%s:%s"
+
+msgid "The port the proxy listens on"
+msgstr "Порт, который слушает прокси"
+
+msgid "The TCP port the proxy listens on, from 1 to 65535."
+msgstr "TCP-порт, который слушает прокси, от 1 до 65535."
+
+msgid "Custom CA bundle"
+msgstr "Свой набор сертификатов (CA)"
+
+msgid "Empty: your system's certificates"
+msgstr "Пусто: системные сертификаты"
+
+msgid "Mocktail and Roblox trust only the certificates in this file"
+msgstr "Mocktail и Roblox доверяют только сертификатам из этого файла"
+
+msgid "This file does not exist, so Mocktail will not start"
+msgstr "Такого файла нет, поэтому Mocktail не запустится"
+
+msgid "A PEM file of certificate authorities that Mocktail and Roblox trust for HTTPS instead of the system's list. You only need it on a company or school network that inspects HTTPS with its own certificate; the file must then also hold the usual public authorities."
+msgstr "PEM-файл с центрами сертификации, которым Mocktail и Roblox доверяют для HTTPS вместо системного списка. Нужен только в сети компании или учебного заведения, которая проверяет HTTPS своим сертификатом; тогда в файле должны быть и обычные публичные центры."
+
+msgid "Mocktail reads the file at every start and never changes it, not even during Roblox updates. With Fleasion on, Fleasion's certificate is added to it."
+msgstr "Mocktail читает файл при каждом запуске и никогда его не меняет, даже при обновлении Roblox. Если включён Fleasion, к нему добавляется сертификат Fleasion."
+
+msgid "Only use a file you trust: any authority in it can pose as any website to Mocktail and Roblox. If the file cannot be read, Mocktail stops at start."
+msgstr "Используйте только файл, которому доверяете: любой центр сертификации из него может выдать себя за любой сайт для Mocktail и Roblox. Если файл не читается, Mocktail остановится при запуске."
+
+msgid "That is a private key, not a certificate file"
+msgstr "Это закрытый ключ, а не файл сертификатов"
+
+msgid "Choose a CA Bundle"
+msgstr "Выбор набора сертификатов"
+
+msgid "Updates"
+msgstr "Обновления"
+
+msgid "Mocktail downloads Roblox for you and keeps a working copy"
+msgstr "Mocktail сам скачивает Roblox и хранит рабочую копию"
+
+msgid "How Mocktail and Roblox reach the internet"
+msgstr "Как Mocktail и Roblox выходят в интернет"
+
+msgid "mocktail_updater was not found next to this window"
+msgstr "mocktail_updater не найден рядом с этим окном"
+
+msgid "current.json is not a valid Roblox record"
+msgstr "current.json не похож на запись об установленном Roblox"
+
+msgid "the updater gave no answer"
+msgstr "программа обновления не ответила"
+
+msgid "Roblox %s"
+msgstr "Roblox %s"
+
+msgid "Update checks are skipped during the self-test"
+msgstr "Во время самопроверки обновления не проверяются"
+
+msgid "Could not check for Roblox updates: %s"
+msgstr "Не удалось проверить обновления Roblox: %s"
+
+msgid "Roblox %s is available"
+msgstr "Доступен Roblox %s"
+
+msgid "Roblox is up to date"
+msgstr "У вас последняя версия Roblox"
+
+msgid "The newest Roblox is %s"
+msgstr "Самая новая версия Roblox — %s"
+
+msgid "no answer in time"
+msgstr "ответ не пришёл вовремя"
+
+msgid "Installed Roblox"
+msgstr "Установленный Roblox"
+
+msgid "Reading…"
+msgstr "Чтение…"
+
+msgid "Could not read it: %s"
+msgstr "Не удалось прочитать: %s"
+
+msgid "Not installed yet; Mocktail downloads it when you press Play"
+msgstr "Ещё не установлен; Mocktail скачает его, когда вы нажмёте «Играть»"
+
+msgid "Not installed, and automatic updates are off, so Roblox cannot start"
+msgstr "Не установлен, а автоматическое обновление выключено, поэтому Roblox не запустится"
+
+msgid "Library ID %s"
+msgstr "ID библиотеки %s"
+
+msgid "Installed %s"
+msgstr "Установлен %s"
+
+msgid "The version of Roblox for Android that Mocktail runs, as recorded in current.json in Mocktail's data folder. Mocktail also keeps the previous working version, so a failed update never leaves you without one."
+msgstr "Версия Roblox для Android, которую запускает Mocktail, по записи в current.json в папке данных Mocktail. Mocktail хранит и предыдущую рабочую версию, так что неудачное обновление не оставит вас без игры."
+
+msgid "Before Roblox runs, Mocktail checks the package's signature and that its library matches a known compatibility profile; the library ID names that exact build."
+msgstr "Перед запуском Roblox Mocktail проверяет подпись пакета и то, что его библиотека соответствует известному профилю совместимости; ID библиотеки обозначает именно эту сборку."
+
+msgid "Record: %s"
+msgstr "Запись: %s"
+
+msgid "Library ID: %s"
+msgstr "ID библиотеки: %s"
+
+msgid "Check"
+msgstr "Проверить"
+
+msgid "Check for Roblox updates"
+msgstr "Проверить обновления Roblox"
+
+msgid "Newest Roblox"
+msgstr "Новейший Roblox"
+
+msgid "Asking APKPure…"
+msgstr "Запрос к APKPure…"
+
+msgid "Could not check: %s"
+msgstr "Не удалось проверить: %s"
+
+msgid "%s is available; Mocktail tests it at the next start"
+msgstr "Доступна %s; Mocktail проверит её при следующем запуске"
+
+msgid "%s is available; automatic updates are off"
+msgstr "Доступна %s; автоматическое обновление выключено"
+
+msgid "%s: you have the newest version"
+msgstr "%s: у вас самая новая версия"
+
+msgid "%s on APKPure; yours is newer"
+msgstr "%s на APKPure; ваша новее"
+
+msgid "%s is the newest version"
+msgstr "%s — самая новая версия"
+
+msgid "Asks APKPure, where Mocktail downloads Roblox from, which version of Roblox for Android is the newest. Nothing is downloaded or installed here."
+msgstr "Спрашивает у APKPure, откуда Mocktail скачивает Roblox, какая версия Roblox для Android самая новая. Здесь ничего не скачивается и не устанавливается."
+
+msgid "With automatic updates on, Mocktail does that when Roblox starts: it tests a new version in two separate test runs with your graphics backend and switches to it only if both pass."
+msgstr "При включённом автоматическом обновлении это делается при запуске Roblox: Mocktail проверяет новую версию в двух отдельных пробных запусках с вашим графическим движком и переходит на неё, только если оба прошли успешно."
+
+msgid "This needs an internet connection. Like Roblox downloads, it does not use the proxy from Network & Updates."
+msgstr "Нужен доступ к интернету. Как и скачивание Roblox, проверка не использует прокси из раздела «Сеть и обновления»."

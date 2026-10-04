@@ -11,6 +11,7 @@ src/launcher_ui/graphics_page.cc
 src/launcher_ui/integrations_page.cc
 src/launcher_ui/launcher_context.cc
 src/launcher_ui/network_updates_page.cc
+src/launcher_ui/network_updates_status.cc
 src/launcher_ui/page_widgets.cc
 src/launcher_ui/pages.cc
 src/launcher_ui/performance_page.cc
