@@ -1168,3 +1168,246 @@ msgstr "Интерфейс Roblox"
 
 msgid "How Roblox's own menus look"
 msgstr "Как выглядят меню самого Roblox"
+
+# Performance page.
+
+#, c-format
+msgid "%.1f GiB"
+msgstr "%.1f ГиБ"
+
+msgid "Multithreaded rendering"
+msgstr "Многопоточный рендеринг"
+
+#, c-format
+msgid "No extra effect: Throughput physics workers already use %d physical core"
+msgid_plural "No extra effect: Throughput physics workers already use all %d physical cores"
+msgstr[0] "Ничего не добавляет: «Пропускная способность» в потоках физики и так использует %d физическое ядро"
+msgstr[1] "Ничего не добавляет: «Пропускная способность» в потоках физики и так использует все %d физических ядра"
+msgstr[2] "Ничего не добавляет: «Пропускная способность» в потоках физики и так использует все %d физических ядер"
+
+msgid "No extra effect: Throughput physics workers already use every physical core"
+msgstr "Ничего не добавляет: «Пропускная способность» в потоках физики и так использует все физические ядра"
+
+msgid "No effect while Physics workers is set to Low latency"
+msgstr "Не действует, пока в потоках физики выбрана «Низкая задержка»"
+
+msgid "Roblox sizes its own worker pools"
+msgstr "Roblox сам определяет число рабочих потоков"
+
+#, c-format
+msgid "Roblox's scheduler uses %d physical core; the performance preset is on"
+msgid_plural "Roblox's scheduler uses all %d physical cores; the performance preset is on"
+msgstr[0] "Планировщик Roblox использует %d физическое ядро; пресет производительности включён"
+msgstr[1] "Планировщик Roblox использует все %d физических ядра; пресет производительности включён"
+msgstr[2] "Планировщик Roblox использует все %d физических ядер; пресет производительности включён"
+
+msgid "Roblox's scheduler uses every physical core; the performance preset is on"
+msgstr "Планировщик Roblox использует все физические ядра; пресет производительности включён"
+
+msgid "Sizes Roblox's task scheduler from this computer's physical processor cores (the cores Mocktail may use, without counting hyper-threads) instead of Roblox's own choice. A place's Lua code can still run on a single thread."
+msgstr "Задаёт размер планировщика задач Roblox по числу физических ядер процессора этого компьютера (тех, что доступны Mocktail, без учёта гиперпотоков), а не по выбору самого Roblox. Lua-код конкретного места при этом всё равно может выполняться в одном потоке."
+
+msgid "It only matters while Physics workers is set to Automatic: Throughput already gives Roblox every physical core, and Low latency ignores this setting."
+msgstr "Это важно, только когда в «Потоках физики» выбрано «Автоматически»: «Пропускная способность» и так отдаёт Roblox все физические ядра, а «Низкая задержка» эту настройку не учитывает."
+
+msgid "With Automatic physics workers, turning it on also turns on Mocktail's performance preset: less texture memory, no MSAA, simpler shadows and the graphics quality level from Graphics."
+msgstr "При «Автоматически» в потоках физики эта настройка заодно включает пресет производительности Mocktail: меньше памяти под текстуры, без MSAA, более простые тени и уровень качества из раздела «Графика»."
+
+msgid "More worker threads help busy places reach a higher frame rate; on a computer doing other heavy work at the same time, they compete with it for the processor."
+msgstr "Больше рабочих потоков помогает поднять частоту кадров в насыщенных местах; но если компьютер одновременно занят другой тяжёлой работой, потоки будут отнимать у неё процессор."
+
+#, c-format
+msgid "Physical cores Mocktail may use here: %d (logical processors: %d)."
+msgstr "Физических ядер, доступных Mocktail: %d (логических процессоров: %d)."
+
+#, c-format
+msgid "With %d physical core, Roblox's work can be spread wider than its own default."
+msgid_plural "With %d physical cores, Roblox's work can be spread wider than its own default."
+msgstr[0] "С %d физическим ядром работу Roblox можно распределить шире, чем он делает сам."
+msgstr[1] "С %d физическими ядрами работу Roblox можно распределить шире, чем он делает сам."
+msgstr[2] "С %d физическими ядрами работу Roblox можно распределить шире, чем он делает сам."
+
+#, c-format
+msgid "With only %d physical core there is little to spread."
+msgid_plural "With only %d physical cores there is little to spread."
+msgstr[0] "При всего %d физическом ядре распределять почти нечего."
+msgstr[1] "При всего %d физических ядрах распределять почти нечего."
+msgstr[2] "При всего %d физических ядрах распределять почти нечего."
+
+msgid "Physics workers"
+msgstr "Потоки физики"
+
+msgid "How Mocktail tunes Roblox's worker threads for physics, render preparation and background tasks. The change applies the next time Roblox starts."
+msgstr "Как Mocktail настраивает рабочие потоки Roblox для физики, подготовки отрисовки и фоновых задач. Изменение вступит в силу при следующем запуске Roblox."
+
+msgid "• Throughput (default): Roblox's worker pools may use every physical core, and Mocktail's performance preset is on: less texture memory, anti-aliasing (MSAA) off, simpler shadows and level of detail, at most 32 sounds at once, and the graphics quality level from Graphics."
+msgstr "• Пропускная способность (по умолчанию): рабочие потоки Roblox могут занять все физические ядра, и включён пресет производительности Mocktail: меньше памяти под текстуры, сглаживание (MSAA) выключено, тени и детализация проще, одновременно звучит не больше 32 звуков, а уровень качества берётся из раздела «Графика»."
+
+msgid "• Low latency: Roblox keeps its own pool sizes; Mocktail only batches physics contact work. The preset stays off, so Roblox's own graphics quality and memory use apply."
+msgstr "• Низкая задержка: Roblox сам определяет число потоков, Mocktail лишь группирует расчёт физических контактов. Пресет остаётся выключенным, поэтому действуют собственные качество графики и расход памяти Roblox."
+
+msgid "• Automatic: no tuning at all, unless Multithreaded rendering is on; that sizes the scheduler from the physical cores and turns the preset on."
+msgstr "• Автоматически: никакой настройки, если только не включён многопоточный рендеринг; тогда планировщик рассчитывается по физическим ядрам и включается пресет."
+
+msgid "Keep Throughput for Mocktail's tuned, lighter rendering. Choose Low latency or Automatic to run Roblox closer to its own defaults, for example when textures look too blurry."
+msgstr "Оставьте «Пропускная способность» ради облегчённой отрисовки, настроенной Mocktail. Выберите «Низкая задержка» или «Автоматически», чтобы Roblox работал ближе к собственным настройкам, — например, если текстуры кажутся слишком размытыми."
+
+msgid "Throughput"
+msgstr "Пропускная способность"
+
+#, c-format
+msgid "Up to %d physical core for Roblox's workers, plus the performance preset"
+msgid_plural "All %d physical cores for Roblox's workers, plus the performance preset"
+msgstr[0] "До %d физического ядра для потоков Roblox и пресет производительности"
+msgstr[1] "Все %d физических ядра для потоков Roblox и пресет производительности"
+msgstr[2] "Все %d физических ядер для потоков Roblox и пресет производительности"
+
+msgid "Every physical core for Roblox's workers, plus the performance preset"
+msgstr "Все физические ядра для потоков Roblox и пресет производительности"
+
+msgid "Low latency"
+msgstr "Низкая задержка"
+
+msgid "Roblox keeps its own pool sizes; only physics batching is tuned"
+msgstr "Roblox сам выбирает число потоков; настраивается только группировка физики"
+
+msgid "No Mocktail tuning unless Multithreaded rendering is on"
+msgstr "Без настройки от Mocktail, если не включён многопоточный рендеринг"
+
+msgid "GameMode is not installed"
+msgstr "GameMode не установлен"
+
+msgid "GameMode is installed and its service is available"
+msgstr "GameMode установлен, и его служба доступна"
+
+msgid "libgamemode is installed, but no GameMode service was found"
+msgstr "libgamemode установлена, но служба GameMode не найдена"
+
+msgid "libgamemode is installed; its service could not be checked"
+msgstr "libgamemode установлена; проверить её службу не удалось"
+
+msgid "libgamemode is installed"
+msgstr "libgamemode установлена"
+
+msgid "Looking for GameMode…"
+msgstr "Поиск GameMode…"
+
+msgid "Never asks GameMode"
+msgstr "Никогда не обращается к GameMode"
+
+msgid "Feral GameMode is a system service that switches the computer into a faster mode while a game runs, for example the processor's performance governor; what exactly depends on its own configuration."
+msgstr "Feral GameMode — системная служба, которая на время игры переводит компьютер в более быстрый режим, например включает для процессора регулятор performance; что именно меняется, зависит от её собственных настроек."
+
+msgid "Mocktail asks for it from the game process itself through libgamemode, so no wrapper such as gamemoderun is needed. A missing GameMode never stops Roblox from starting."
+msgstr "Mocktail запрашивает его прямо из процесса игры через libgamemode, поэтому обёртка вроде gamemoderun не нужна. Без GameMode Roblox всё равно запустится."
+
+msgid "• Automatic and On send the same request; On only adds a warning to the log when GameMode is missing."
+msgstr "• «Автоматически» и «Вкл.» отправляют одинаковый запрос; «Вкл.» лишь добавляет предупреждение в журнал, если GameMode нет."
+
+msgid "• Off never asks for it."
+msgstr "• «Выкл.» никогда к нему не обращается."
+
+msgid "libgamemode.so.0 is installed."
+msgstr "libgamemode.so.0 установлена."
+
+msgid "libgamemode.so.0 was not found; install your distribution's gamemode package to use GameMode."
+msgstr "libgamemode.so.0 не найдена; чтобы пользоваться GameMode, установите пакет gamemode вашего дистрибутива."
+
+#, c-format
+msgid "%s is running."
+msgstr "%s запущена."
+
+#, c-format
+msgid "%s starts on the first request."
+msgstr "%s запустится при первом запросе."
+
+#, c-format
+msgid "%s is not on the session bus."
+msgstr "%s нет на сеансовой шине."
+
+msgid "There is no session bus to ask about the GameMode service."
+msgstr "Сеансовой шины, чтобы спросить о службе GameMode, нет."
+
+msgid "GameMode is installed, and Automatic uses it whenever its service runs."
+msgstr "GameMode установлен, и «Автоматически» пользуется им, когда его служба работает."
+
+msgid "Automatic costs nothing without GameMode and starts using it once it is installed."
+msgstr "Без GameMode «Автоматически» ничего не стоит, а после его установки начнёт им пользоваться."
+
+msgid "GameMode is not installed, so On only adds a warning to the log."
+msgstr "GameMode не установлен, поэтому «Вкл.» лишь добавит предупреждение в журнал."
+
+msgid "No GameMode service answers on the session bus, so the request will fail; Roblox still starts."
+msgstr "На сеансовой шине не отвечает служба GameMode, поэтому запрос не пройдёт; Roblox всё равно запустится."
+
+msgid "Asks GameMode for more performance when it is installed"
+msgstr "Просит у GameMode больше производительности, если он установлен"
+
+msgid "The same request; the log warns when GameMode is missing"
+msgstr "Тот же запрос; если GameMode нет, в журнале будет предупреждение"
+
+msgid "Not installed"
+msgstr "Не установлен"
+
+msgid "No service"
+msgstr "Нет службы"
+
+msgid "Installed"
+msgstr "Установлен"
+
+#, c-format
+msgid "GameMode: %s"
+msgstr "GameMode: %s"
+
+msgid "Limit"
+msgstr "Предел"
+
+msgid "GiB of resident memory plus swap"
+msgstr "ГиБ резидентной памяти вместе с подкачкой"
+
+msgid "Memory limit"
+msgstr "Ограничение памяти"
+
+msgid "Off: the game may use as much memory as it needs"
+msgstr "Выкл.: игра может занимать столько памяти, сколько ей нужно"
+
+#, c-format
+msgid "Mocktail ends the game when it uses more than %s"
+msgstr "Mocktail завершит игру, если она займёт больше %s"
+
+msgid "A hard cap on the memory the game process may use, counted as its resident memory plus swap. A watchdog checks it ten times a second and ends Mocktail with exit status 137 when the cap is reached, so anything unsaved in the experience is lost."
+msgstr "Жёсткий предел памяти для процесса игры: считается резидентная память вместе с подкачкой. Сторожевой поток проверяет его десять раз в секунду и при достижении предела завершает Mocktail с кодом 137, так что всё несохранённое в игре пропадёт."
+
+msgid "Swap stays enabled; the cap only decides when the game is stopped. Leave it off unless Roblox has made this computer run out of memory."
+msgstr "Подкачка остаётся включённой: предел лишь решает, когда остановить игру. Не включайте его, если Roblox ещё ни разу не исчерпывал память этого компьютера."
+
+msgid "A cap that is too low ends the game while it loads or in large experiences; 6 GiB is a cautious start on a computer with 32 GiB."
+msgstr "Слишком низкий предел завершит игру ещё при загрузке или в больших мирах; для компьютера с 32 ГиБ осторожное начальное значение — 6 ГиБ."
+
+#, c-format
+msgid "This computer has %s of memory; switching the limit on starts at %s."
+msgstr "У этого компьютера %s памяти; при включении предел начнётся с %s."
+
+msgid "Very low: Roblox may be stopped while it is still loading."
+msgstr "Очень мало: Roblox может быть остановлен ещё во время загрузки."
+
+msgid "Larger than this computer's memory, so the system runs out before the limit is reached."
+msgstr "Больше, чем памяти у этого компьютера, поэтому система исчерпает память раньше, чем сработает предел."
+
+msgid "Processor"
+msgstr "Процессор"
+
+msgid "How Roblox spreads its work over the processor cores"
+msgstr "Как Roblox распределяет работу по ядрам процессора"
+
+msgid "Advanced processor options"
+msgstr "Дополнительные настройки процессора"
+
+msgid "Physics workers and the performance preset"
+msgstr "Потоки физики и пресет производительности"
+
+msgid "System"
+msgstr "Система"
+
+msgid "Help from the operating system, and a safety cap on memory"
+msgstr "Помощь от операционной системы и страховочный предел памяти"
