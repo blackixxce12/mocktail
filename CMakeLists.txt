@@ -656,6 +656,7 @@ if(MOCKTAIL_BUILD_LAUNCHER_UI)
     src/launcher_ui/accounts_page.cc
     src/launcher_ui/advanced_page.cc
     src/launcher_ui/audio_page.cc
+    src/launcher_ui/audio_page_devices.cc
     src/launcher_ui/bindings.cc
     src/launcher_ui/display_page.cc
     src/launcher_ui/graphics_page.cc
@@ -686,6 +687,8 @@ if(MOCKTAIL_BUILD_LAUNCHER_UI)
     Mocktail::LauncherUiLaunch
     Mocktail::Runtime
     PkgConfig::MOCKTAIL_LAUNCHER_ADWAITA
+    # Audio devices are listed with SDL, as the game names them.
+    SDL3::SDL3
     nlohmann_json::nlohmann_json
   )
   mocktail_apply_compile_options(mocktail_launcher_ui)

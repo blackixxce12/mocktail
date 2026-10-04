@@ -1411,3 +1411,127 @@ msgstr "Система"
 
 msgid "Help from the operating system, and a safety cap on memory"
 msgstr "Помощь от операционной системы и страховочный предел памяти"
+
+# Audio page.
+
+msgid "Look for sound devices again"
+msgstr "Поискать звуковые устройства заново"
+
+msgid "System default"
+msgstr "Системное по умолчанию"
+
+msgid "The microphone your desktop's sound settings choose"
+msgstr "Микрофон, выбранный в настройках звука рабочего стола"
+
+msgid "The output your desktop's sound settings choose"
+msgstr "Выход, выбранный в настройках звука рабочего стола"
+
+msgid "Only this microphone; Roblox does not start without it"
+msgstr "Только этот микрофон; без него Roblox не запустится"
+
+msgid "Only this device; Roblox does not start without it"
+msgstr "Только это устройство; без него Roblox не запустится"
+
+msgid "Several devices have this name, so Roblox cannot tell them apart"
+msgstr "Это имя у нескольких устройств, и Roblox не может их различить"
+
+msgid "Disabled"
+msgstr "Отключён"
+
+msgid "No microphone; Roblox is told it may not record"
+msgstr "Без микрофона; Roblox получает запрет на запись звука"
+
+#, c-format
+msgid "%s (not connected)"
+msgstr "%s (не подключено)"
+
+msgid "Saved earlier; not connected now"
+msgstr "Выбрано раньше; сейчас не подключено"
+
+msgid "Looking for sound devices…"
+msgstr "Поиск звуковых устройств…"
+
+msgid "Sound devices could not be listed"
+msgstr "Не удалось получить список звуковых устройств"
+
+#, c-format
+msgid "Device number %s (from config.yaml)"
+msgstr "Устройство номер %s (из config.yaml)"
+
+msgid "A number from an earlier start; numbers change between starts"
+msgstr "Номер из прошлого запуска; номера меняются от запуска к запуску"
+
+#, c-format
+msgid "Sound devices could not be listed: %s"
+msgstr "Не удалось получить список звуковых устройств: %s"
+
+#, c-format
+msgid "Sound system: %s, %zu microphone found."
+msgid_plural "Sound system: %s, %zu microphones found."
+msgstr[0] "Звуковая система: %s, найден %zu микрофон."
+msgstr[1] "Звуковая система: %s, найдено %zu микрофона."
+msgstr[2] "Звуковая система: %s, найдено %zu микрофонов."
+
+#, c-format
+msgid "Sound system: %s, %zu output found."
+msgid_plural "Sound system: %s, %zu outputs found."
+msgstr[0] "Звуковая система: %s, найден %zu выход."
+msgstr[1] "Звуковая система: %s, найдено %zu выхода."
+msgstr[2] "Звуковая система: %s, найдено %zu выходов."
+
+msgid "Output device"
+msgstr "Устройство вывода"
+
+msgid "Where Roblox plays its sound. Mocktail opens the device through SDL, which names devices exactly as this list does."
+msgstr "Куда Roblox выводит звук. Mocktail открывает устройство через SDL, а SDL называет устройства точно так же, как этот список."
+
+msgid "• System default: the output your desktop's sound settings choose. It keeps working when devices come and go."
+msgstr "• Системное по умолчанию: выход, выбранный в настройках звука рабочего стола. Работает и тогда, когда устройства подключают и отключают."
+
+msgid "• A named device: always that one. If it is unplugged, renamed or shares its name with another device, Roblox stops at start with an audio error instead of playing elsewhere."
+msgstr "• Конкретное устройство: всегда только оно. Если его отключили, переименовали или такое же имя есть у другого устройства, Roblox остановится при запуске с ошибкой звука, а не заиграет через другой выход."
+
+msgid "Roblox's own audio settings can still switch the output while you play; that choice is not saved here."
+msgstr "Во время игры выход можно переключить и в настройках звука самого Roblox; этот выбор здесь не сохраняется."
+
+msgid "A pinned device stops Roblox from starting whenever it is disconnected; System default follows your desktop instead."
+msgstr "Закреплённое устройство не даёт Roblox запуститься, когда оно отключено, а «Системное по умолчанию» просто следует за рабочим столом."
+
+msgid "This device is not connected, so Roblox will not start until it is back or System default is chosen."
+msgstr "Это устройство не подключено, поэтому Roblox не запустится, пока оно не появится или не будет выбрано «Системное по умолчанию»."
+
+msgid "Several devices have this name, so Roblox refuses it. Choose System default."
+msgstr "Это имя у нескольких устройств, поэтому Roblox его не примет. Выберите «Системное по умолчанию»."
+
+msgid "Microphone"
+msgstr "Микрофон"
+
+msgid "The microphone Roblox voice chat records from, opened through SDL by its exact name."
+msgstr "Микрофон, с которого записывает голосовой чат Roblox. Его открывает SDL по точному имени."
+
+msgid "• System default: the microphone your desktop's sound settings choose."
+msgstr "• Системное по умолчанию: микрофон, выбранный в настройках звука рабочего стола."
+
+msgid "• A named microphone: always that one. If it is missing at start or shares its name with another device, Roblox does not start."
+msgstr "• Конкретный микрофон: всегда только он. Если при запуске его нет или такое же имя есть у другого устройства, Roblox не запустится."
+
+msgid "• Disabled: nothing is recorded, and Roblox is told it has no permission to use a microphone."
+msgstr "• Отключён: ничего не записывается, а Roblox получает ответ, что разрешения на микрофон нет."
+
+msgid "Whether voice chat is available at all depends on your Roblox account and Roblox's own settings."
+msgstr "Доступен ли голосовой чат вообще, зависит от вашего аккаунта Roblox и настроек самого Roblox."
+
+msgid "A pinned microphone stops Roblox from starting whenever it is disconnected; System default follows your desktop instead."
+msgstr "Закреплённый микрофон не даёт Roblox запуститься, когда он отключён, а «Системное по умолчанию» просто следует за рабочим столом."
+
+msgid "This microphone is not connected, so Roblox will not start until it is back or System default is chosen."
+msgstr "Этот микрофон не подключён, поэтому Roblox не запустится, пока он не появится или не будет выбрано «Системное по умолчанию»."
+
+msgid "Device numbers change between starts. Choose the microphone by its name instead."
+msgstr "Номера устройств меняются от запуска к запуску. Лучше выберите микрофон по имени."
+
+msgid "Sound devices"
+msgstr "Звуковые устройства"
+
+msgid "Listed by the names the game uses; changes apply at the next start"
+msgstr "Названия те же, что видит игра; изменения вступят в силу при следующем запуске"

@@ -48,6 +48,7 @@ constexpr const char* kIcons[] = {
     "dialog-warning-symbolic",
     "edit-undo-symbolic",
     "go-next-symbolic",
+    "view-refresh-symbolic",
 };
 
 std::string Quote(const std::string& text) {
