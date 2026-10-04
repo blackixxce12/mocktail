@@ -778,3 +778,393 @@ msgstr "Частота кадров"
 
 msgid "How many frames Roblox draws and when they reach the screen"
 msgstr "Сколько кадров рисует Roblox и когда они попадают на экран"
+
+# Display page.
+
+msgid "In X11 pixels; native resolution has no effect"
+msgstr "В пикселях X11; чёткое изображение не действует"
+
+#, c-format
+msgid "Renders %s px; the compositor upscales it"
+msgstr "Отрисовка %s пикс., композитор растягивает картинку"
+
+#, c-format
+msgid "Renders %s px"
+msgstr "Отрисовка %s пикс."
+
+msgid "Window size"
+msgstr "Размер окна"
+
+msgid "The game starts fullscreen; this size applies after leaving it"
+msgstr "Игра запускается на весь экран; этот размер действует после выхода из полноэкранного режима"
+
+msgid "The game starts maximized; this size applies when it is restored"
+msgstr "Игра запускается развёрнутой; этот размер действует, когда окно восстановлено"
+
+#, c-format
+msgid "Remembered from the last session; config.yaml says %s"
+msgstr "Запомнен с прошлого сеанса; в config.yaml указано %s"
+
+msgid "The size of the game window while it is neither fullscreen nor maximized, in desktop units: on a screen scaled to 160 %, 1600 × 900 covers a 2560 × 1440 panel."
+msgstr "Размер окна игры, когда оно не на весь экран и не развёрнуто, в единицах рабочего стола: на экране с масштабом 160 % размер 1600 × 900 занимает всю панель 2560 × 1440."
+
+msgid "The game remembers the size its window had when it was last closed and uses that instead of config.yaml. Saving a size here updates both, so the next start uses it; resizing the game window changes the remembered size again."
+msgstr "Игра запоминает размер окна на момент закрытия и использует его вместо config.yaml. При сохранении размера здесь обновляется и то и другое, так что следующий запуск возьмёт новый размер; если потом изменить размер окна игры, запомнится уже он."
+
+msgid "Tiling compositors such as Hyprland, niri, Sway or river usually size windows themselves, so there the size matters only for a floating window."
+msgstr "Тайлинговые композиторы вроде Hyprland, niri, Sway или river обычно сами задают размер окон, поэтому там он важен только для плавающего окна."
+
+msgid "Through X11 (XWayland) the size is in X pixels, which on a scaled screen may be physical pixels, depending on how the desktop scales XWayland."
+msgstr "Через X11 (XWayland) размер задаётся в пикселях X-сервера, а на масштабированном экране это могут быть физические пиксели — смотря как рабочий стол масштабирует XWayland."
+
+#, c-format
+msgid "This screen: %s desktop units at %d %% (%s pixels)."
+msgstr "Этот экран: %s в единицах рабочего стола, масштаб %d %% (%s пикс.)."
+
+#, c-format
+msgid "Remembered size: %s."
+msgstr "Запомненный размер: %s."
+
+msgid "Nothing is remembered yet, so the first window uses the size from config.yaml."
+msgstr "Пока ничего не запомнено, поэтому первое окно откроется с размером из config.yaml."
+
+msgid "Width"
+msgstr "Ширина"
+
+msgid "Desktop units"
+msgstr "В единицах рабочего стола"
+
+msgid "The window width in desktop units, from 160 to 16384. Saving also updates the size the game remembers."
+msgstr "Ширина окна в единицах рабочего стола, от 160 до 16384. При сохранении обновляется и размер, который запомнила игра."
+
+msgid "Height"
+msgstr "Высота"
+
+msgid "The window height in desktop units, from 120 to 16384. Saving also updates the size the game remembers."
+msgstr "Высота окна в единицах рабочего стола, от 120 до 16384. При сохранении обновляется и размер, который запомнила игра."
+
+#, c-format
+msgid "%s (whole screen)"
+msgstr "%s (весь экран)"
+
+#, c-format
+msgid "%s (default)"
+msgstr "%s (по умолчанию)"
+
+#, c-format
+msgid "%s (last used)"
+msgstr "%s (как в прошлый раз)"
+
+msgid "The size the game window had when it was last closed"
+msgstr "Размер окна игры на момент последнего закрытия"
+
+#, c-format
+msgid "%s (custom)"
+msgstr "%s (своё)"
+
+msgid "Enter a width and height"
+msgstr "Ввести ширину и высоту"
+
+msgid "Start in"
+msgstr "При запуске"
+
+msgid "How the game window opens. The game still remembers the mode each session ends in, and F11 or Roblox's own fullscreen setting switch while you play."
+msgstr "Как открывается окно игры. Игра по-прежнему запоминает, в каком режиме закончился сеанс, а во время игры режим переключают F11 или полноэкранная настройка самого Roblox."
+
+msgid "Fullscreen covers the screen at its own resolution: it is not an exclusive video mode, so switching is quick. Native resolution on scaled displays decides how many pixels Roblox renders there."
+msgstr "Полный экран занимает весь экран в его собственном разрешении: это не эксклюзивный видеорежим, поэтому переключение быстрое. Сколько пикселей Roblox при этом рисует, зависит от настройки «Чёткое изображение при масштабировании»."
+
+msgid "Tiling compositors may still tile a window that starts windowed or maximized."
+msgstr "Тайлинговые композиторы всё равно могут встроить в раскладку окно, запущенное в окне или развёрнутым."
+
+msgid "Last used mode"
+msgstr "Как в прошлый раз"
+
+msgid "As the last session ended; a window the first time"
+msgstr "Как закончился прошлый сеанс; в первый раз — в окне"
+
+msgid "As the last session ended: fullscreen"
+msgstr "Как закончился прошлый сеанс: на весь экран"
+
+msgid "As the last session ended: maximized"
+msgstr "Как закончился прошлый сеанс: развёрнутым"
+
+msgid "As the last session ended: in a window"
+msgstr "Как закончился прошлый сеанс: в окне"
+
+msgid "Window"
+msgstr "Окно"
+
+msgid "Windowed"
+msgstr "В окне"
+
+msgid "A normal window of the size below"
+msgstr "Обычное окно размера, указанного ниже"
+
+msgid "Maximized"
+msgstr "Развёрнутым"
+
+msgid "Fills the screen around panels and docks"
+msgstr "Заполняет экран, оставляя место панелям и докам"
+
+msgid "Fullscreen"
+msgstr "Полный экран"
+
+msgid "Covers the whole screen; F11 switches back to a window"
+msgstr "Занимает весь экран; F11 возвращает в окно"
+
+msgid "Native resolution on scaled displays"
+msgstr "Чёткое изображение при масштабировании (HiDPI)"
+
+msgid "No effect through X11 (XWayland)"
+msgstr "Через X11 (XWayland) не действует"
+
+msgid "Renders every pixel of a scaled screen instead of upscaling"
+msgstr "Рисует каждый пиксель масштабированного экрана вместо растягивания"
+
+#, c-format
+msgid "No effect at %d %% scale"
+msgstr "При масштабе %d %% не действует"
+
+#, c-format
+msgid "Scale %d %%: renders all %s pixels"
+msgstr "Масштаб %d %%: рисуются все %s пикс."
+
+#, c-format
+msgid "Scale %d %%: renders %s, upscaled by the compositor"
+msgstr "Масштаб %d %%: рисуется %s, композитор растягивает"
+
+msgid "On a screen scaled above 100 %, this decides whether Roblox renders every pixel of the screen or the smaller desktop size, which the compositor then stretches. Roblox's menus keep the same size either way."
+msgstr "На экране с масштабом больше 100 % эта настройка решает, рисует ли Roblox каждый пиксель экрана или меньший размер рабочего стола, который потом растягивает композитор. Размер меню Roblox в обоих случаях одинаковый."
+
+msgid "• On: sharp text and edges, but the graphics card draws the scale squared times as many pixels: 2.56 times as many at 160 %."
+msgstr "• Вкл.: чёткий текст и края, но видеокарте приходится рисовать больше пикселей — в квадрат масштаба раз: при 160 % в 2,56 раза больше."
+
+msgid "• Off: fewer pixels to draw, a softer picture and usually a higher frame rate."
+msgstr "• Выкл.: меньше пикселей, картинка мягче, а кадров в секунду обычно больше."
+
+msgid "It works only with Wayland. Through X11 (XWayland) the game gets no pixel density, so this setting changes nothing there."
+msgstr "Работает только с Wayland. Через X11 (XWayland) игра не получает плотность пикселей, поэтому там эта настройка ничего не меняет."
+
+#, c-format
+msgid "This screen: %s desktop units at %d %%, %s pixels."
+msgstr "Этот экран: %s в единицах рабочего стола при масштабе %d %%, %s пикс."
+
+msgid "With Intel graphics only, the extra pixels cost more frame rate than the sharper picture is worth."
+msgstr "Когда есть только графика Intel, лишние пиксели отнимают больше кадров, чем стоит прибавка в чёткости."
+
+#, c-format
+msgid "Your screen is scaled to %d %%, and this keeps the picture as sharp as the screen allows."
+msgstr "Масштаб вашего экрана — %d %%, и так картинка будет настолько чёткой, насколько позволяет экран."
+
+msgid "Fullscreen through X11, at the X server's screen size"
+msgstr "На весь экран через X11, в размере экрана X-сервера"
+
+msgid "Maximized through X11, within the X server's screen"
+msgstr "Развёрнуто через X11, в пределах экрана X-сервера"
+
+#, c-format
+msgid "A %s window through X11"
+msgstr "Окно %s через X11"
+
+msgid "Fullscreen at the screen's own size"
+msgstr "На весь экран в его собственном размере"
+
+msgid "Maximized to the screen's free area"
+msgstr "Развёрнуто на свободную часть экрана"
+
+#, c-format
+msgid "%s px fullscreen, upscaled to %s"
+msgstr "%s пикс. на весь экран, растянуто до %s"
+
+#, c-format
+msgid "%s px fullscreen, sharp"
+msgstr "%s пикс. на весь экран, чётко"
+
+#, c-format
+msgid "Up to %s px maximized, upscaled"
+msgstr "До %s пикс. в развёрнутом окне, растянуто"
+
+#, c-format
+msgid "Up to %s px maximized"
+msgstr "До %s пикс. в развёрнутом окне"
+
+#, c-format
+msgid "%s px in a window, upscaled"
+msgstr "%s пикс. в окне, растянуто"
+
+#, c-format
+msgid "%s px in a window"
+msgstr "%s пикс. в окне"
+
+#, c-format
+msgid "%s px in a %s window"
+msgstr "%s пикс. в окне %s"
+
+msgid "Game resolution"
+msgstr "Разрешение игры"
+
+msgid "What Roblox renders with the settings above, worked out from this screen's desktop size and scale, the window size, the start mode and native resolution. Roblox lays out its interface at the desktop size; this is how many pixels it draws."
+msgstr "Что Roblox будет рисовать с настройками выше. Расчёт учитывает размер и масштаб этого экрана, размер окна, режим запуска и чёткое изображение. Интерфейс Roblox раскладывается по размеру рабочего стола, а здесь показано, сколько пикселей он рисует."
+
+msgid "A lower fullscreen resolution, as games offer on Windows, is not available: fullscreen always covers the screen at its own size. To draw fewer pixels on a scaled screen, turn native resolution off."
+msgstr "Пониженного разрешения в полноэкранном режиме, как в играх на Windows, нет: полный экран всегда занимает экран в его собственном размере. Чтобы рисовать меньше пикселей на масштабированном экране, выключите чёткое изображение."
+
+msgid "A maximized window loses the space of panels and docks, which this window cannot see, so its size is an upper bound."
+msgstr "Развёрнутое окно теряет место под панели и доки, которых это окно не видит, поэтому его размер — верхняя граница."
+
+msgid "Uses Wayland here"
+msgstr "Здесь используется Wayland"
+
+msgid "Uses X11 (XWayland) here: NVIDIA with Vulkan"
+msgstr "Здесь используется X11 (XWayland): NVIDIA с Vulkan"
+
+msgid "Uses X11 here: there is no Wayland session"
+msgstr "Здесь используется X11: сеанса Wayland нет"
+
+msgid "Wayland when available; X11 (XWayland) for NVIDIA with Vulkan"
+msgstr "Wayland, если он есть; X11 (XWayland) для NVIDIA с Vulkan"
+
+msgid "Native Wayland; with NVIDIA and Vulkan it has hung for some users"
+msgstr "Нативный Wayland; с NVIDIA и Vulkan у некоторых зависал"
+
+msgid "Native Wayland: sharp on scaled screens with native resolution"
+msgstr "Нативный Wayland: чётко на масштабированных экранах с чётким изображением"
+
+msgid "No Wayland session: WAYLAND_DISPLAY is not set"
+msgstr "Нет сеанса Wayland: WAYLAND_DISPLAY не задана"
+
+msgid "X11 (XWayland)"
+msgstr "X11 (XWayland)"
+
+msgid "Through an X server; native resolution has no effect"
+msgstr "Через X-сервер; чёткое изображение не действует"
+
+msgid "No X server: DISPLAY is not set"
+msgstr "Нет X-сервера: DISPLAY не задана"
+
+msgid "Display server"
+msgstr "Графический сервер"
+
+msgid "Whether the game window talks to your desktop through Wayland or through X11, which on a Wayland desktop means XWayland. The change applies the next time Roblox starts, also to the test runs of automatic updates."
+msgstr "Через что окно игры работает с рабочим столом: через Wayland или через X11, то есть на рабочем столе Wayland через XWayland. Изменение вступит в силу при следующем запуске Roblox и коснётся также тестовых запусков автоматического обновления."
+
+msgid "• Automatic: Wayland when the desktop offers it. The exception is NVIDIA's driver with the Vulkan backend: then XWayland, because NVIDIA's native Wayland path has hung and lost the display (upstream issue #186)."
+msgstr "• Автоматически: Wayland, если рабочий стол его предлагает. Исключение — драйвер NVIDIA с движком Vulkan: тогда XWayland, потому что в нативном Wayland драйвер NVIDIA зависал и терял связь с экраном (issue #186 в основном репозитории)."
+
+msgid "• Wayland: the native path, sharp on scaled screens with native resolution. On NVIDIA with Vulkan it is the riskier choice, but worth a try when the mouse or camera misbehaves through XWayland."
+msgstr "• Wayland: нативный путь, чёткий на масштабированных экранах с чётким изображением. На NVIDIA с Vulkan это более рискованный выбор, но его стоит попробовать, если через XWayland капризничают мышь или камера."
+
+msgid "• X11 (XWayland): works with every driver, but the game gets no pixel density, so native resolution has no effect and the picture may look small or soft on a scaled screen."
+msgstr "• X11 (XWayland): работает с любым драйвером, но игра не получает плотность пикселей, поэтому чёткое изображение не действует, а на масштабированном экране картинка может выглядеть мелкой или мыльной."
+
+msgid "SDL_VIDEODRIVER or SDL_VIDEO_DRIVER set in the shortcut or terminal always win over this setting."
+msgstr "Переменные окружения SDL_VIDEODRIVER или SDL_VIDEO_DRIVER из ярлыка или терминала всегда важнее этой настройки."
+
+msgid "This session offers Wayland and X11 (XWayland)."
+msgstr "В этом сеансе есть Wayland и X11 (XWayland)."
+
+msgid "This session offers Wayland only, without an X server."
+msgstr "В этом сеансе есть только Wayland, без X-сервера."
+
+msgid "This session offers X11 only."
+msgstr "В этом сеансе есть только X11."
+
+msgid "This session offers no display server to the game."
+msgstr "В этом сеансе нет графического сервера для игры."
+
+msgid "NVIDIA's kernel driver is loaded."
+msgstr "Загружен драйвер ядра NVIDIA."
+
+msgid "It avoids NVIDIA's Wayland hangs; choose Wayland only if XWayland gives you trouble."
+msgstr "Так игра обходит зависания NVIDIA в Wayland; выбирайте Wayland, только если с XWayland есть проблемы."
+
+msgid "It already picks the best server this session offers."
+msgstr "Он и так выбирает лучший сервер из тех, что есть в этом сеансе."
+
+msgid "This session has no Wayland, so the game uses the automatic choice."
+msgstr "В этом сеансе нет Wayland, поэтому игра выберет сервер автоматически."
+
+msgid "This session has no X server, so the game uses the automatic choice."
+msgstr "В этом сеансе нет X-сервера, поэтому игра выберет сервер автоматически."
+
+msgid "NVIDIA's Wayland path for Vulkan has hung or lost the display for some users (upstream issue #186). If the game freezes or closes, go back to Automatic."
+msgstr "У некоторых драйвер NVIDIA с Vulkan в Wayland зависал или терял связь с экраном (issue #186 в основном репозитории). Если игра зависнет или закроется, верните «Автоматически»."
+
+msgid "Theme"
+msgstr "Тема"
+
+msgid "The theme of Roblox's own menus and screens, chosen when the game starts."
+msgstr "Тема меню и экранов самого Roblox; выбирается при запуске игры."
+
+msgid "• From your Roblox account: the theme saved in your Roblox settings, read from Roblox's local data for the signed-in account; dark when none is saved yet."
+msgstr "• Как в аккаунте Roblox: тема, сохранённая в настройках Roblox; она читается из локальных данных Roblox для аккаунта, в который выполнен вход. Если тема ещё не сохранена — тёмная."
+
+msgid "• Follow the system: your desktop's light or dark preference as SDL reports it at start; light when the desktop reports none."
+msgstr "• Как в системе: светлая или тёмная тема рабочего стола — так, как её сообщает SDL при запуске; светлая, если рабочий стол ничего не сообщает."
+
+msgid "• Light and Dark: always that theme."
+msgstr "• Светлая и Тёмная: всегда эта тема."
+
+msgid "With any choice except “From your Roblox account”, Mocktail also writes the resulting theme into Roblox's local settings for the signed-in account at every start."
+msgstr "При любом выборе, кроме «Как в аккаунте Roblox», Mocktail при каждом запуске ещё и записывает получившуюся тему в локальные настройки Roblox для аккаунта, в который выполнен вход."
+
+msgid "From your Roblox account"
+msgstr "Как в аккаунте Roblox"
+
+msgid "The theme saved in your Roblox settings; dark until one is saved"
+msgstr "Тема из настроек Roblox; тёмная, пока там ничего не сохранено"
+
+msgid "Follow the system"
+msgstr "Как в системе"
+
+msgid "Light or dark, as your desktop prefers when the game starts"
+msgstr "Светлая или тёмная — как предпочитает рабочий стол на момент запуска игры"
+
+msgid "Light"
+msgstr "Светлая"
+
+msgid "Always light"
+msgstr "Всегда светлая"
+
+msgid "Dark"
+msgstr "Тёмная"
+
+msgid "Always dark"
+msgstr "Всегда тёмная"
+
+msgid "Window title"
+msgstr "Заголовок окна"
+
+msgid "Shown in taskbars and window switchers"
+msgstr "Виден на панели задач и в переключателе окон"
+
+msgid "The title of the game window, shown in taskbars, docks and window switchers. Window rules of some compositors match on it, so change it only together with such rules."
+msgstr "Заголовок окна игры, который видно на панели задач, в доках и в переключателе окон. Правила окон в некоторых композиторах опираются на него, поэтому меняйте его только вместе с такими правилами."
+
+msgid "It cannot be empty; the default is Roblox."
+msgstr "Он не может быть пустым; по умолчанию — Roblox."
+
+msgid "The title cannot be empty"
+msgstr "Заголовок не может быть пустым"
+
+msgid "How the game window opens and how large it is"
+msgstr "Как открывается окно игры и какого оно размера"
+
+msgid "More window options"
+msgstr "Другие настройки окна"
+
+msgid "Scaling"
+msgstr "Масштабирование"
+
+msgid "Sharpness and pixel count on screens scaled above 100 %"
+msgstr "Чёткость и число пикселей на экранах с масштабом больше 100 %"
+
+msgid "Whether the game window uses Wayland or X11"
+msgstr "Работает ли окно игры через Wayland или через X11"
+
+msgid "Roblox interface"
+msgstr "Интерфейс Roblox"
+
+msgid "How Roblox's own menus look"
+msgstr "Как выглядят меню самого Roblox"
