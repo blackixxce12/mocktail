@@ -518,6 +518,16 @@ TEST(WebViewHelperLauncherTest, DecodesOptionalParentWindowAndModality) {
             "wayland:{5b7e1d2c-0000-4c4c-8888-aaaaaaaaaaaa}");
   EXPECT_TRUE(decoded.modal);
 
+  // mutter hands out random printable ASCII, spaces and quotes included.
+  const std::string mutter_handle = "wayland: q\"7 ;\\/{~`'$x ";
+  ASSERT_TRUE(DecodeWebViewRequest(
+      base + "\nparent=" + mutter_handle + "\nmodal=1", &decoded, &error))
+      << error;
+  EXPECT_EQ(decoded.parent_window, mutter_handle);
+  EXPECT_TRUE(decoded.modal);
+  EXPECT_EQ(ChooseWebViewParent(nullptr, mutter_handle).parent_window,
+            mutter_handle);
+
   ASSERT_TRUE(DecodeWebViewRequest(base + "\nparent=x11:62914563\nmodal=1",
                                    &decoded, &error))
       << error;
@@ -536,7 +546,9 @@ TEST(WebViewHelperLauncherTest, DecodesOptionalParentWindowAndModality) {
            base + "\nmodal=1",
            base + "\nparent=",
            base + "\nparent=wayland:",
-           base + "\nparent=wayland:has space",
+           base + "\nparent=wayland:tab\there",
+           base + "\nparent=wayland:del\x7f",
+           base + "\nparent=wayland:non-ascii\xc3\xa9",
            base + "\nparent=wayland:two\nlines",
            base + "\nparent=x11:0",
            base + "\nparent=x11:012",
@@ -604,7 +616,7 @@ TEST(WebViewHelperLauncherTest, ModalityWithoutParentKeepsTheOriginalRequest) {
 
 TEST(WebViewHelperLauncherTest, RejectsInvalidParentWindowBeforeSpawn) {
   WebViewHelperLaunchOptions options;
-  options.parent_window = "wayland:bad handle";
+  options.parent_window = "wayland:bad\thandle";
   const WebViewHelperLaunchResult result = LaunchWebViewHelper(
       "/definitely/missing/helper", "https://www.roblox.com/login", {},
       options);
@@ -656,7 +668,7 @@ TEST(WebViewHelperLauncherTest, OpensItsOwnWindowWithoutAUsableGameWindow) {
   EXPECT_FALSE(options.modal);
   EXPECT_NE(reason.find("no handle"), std::string::npos);
 
-  options = ChooseWebViewParent("transient", "wayland:bad handle", &reason);
+  options = ChooseWebViewParent("transient", "wayland:bad\thandle", &reason);
   EXPECT_TRUE(options.parent_window.empty());
   EXPECT_FALSE(options.modal);
   EXPECT_NE(reason.find("unsafe"), std::string::npos);

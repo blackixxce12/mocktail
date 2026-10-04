@@ -629,13 +629,15 @@ bool ValidateWebViewParentWindow(std::string_view parent_window,
   if (parent_window.compare(0, kWaylandParentPrefix.size(),
                             kWaylandParentPrefix) == 0) {
     // xdg-foreign handles are opaque strings: UUIDs on Hyprland and KWin,
-    // random tokens on wlroots and Smithay. Keep them printable and unspaced.
+    // random tokens on wlroots and Smithay, and on mutter any printable ASCII,
+    // spaces included. Keep them printable, which also keeps them on the one
+    // line the request gives them.
     const std::string_view handle =
         parent_window.substr(kWaylandParentPrefix.size());
     if (handle.empty() ||
         !std::all_of(handle.begin(), handle.end(), [](char byte) {
           const unsigned char value = static_cast<unsigned char>(byte);
-          return value > 0x20 && value < 0x7f;
+          return value >= 0x20 && value < 0x7f;
         })) {
       return fail("webview Wayland parent handle is empty or unsafe");
     }
