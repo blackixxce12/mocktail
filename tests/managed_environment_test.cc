@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "runtime/graphics_launch_policy.h"
 #include "runtime/runtime_config_file.h"
 
 namespace mocktail {
@@ -135,6 +136,17 @@ TEST(ManagedEnvironmentTest, CoversEverySettingTheLauncherNeeds) {
   EXPECT_EQ(FindManagedEnvironmentVariable("MOCKTAIL_HEADLESS"), nullptr);
   EXPECT_EQ(FindManagedEnvironmentVariable("HOME"), nullptr);
   EXPECT_EQ(FindManagedEnvironmentVariable(""), nullptr);
+}
+
+TEST(ManagedEnvironmentTest, ListsEveryUserVideoDriverVariable) {
+  // display.server steps aside for these; the settings window must be able
+  // to show them as overriding it.
+  for (const std::string_view name : kUserVideoDriverVariables) {
+    const ManagedEnvironmentVariable* variable =
+        FindManagedEnvironmentVariable(name);
+    ASSERT_NE(variable, nullptr) << name;
+    EXPECT_EQ(variable->yaml_key, "display.server") << name;
+  }
 }
 
 TEST(ManagedEnvironmentTest, NamesAreUniqueAndEveryEntryCanImport) {

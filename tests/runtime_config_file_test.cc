@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "runtime/graphics_launch_policy.h"
 #include "runtime/runtime_config_bootstrap.h"
 
 #ifndef MOCKTAIL_TEST_SOURCE_DIR
@@ -1474,6 +1475,146 @@ TEST(RuntimeConfigFileTest, DefaultGraphicsQualityLeavesThePresetInCharge) {
   EXPECT_EQ(loaded.config.engine().graphics_quality, GraphicsQuality{});
   ASSERT_TRUE(ExportRuntimeConfigEnvironment(loaded.config, &error)) << error;
   EXPECT_EQ(GetVariable("MOCKTAIL_GRAPHICS_QUALITY"), std::nullopt);
+}
+
+// ApplyGraphicsLaunchPolicy with a system backend, which publishes only the
+// backend switches and display.server.
+class DisplayServerPolicyTest : public ::testing::Test {
+ protected:
+  RuntimeConfig Load(std::string_view server,
+                     const MapEnvironment& environment = MapEnvironment()) {
+    const RuntimeConfigLoadResult loaded = LoadRuntimeConfig(
+        environment,
+        temporary_.Write("version: 1\ngraphics:\n  backend: system\n"
+                         "display:\n  server: " +
+                         std::string(server) + "\n"));
+    EXPECT_TRUE(loaded) << loaded.error;
+    return loaded.config;
+  }
+
+  bool Apply(const RuntimeConfig& config,
+             const std::vector<std::string>& user_environment) {
+    std::string error;
+    const bool applied =
+        ApplyGraphicsLaunchPolicy(config, user_environment, &error);
+    EXPECT_TRUE(applied) << error;
+    return applied;
+  }
+
+  TemporaryDirectory temporary_;
+  const ScopedEnvironment scoped_{{
+      "MOCKTAIL_GRAPHICS_BACKEND",
+      "MOCKTAIL_PRELOAD_VULKAN_SHIM",
+      "MOCKTAIL_REQUIRE_REAL_GRAPHICS",
+      "MOCKTAIL_DISABLE_AUTO_ANGLE_FALLBACK",
+      "MOCKTAIL_SOFTWARE_WINDOW_FALLBACK",
+      "SDL_VIDEODRIVER",
+      "SDL_VIDEO_DRIVER",
+      "MOCKTAIL_FORCE_WAYLAND",
+      "MOCKTAIL_FORCE_X11",
+      "MOCKTAIL_ANGLE_FORCE_X11",
+  }};
+};
+
+TEST_F(DisplayServerPolicyTest, WaylandForcesWaylandAndClearsX11Switches) {
+  // Left over from Mocktail itself, not from the user's environment.
+  ASSERT_EQ(setenv("MOCKTAIL_FORCE_X11", "1", 1), 0);
+  ASSERT_EQ(setenv("MOCKTAIL_ANGLE_FORCE_X11", "1", 1), 0);
+  ASSERT_TRUE(Apply(Load("wayland"), {}));
+  EXPECT_EQ(GetVariable("MOCKTAIL_FORCE_WAYLAND"), "1");
+  EXPECT_EQ(GetVariable("MOCKTAIL_FORCE_X11"), std::nullopt);
+  EXPECT_EQ(GetVariable("MOCKTAIL_ANGLE_FORCE_X11"), std::nullopt);
+  EXPECT_EQ(GetVariable("SDL_VIDEODRIVER"), std::nullopt);
+  EXPECT_EQ(GetVariable("MOCKTAIL_GRAPHICS_BACKEND"), "system");
+}
+
+TEST_F(DisplayServerPolicyTest, X11ForcesX11AndClearsWayland) {
+  ASSERT_EQ(setenv("MOCKTAIL_FORCE_WAYLAND", "1", 1), 0);
+  ASSERT_TRUE(Apply(Load("x11"), {}));
+  EXPECT_EQ(GetVariable("MOCKTAIL_FORCE_X11"), "1");
+  EXPECT_EQ(GetVariable("MOCKTAIL_FORCE_WAYLAND"), std::nullopt);
+  EXPECT_EQ(GetVariable("SDL_VIDEODRIVER"), std::nullopt);
+}
+
+TEST_F(DisplayServerPolicyTest, AutoTouchesNothing) {
+  ASSERT_TRUE(Apply(Load("auto"), {}));
+  for (const std::string_view name : kUserVideoDriverVariables) {
+    EXPECT_EQ(GetVariable(std::string(name).c_str()), std::nullopt) << name;
+  }
+  ASSERT_EQ(setenv("MOCKTAIL_FORCE_X11", "1", 1), 0);
+  ASSERT_TRUE(Apply(Load("auto"), {}));
+  EXPECT_EQ(GetVariable("MOCKTAIL_FORCE_X11"), "1");
+  EXPECT_EQ(GetVariable("MOCKTAIL_FORCE_WAYLAND"), std::nullopt);
+}
+
+TEST_F(DisplayServerPolicyTest, UserVideoDriverVariablesWin) {
+  // The user's shortcut runs `env SDL_VIDEODRIVER=x11 mocktail`.
+  ASSERT_EQ(setenv("SDL_VIDEODRIVER", "x11", 1), 0);
+  ASSERT_TRUE(Apply(Load("wayland"), {"SDL_VIDEODRIVER"}));
+  EXPECT_EQ(GetVariable("SDL_VIDEODRIVER"), "x11");
+  EXPECT_EQ(GetVariable("MOCKTAIL_FORCE_WAYLAND"), std::nullopt);
+  EXPECT_EQ(GetVariable("MOCKTAIL_FORCE_X11"), std::nullopt);
+  ASSERT_EQ(unsetenv("SDL_VIDEODRIVER"), 0);
+
+  for (const std::string_view name : kUserVideoDriverVariables) {
+    const std::string owned(name);
+    // Even an empty or "0" value is the user's own decision.
+    for (const char* value : {"1", "0", ""}) {
+      ASSERT_EQ(setenv(owned.c_str(), value, 1), 0);
+      ASSERT_TRUE(Apply(Load("x11"), {"MOCKTAIL_VSYNC", owned}));
+      EXPECT_EQ(GetVariable(owned.c_str()), value) << name;
+      for (const std::string_view other : kUserVideoDriverVariables) {
+        if (other != name) {
+          EXPECT_EQ(GetVariable(std::string(other).c_str()), std::nullopt)
+              << name << " / " << other;
+        }
+      }
+      ASSERT_EQ(unsetenv(owned.c_str()), 0);
+    }
+  }
+}
+
+TEST_F(DisplayServerPolicyTest, VariablesRemovedSinceStartNoLongerWin) {
+  // The settings window asked main to ignore the user's overrides, so the
+  // captured SDL_VIDEODRIVER was unset before the config was loaded.
+  ASSERT_TRUE(Apply(Load("wayland"), {"SDL_VIDEODRIVER"}));
+  EXPECT_EQ(GetVariable("MOCKTAIL_FORCE_WAYLAND"), "1");
+  EXPECT_FALSE(UserSelectsVideoDriver({"SDL_VIDEODRIVER"}));
+  // Only variables captured from the user's environment count.
+  EXPECT_FALSE(UserSelectsVideoDriver({}));
+  EXPECT_TRUE(UserSelectsVideoDriver({"MOCKTAIL_FORCE_WAYLAND"}));
+}
+
+TEST_F(DisplayServerPolicyTest, DisplayServerVariableIsAnOrdinarySetting) {
+  // MOCKTAIL_DISPLAY_SERVER overrides the YAML value like any other setting
+  // and is applied through the same switches.
+  const RuntimeConfig config =
+      Load("wayland", MapEnvironment({{"MOCKTAIL_DISPLAY_SERVER", "x11"}}));
+  EXPECT_EQ(config.display().server, DisplayServer::kX11);
+  ASSERT_TRUE(Apply(config, {"MOCKTAIL_DISPLAY_SERVER"}));
+  EXPECT_EQ(GetVariable("MOCKTAIL_FORCE_X11"), "1");
+  EXPECT_EQ(GetVariable("MOCKTAIL_FORCE_WAYLAND"), std::nullopt);
+}
+
+TEST_F(DisplayServerPolicyTest, OverloadWithoutCaptureTreatsCurrentAsUsers) {
+  ASSERT_EQ(setenv("SDL_VIDEO_DRIVER", "wayland", 1), 0);
+  std::string error;
+  ASSERT_TRUE(ApplyGraphicsLaunchPolicy(Load("x11"), &error)) << error;
+  EXPECT_EQ(GetVariable("MOCKTAIL_FORCE_X11"), std::nullopt);
+  ASSERT_EQ(unsetenv("SDL_VIDEO_DRIVER"), 0);
+  ASSERT_TRUE(ApplyGraphicsLaunchPolicy(Load("x11"), &error)) << error;
+  EXPECT_EQ(GetVariable("MOCKTAIL_FORCE_X11"), "1");
+}
+
+TEST_F(DisplayServerPolicyTest, RefusesAnInvalidDisplayServer) {
+  const RuntimeConfig invalid = RuntimeConfig::FromEnvironment(MapEnvironment(
+      {{"MOCKTAIL_GRAPHICS_BACKEND", "system"},
+       {"MOCKTAIL_DISPLAY_SERVER", "mir"}}));
+  std::string error;
+  EXPECT_FALSE(ApplyGraphicsLaunchPolicy(invalid, {}, &error));
+  EXPECT_NE(error.find("display server"), std::string::npos) << error;
+  EXPECT_EQ(GetVariable("MOCKTAIL_FORCE_WAYLAND"), std::nullopt);
+  EXPECT_EQ(GetVariable("MOCKTAIL_FORCE_X11"), std::nullopt);
 }
 
 }  // namespace

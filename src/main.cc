@@ -519,6 +519,7 @@ int main(int argc, char* argv[]) {
   }
   if (command_line.options.mode == mocktail::runtime::CommandMode::kRun &&
       !mocktail::runtime::ApplyGraphicsLaunchPolicy(runtime_config.config,
+                                                     user_managed_environment,
                                                      &command_line_error)) {
     std::cerr << "[FATAL] " << command_line_error << '\n';
     return EXIT_FAILURE;
@@ -614,6 +615,14 @@ int main(int argc, char* argv[]) {
               << (runtime_config.config.graphics_backend() ==
                           mocktail::runtime::GraphicsBackend::kSystem
                       ? " (EGL/OpenGL ES)"
+                      : "")
+              << '\n';
+    std::cout << "  [runtime] display server="
+              << mocktail::runtime::DisplayServerName(
+                     runtime_config.config.display().server)
+              << (mocktail::runtime::UserSelectsVideoDriver(
+                      user_managed_environment)
+                      ? " (video driver chosen by the environment)"
                       : "")
               << '\n';
   }

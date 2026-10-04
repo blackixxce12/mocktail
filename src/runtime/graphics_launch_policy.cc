@@ -1,6 +1,7 @@
 #include "runtime/graphics_launch_policy.h"
 
 #include "runtime/frame_rate_policy.h"
+#include "runtime/managed_environment.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -75,6 +76,33 @@ bool SetDefault(const char* name, const std::string& value,
     return true;
   }
   return SetValue(name, value, error);
+}
+
+bool ClearValue(const char* name, std::string* error) {
+  if (unsetenv(name) == 0) {
+    return true;
+  }
+  if (error != nullptr) {
+    *error = std::string("cannot clear graphics setting: ") + name;
+  }
+  return false;
+}
+
+// window.cc's video-driver policy reads these switches when it creates the
+// game window; a forced driver beats its NVIDIA XWayland rule.
+bool ApplyDisplayServer(DisplayServer server, std::string* error) {
+  switch (server) {
+    case DisplayServer::kWayland:
+      return SetValue("MOCKTAIL_FORCE_WAYLAND", "1", error) &&
+             ClearValue("MOCKTAIL_FORCE_X11", error) &&
+             ClearValue("MOCKTAIL_ANGLE_FORCE_X11", error);
+    case DisplayServer::kX11:
+      return SetValue("MOCKTAIL_FORCE_X11", "1", error) &&
+             ClearValue("MOCKTAIL_FORCE_WAYLAND", error);
+    case DisplayServer::kAuto:
+      break;
+  }
+  return true;
 }
 
 // "default" is engine.graphics_quality's own word for an unset level.
@@ -268,12 +296,41 @@ std::string SelectVulkanIcdManifest(
   return {};
 }
 
+bool UserSelectsVideoDriver(const std::vector<std::string>& user_environment) {
+  for (const std::string_view name : kUserVideoDriverVariables) {
+    const std::string owned(name);
+    if (std::find(user_environment.begin(), user_environment.end(), owned) !=
+            user_environment.end() &&
+        std::getenv(owned.c_str()) != nullptr) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool ApplyGraphicsLaunchPolicy(const RuntimeConfig& config,
+                               std::string* error) {
+  return ApplyGraphicsLaunchPolicy(
+      config, CaptureUserManagedEnvironment(environ), error);
+}
+
+bool ApplyGraphicsLaunchPolicy(const RuntimeConfig& config,
+                               const std::vector<std::string>& user_environment,
                                std::string* error) {
   if (config.graphics_backend() == GraphicsBackend::kUnknown) {
     if (error != nullptr) {
       *error = "cannot apply an unknown graphics backend";
     }
+    return false;
+  }
+  if (!config.display().server_valid) {
+    if (error != nullptr) {
+      *error = "cannot apply an invalid display server";
+    }
+    return false;
+  }
+  if (!UserSelectsVideoDriver(user_environment) &&
+      !ApplyDisplayServer(config.display().server, error)) {
     return false;
   }
 
