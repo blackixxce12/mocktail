@@ -229,6 +229,9 @@ class LauncherContext {
   // "Move into settings": imports the environment overrides into the draft
   // and asks mocktail to leave them out of this launch.
   void MoveEnvironmentIntoSettings();
+  // The banner's Details dialog: every overriding variable with its
+  // (redacted) value and origin, Move into Settings and Clean Up Shortcut.
+  void ShowEnvironmentDialog();
   runtime::LauncherUiResult outcome() const { return outcome_; }
 
   // ---- feedback
@@ -264,7 +267,6 @@ class LauncherContext {
   void UpdateConfigBanners();
   void UpdateEnvironmentBanner();
   void ShowConfigErrorDialog();
-  void ShowEnvironmentDialog();
   void ShowCloseDialog();
   bool SaveInternal(bool quiet);
   void Finish(runtime::LauncherUiResult outcome);

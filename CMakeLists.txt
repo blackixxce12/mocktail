@@ -714,6 +714,7 @@ if(MOCKTAIL_BUILD_LAUNCHER_UI)
   add_dependencies(mocktail_launcher_ui mocktail_translations)
   # Helpers of the Integrations, Network & Updates, Advanced and About pages.
   target_sources(mocktail_launcher_ui PRIVATE
+    src/launcher_ui/advanced_fast_flags.cc
     src/launcher_ui/network_updates_status.cc
     src/launcher_ui/page_widgets.cc
   )

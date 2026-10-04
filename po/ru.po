@@ -2482,3 +2482,370 @@ msgstr "При включённом автоматическом обновле�
 
 msgid "This needs an internet connection. Like Roblox downloads, it does not use the proxy from Network & Updates."
 msgstr "Нужен доступ к интернету. Как и скачивание Roblox, проверка не использует прокси из раздела «Сеть и обновления»."
+
+# Advanced page (advanced_page.cc, advanced_fast_flags.cc).
+msgid "Fast Flag %s conflicts with your settings; remove it or change the setting"
+msgstr "Fast Flag %s конфликтует с вашими настройками; удалите его или измените настройку"
+
+msgid "Fast Flags exceed the 64 KiB fflags.json may hold"
+msgstr "Fast Flags не помещаются в 64 КиБ, допустимые для fflags.json"
+
+msgid "true or false"
+msgstr "true или false"
+
+msgid "a whole number"
+msgstr "целое число"
+
+msgid "text"
+msgstr "текст"
+
+msgid "Enter the flag's name, for example FFlagDebugDisplayFPS"
+msgstr "Введите имя флага, например FFlagDebugDisplayFPS"
+
+msgid "A flag name uses only letters, digits and underscores"
+msgstr "В имени флага только латинские буквы, цифры и подчёркивания"
+
+msgid "This flag takes %s"
+msgstr "Значение этого флага — %s"
+
+msgid "Saved as %s"
+msgstr "Сохранится как %s"
+
+msgid "replaces the flag already in the list"
+msgstr "заменит флаг, который уже есть в списке"
+
+msgid "Mocktail sets this flag itself for some settings"
+msgstr "Mocktail сам задаёт этот флаг при некоторых настройках"
+
+msgid "Edit Flag"
+msgstr "Изменить флаг"
+
+msgid "Add Flag"
+msgstr "Добавить флаг"
+
+msgid "Flag names start with FFlag, FInt, FString or their DF forms; the type follows the name."
+msgstr "Имена флагов начинаются с FFlag, FInt, FString или их вариантов с DF; тип значения следует из имени."
+
+msgid "Name"
+msgstr "Имя"
+
+msgid "Value"
+msgstr "Значение"
+
+msgid "_Add"
+msgstr "_Добавить"
+
+msgid "Nothing imported: choose a JSON object of flags of at most 64 KiB, like ClientAppSettings.json"
+msgstr "Ничего не импортировано: выберите JSON-объект с флагами размером до 64 КиБ, например ClientAppSettings.json"
+
+msgid "%d flag imported"
+msgid_plural "%d flags imported"
+msgstr[0] "Импортирован %d флаг"
+msgstr[1] "Импортировано %d флага"
+msgstr[2] "Импортировано %d флагов"
+
+msgid "Import Fast Flags"
+msgstr "Импорт Fast Flags"
+
+msgid "JSON files"
+msgstr "Файлы JSON"
+
+msgid "Fast Flags"
+msgstr "Fast Flags"
+
+msgid "Import JSON…"
+msgstr "Импортировать JSON…"
+
+msgid "Open fflags.json"
+msgstr "Открыть fflags.json"
+
+msgid "Reload fflags.json"
+msgstr "Перечитать fflags.json"
+
+msgid "More Fast Flags actions"
+msgstr "Другие действия с Fast Flags"
+
+msgid "Use with caution: Roblox ignores most flags that are not on its allowlist"
+msgstr "Осторожно: Roblox игнорирует большинство флагов не из своего белого списка"
+
+msgid "Saved to fflags.json with the other settings. Where Mocktail sets a flag itself, its own value wins."
+msgstr "Сохраняются в fflags.json вместе с остальными настройками. Если Mocktail сам задаёт флаг, побеждает его значение."
+
+msgid "fflags.json does not exist yet; add a flag and save first"
+msgstr "fflags.json пока нет; сначала добавьте флаг и сохраните"
+
+msgid "Flags"
+msgstr "Флаги"
+
+msgid "%d flag"
+msgid_plural "%d flags"
+msgstr[0] "%d флаг"
+msgstr[1] "%d флага"
+msgstr[2] "%d флагов"
+
+msgid "fflags.json cannot be read"
+msgstr "fflags.json не читается"
+
+msgid "Fix the file, then reload it from the menu. Until then Mocktail stops at start."
+msgstr "Исправьте файл, затем перечитайте его через меню. До этого Mocktail будет останавливаться при запуске."
+
+msgid "No flags"
+msgstr "Флагов нет"
+
+msgid "Add one with the + button, or import a JSON file such as ClientAppSettings.json from the menu"
+msgstr "Добавьте флаг кнопкой + или импортируйте через меню JSON-файл, например ClientAppSettings.json"
+
+msgid "Your settings make Mocktail set %s here, so Roblox will not start with this value"
+msgstr "При ваших настройках Mocktail задаёт здесь %s, поэтому с этим значением Roblox не запустится"
+
+msgid "Mocktail always sets %s here; this value is ignored"
+msgstr "Mocktail всегда задаёт здесь %s; это значение игнорируется"
+
+msgid "Edit %s"
+msgstr "Изменить %s"
+
+msgid "Remove %s"
+msgstr "Удалить %s"
+
+msgid "“%s” removed"
+msgstr "«%s» удалён"
+
+msgid "Fast Flags editor"
+msgstr "Редактор Fast Flags"
+
+msgid "No flags: Roblox uses its own values"
+msgstr "Флагов нет: Roblox использует свои значения"
+
+msgid "%d flag in fflags.json"
+msgid_plural "%d flags in fflags.json"
+msgstr[0] "%d флаг в fflags.json"
+msgstr[1] "%d флага в fflags.json"
+msgstr[2] "%d флагов в fflags.json"
+
+msgid "Mocktail will not start until fflags.json is fixed"
+msgstr "Mocktail не запустится, пока fflags.json не исправлен"
+
+msgid "%d flag conflicts with your settings, so Roblox would not start"
+msgid_plural "%d flags conflict with your settings, so Roblox would not start"
+msgstr[0] "%d флаг конфликтует с вашими настройками, и Roblox не запустится"
+msgstr[1] "%d флага конфликтуют с вашими настройками, и Roblox не запустится"
+msgstr[2] "%d флагов конфликтуют с вашими настройками, и Roblox не запустится"
+
+msgid "Fast Flags are Roblox's internal switches. Mocktail passes the flags in fflags.json to Roblox at every start, but its own settings come first: a flag Mocktail sets itself is ignored or, when the values disagree on something Mocktail checks, stops Roblox from starting."
+msgstr "Fast Flags — внутренние переключатели Roblox. Mocktail передаёт флаги из fflags.json в Roblox при каждом запуске, но его собственные настройки важнее: флаг, который Mocktail задаёт сам, игнорируется, а если значения расходятся там, где Mocktail это проверяет, Roblox не запустится."
+
+msgid "Since September 2025 Roblox applies only flags on its allowlist and quietly ignores most others."
+msgstr "С сентября 2025 года Roblox применяет только флаги из своего белого списка, а большинство остальных молча игнорирует."
+
+msgid "A wrong flag can make Roblox unstable or stop it from starting; remove it if Roblox misbehaves. Most players never need any."
+msgstr "Неудачный флаг может сделать Roblox нестабильным или не дать ему запуститься; если Roblox ведёт себя странно, удалите флаг. Большинству игроков флаги вообще не нужны."
+
+msgid "The file holds at most 64 KiB; values are text, true/false or whole numbers."
+msgstr "Файл вмещает не больше 64 КиБ; значения — текст, true/false или целые числа."
+
+msgid "File: %s"
+msgstr "Файл: %s"
+
+msgid "Device profile"
+msgstr "Профиль устройства"
+
+msgid "A computer with a mouse and keyboard gets Roblox's full desktop interface."
+msgstr "На компьютере с мышью и клавиатурой вы получаете полный настольный интерфейс Roblox."
+
+msgid "Mouse and keyboard are not reported to Roblox; without a touchscreen this is hard to use"
+msgstr "Roblox не узнает о мыши и клавиатуре; без сенсорного экрана пользоваться неудобно"
+
+msgid "Experimental in Mocktail"
+msgstr "Экспериментально в Mocktail"
+
+msgid "Roblox for Android adapts to the device it runs on. This profile decides which inputs Roblox expects (touch, mouse, keyboard), the device name and model it reports, and how its web requests identify the device."
+msgstr "Roblox для Android подстраивается под устройство, на котором работает. Профиль определяет, каких способов ввода ждёт Roblox (касания, мышь, клавиатура), какие название и модель устройства он сообщает и как устройство представляется в веб-запросах."
+
+msgid "• PC (Windows 11): mouse and keyboard and Roblox's desktop layout. Mocktail's default."
+msgstr "• ПК (Windows 11): мышь и клавиатура, настольный интерфейс Roblox. Вариант Mocktail по умолчанию."
+
+msgid "• Phone (Google Pixel 7): Roblox's touch interface with on-screen buttons. Mouse and keyboard are not reported, so it suits a touchscreen."
+msgstr "• Телефон (Google Pixel 7): сенсорный интерфейс Roblox с экранными кнопками. О мыши и клавиатуре Roblox не узнаёт, так что вариант подходит для сенсорного экрана."
+
+msgid "• Console (PlayStation 5): Roblox treats you as a console player when deciding which experiences let you in, without the desktop layout; mouse and keyboard stay available. Experimental."
+msgstr "• Консоль (PlayStation 5): Roblox считает вас игроком на консоли, когда решает, в какие игры пускать, и не показывает настольный интерфейс; мышь и клавиатура остаются. Экспериментально."
+
+msgid "Switching clears the Roblox data that depends on the device at the next start; your sign-in stays."
+msgstr "После смены профиля при следующем запуске очищаются данные Roblox, зависящие от устройства; вход в аккаунт сохраняется."
+
+msgid "PC (Windows 11)"
+msgstr "ПК (Windows 11)"
+
+msgid "Mouse and keyboard, Roblox's desktop layout"
+msgstr "Мышь и клавиатура, настольный интерфейс Roblox"
+
+msgid "Phone (Google Pixel 7)"
+msgstr "Телефон (Google Pixel 7)"
+
+msgid "Touch interface; mouse and keyboard are not reported"
+msgstr "Сенсорный интерфейс; о мыши и клавиатуре Roblox не узнаёт"
+
+msgid "Console (PlayStation 5)"
+msgstr "Консоль (PlayStation 5)"
+
+msgid "Console identity for experience access; experimental"
+msgstr "Консоль для доступа к играм; экспериментально"
+
+msgid "A custom profile, edited in config.yaml"
+msgstr "Свой профиль, задаётся в config.yaml"
+
+msgid "config.yaml describes a device of its own (the detailed device: block with a name, model and inputs). This window does not edit it and keeps it exactly as it is."
+msgstr "В config.yaml описано собственное устройство (подробный блок device: с названием, моделью и способами ввода). Это окно его не меняет и сохраняет как есть."
+
+msgid "To use a preset again, replace the block with a single line such as device: pc-windows-11."
+msgstr "Чтобы вернуться к готовому профилю, замените блок одной строкой, например device: pc-windows-11."
+
+msgid "Show this window on start"
+msgstr "Показывать это окно при запуске"
+
+msgid "Opens before Roblox when you start Mocktail from its icon"
+msgstr "Открывается перед Roblox, когда вы запускаете Mocktail значком"
+
+msgid "Roblox starts directly; open this window with the shortcut's “Mocktail Settings” action"
+msgstr "Roblox запускается сразу; это окно открывает действие ярлыка «Настройки Mocktail»"
+
+msgid "When on, starting Mocktail from its icon or with the mocktail command opens this window first, and Play starts Roblox."
+msgstr "Когда включено, запуск Mocktail значком или командой mocktail сначала открывает это окно, а Roblox запускает кнопка «Играть»."
+
+msgid "Joining a game from the Roblox website never opens it, and neither do Mocktail's own update test runs."
+msgstr "При входе в игру с сайта Roblox окно не открывается, как и при пробных запусках Mocktail во время обновления."
+
+msgid "When off, right-click the Mocktail icon and choose “Mocktail Settings” (or run mocktail --launcher) to come back here; “Play now” (mocktail --play) always skips this window."
+msgstr "Когда выключено, щёлкните значок Mocktail правой кнопкой и выберите «Настройки Mocktail» (или выполните mocktail --launcher), чтобы вернуться сюда; «Играть сразу» (mocktail --play) всегда пропускает это окно."
+
+msgid "If config.yaml has an error, the window opens anyway so you can fix it."
+msgstr "Если в config.yaml ошибка, окно всё равно откроется, чтобы её можно было исправить."
+
+msgid "Details…"
+msgstr "Подробнее…"
+
+msgid "Overriding variables"
+msgstr "Переопределяющие переменные"
+
+msgid "None: every setting comes from config.yaml"
+msgstr "Нет: все настройки берутся из config.yaml"
+
+msgid "Moved into settings and left out of this launch"
+msgstr "Перенесены в настройки и не используются в этом запуске"
+
+msgid "%d variable overrides settings: %s"
+msgid_plural "%d variables override settings: %s"
+msgstr[0] "%d переменная переопределяет настройки: %s"
+msgstr[1] "%d переменные переопределяют настройки: %s"
+msgstr[2] "%d переменных переопределяют настройки: %s"
+
+msgid "Environment variables such as SDL_VIDEODRIVER or MOCKTAIL_VSYNC win over config.yaml, so a value set in a desktop shortcut or a terminal silently replaces the setting shown here. Rows they affect carry an ENV badge."
+msgstr "Переменные окружения, такие как SDL_VIDEODRIVER или MOCKTAIL_VSYNC, важнее config.yaml, поэтому значение из ярлыка или терминала молча заменяет показанную здесь настройку. Строки, на которые они влияют, помечены значком ENV."
+
+msgid "Details lists each variable, its value (secrets hidden) and where it probably comes from."
+msgstr "В «Подробнее» перечислены все переменные, их значения (секреты скрыты) и откуда они, скорее всего, взялись."
+
+msgid "To stop them for good, remove them where they are set: Clean Up below for the desktop shortcut, or your shell's profile."
+msgstr "Чтобы избавиться от них насовсем, уберите их там, где они заданы: в ярлыке — кнопкой «Очистить» ниже, или в профиле командной оболочки."
+
+msgid "Move"
+msgstr "Перенести"
+
+msgid "Move into settings"
+msgstr "Перенести в настройки"
+
+msgid "Keep their values in config.yaml and ignore them for this launch"
+msgstr "Сохранить их значения в config.yaml и не учитывать переменные в этом запуске"
+
+msgid "Copies each variable's value into the matching setting, so this launch behaves the same but the settings show and control it. The variables are left out of this launch; they come back on the next start until you remove them from the shortcut or terminal."
+msgstr "Копирует значение каждой переменной в соответствующую настройку: этот запуск пройдёт так же, но теперь его видно и можно менять в настройках. В этом запуске переменные не используются; при следующем они вернутся, пока вы не уберёте их из ярлыка или терминала."
+
+msgid "Save to keep the moved values."
+msgstr "Сохраните, чтобы перенесённые значения остались."
+
+msgid "Fix config.yaml first"
+msgstr "Сначала исправьте config.yaml"
+
+msgid "Move their values into settings first if you want to keep them."
+msgstr "Если значения нужны, сначала перенесите их в настройки."
+
+msgid "Clean Up…"
+msgstr "Очистить…"
+
+msgid "Desktop shortcut"
+msgstr "Ярлык"
+
+msgid "You use the installed shortcut; it sets no variables"
+msgstr "Используется установленный ярлык; переменных в нём нет"
+
+msgid "Your own copy sets %s"
+msgstr "Ваша копия ярлыка задаёт %s"
+
+msgid "Your own copy cannot be cleaned up here: %s"
+msgstr "Вашу копию ярлыка здесь не очистить: %s"
+
+msgid "Your own copy sets no variables that override settings"
+msgstr "Ваша копия ярлыка не задаёт переменных, переопределяющих настройки"
+
+msgid "Desktop environments prefer your own copy of a shortcut (~/.local/share/applications/space.bigrat.mocktail.desktop) over the installed one. A copy made to add a variable such as SDL_VIDEODRIVER=wayland forces it on every start, website joins included, because the same shortcut opens roblox: links."
+msgstr "Окружения рабочего стола предпочитают вашу копию ярлыка (~/.local/share/applications/space.bigrat.mocktail.desktop) установленной. Копия, сделанная ради переменной вроде SDL_VIDEODRIVER=wayland, навязывает её при каждом запуске — и при входе в игру с сайта, потому что тот же ярлык открывает ссылки roblox:."
+
+msgid "Clean Up removes only the variables that override settings this window manages; others, such as a GPU switch or MANGOHUD, stay. When nothing else differs from the installed shortcut, your copy is deleted instead. A backup is kept next to it."
+msgstr "«Очистить» убирает только переменные, переопределяющие настройки этого окна; остальные, например переключение видеокарты или MANGOHUD, остаются. Если больше ничем копия от установленного ярлыка не отличается, она удаляется. Рядом сохраняется резервная копия."
+
+msgid "Move the values into settings first, or those settings fall back to what config.yaml says."
+msgstr "Сначала перенесите значения в настройки, иначе эти настройки вернутся к тому, что записано в config.yaml."
+
+msgid "Your copy: %s"
+msgstr "Ваша копия: %s"
+
+msgid "Device"
+msgstr "Устройство"
+
+msgid "Which kind of device Roblox thinks it runs on"
+msgstr "На каком устройстве, по мнению Roblox, он работает"
+
+msgid "Roblox engine switches for experiments; rarely needed"
+msgstr "Переключатели движка Roblox для экспериментов; нужны редко"
+
+msgid "Settings window"
+msgstr "Окно настроек"
+
+msgid "When this window opens"
+msgstr "Когда открывается это окно"
+
+msgid "Environment variables"
+msgstr "Переменные окружения"
+
+msgid "Values from the shortcut or terminal that win over settings"
+msgstr "Значения из ярлыка или терминала, которые важнее настроек"
+
+msgid "Files"
+msgstr "Файлы"
+
+msgid "Where Mocktail keeps settings, Roblox and logs"
+msgstr "Где Mocktail хранит настройки, Roblox и логи"
+
+msgid "Settings file"
+msgstr "Файл настроек"
+
+msgid "config.yaml holds every setting in this window. Saving keeps your comments and layout, and before its first save the window keeps a copy as config.yaml.launcher-backup."
+msgstr "В config.yaml хранятся все настройки этого окна. При сохранении ваши комментарии и оформление остаются, а перед первым сохранением окно делает копию config.yaml.launcher-backup."
+
+msgid "If you edit it while this window is open, the window notices and offers to reload it."
+msgstr "Если изменить файл, пока это окно открыто, окно заметит это и предложит перечитать его."
+
+msgid "Data folder"
+msgstr "Папка данных"
+
+msgid "Roblox itself (the installed versions), its app data such as caches, and your saved sign-ins."
+msgstr "Сам Roblox (установленные версии), данные приложения вроде кешей и ваши сохранённые входы в аккаунты."
+
+msgid "Do not share this folder: it holds your sign-in sessions."
+msgstr "Не передавайте эту папку другим: в ней ваши сессии входа."
+
+msgid "Logs folder"
+msgstr "Папка логов"
+
+msgid "latest.log and one log per start in sessions/. Attach latest.log when you report a problem."
+msgstr "latest.log и по логу на каждый запуск в sessions/. Прикладывайте latest.log к сообщению о проблеме."
