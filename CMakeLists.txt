@@ -519,6 +519,7 @@ target_link_libraries(mocktail_window PUBLIC
 # window itself is a separate helper process.
 add_library(mocktail_config_editor STATIC
   src/launcher/config_document.cc
+  src/launcher/desktop_entry_cleanup.cc
   src/launcher/fast_flags_document.cc
   src/launcher/private_file.cc
   src/launcher/utf8.cc

@@ -76,6 +76,18 @@ target_link_libraries(launcher_fast_flags_document_test PRIVATE
 )
 mocktail_apply_compile_options(launcher_fast_flags_document_test)
 
+add_executable(launcher_desktop_entry_cleanup_test
+  launcher_desktop_entry_cleanup_test.cc
+)
+target_link_libraries(launcher_desktop_entry_cleanup_test PRIVATE
+  Mocktail::ConfigEditor
+  GTest::gtest_main
+)
+target_compile_definitions(launcher_desktop_entry_cleanup_test PRIVATE
+  MOCKTAIL_TEST_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+)
+mocktail_apply_compile_options(launcher_desktop_entry_cleanup_test)
+
 add_executable(discord_rpc_test discord_rpc_test.cc)
 target_link_libraries(discord_rpc_test PRIVATE
   Mocktail::Runtime
@@ -999,6 +1011,7 @@ gtest_discover_tests(runtime_config_file_test)
 gtest_discover_tests(launcher_config_document_test)
 gtest_discover_tests(launcher_window_state_file_test)
 gtest_discover_tests(launcher_fast_flags_document_test)
+gtest_discover_tests(launcher_desktop_entry_cleanup_test)
 gtest_discover_tests(payload_update_preflight_test)
 gtest_discover_tests(apk_provider_test)
 gtest_discover_tests(native_update_test)
