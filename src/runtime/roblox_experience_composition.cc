@@ -446,7 +446,8 @@ Status RobloxExperienceComposition::InitializePlatformProtocols() {
     std::lock_guard<std::mutex> lock(mutex_);
     if (platform_protocols_initialized_ || objects_ != nullptr ||
         web_view_bridge_ != nullptr || permissions_bridge_ != nullptr ||
-        call_protocol_bridge_ != nullptr) {
+        call_protocol_bridge_ != nullptr ||
+        account_protocol_bridge_ != nullptr) {
       return FailedPrecondition("platform protocols are already initialized");
     }
   }
@@ -533,12 +534,32 @@ Status RobloxExperienceComposition::InitializePlatformProtocols() {
     (void)ReleaseGlobalObjects();
     return status;
   }
+  // AccountProtocol: Mocktail has no device integrity provider. Answering the
+  // APK's two integrity methods explicitly keeps that visible in the log and
+  // lets LuaApp take its own "integrity unavailable" path at once.
+  auto account_protocol_bridge = std::make_unique<RobloxAccountProtocolBridge>(
+      environment_,
+      RobloxAccountProtocolSymbols{web_view_symbols_.set_request_handler_raw,
+                                   web_view_symbols_.clear_request_handler},
+      RobloxAccountProtocolObjects{web_view_objects.message_bus,
+                                   jni_factory_.context,
+                                   jni_factory_.create_request_handler,
+                                   jni_factory_.clear_request_handler});
+  const Status account_status = account_protocol_bridge->Initialize();
+  if (!account_status.ok()) {
+    std::fprintf(stderr,
+                 "  [platform] AccountProtocol integrity handlers unavailable: "
+                 "%s\n",
+                 account_status.message().c_str());
+    account_protocol_bridge.reset();
+  }
   {
     std::lock_guard<std::mutex> lock(mutex_);
     web_view_bridge_ = std::move(web_view_bridge);
     browser_service_bridge_ = std::move(browser_service_bridge);
     permissions_bridge_ = std::move(permissions_bridge);
     call_protocol_bridge_ = std::move(call_protocol_bridge);
+    account_protocol_bridge_ = std::move(account_protocol_bridge);
     platform_protocols_initialized_ = true;
   }
   if (jnivm::VM* vm = jnivm::VM::FromJavaVM(environment_.java_vm)) {
@@ -1795,6 +1816,7 @@ Status RobloxExperienceComposition::Shutdown() {
   std::unique_ptr<RobloxBrowserServiceBridge> browser_service_bridge;
   std::unique_ptr<RobloxPermissionsBridge> permissions_bridge;
   std::unique_ptr<RobloxCallProtocolBridge> call_protocol_bridge;
+  std::unique_ptr<RobloxAccountProtocolBridge> account_protocol_bridge;
   std::shared_ptr<WebViewHelperProcess> web_surface_process;
   jnivm::VM* late_lifecycle_vm = nullptr;
   jnivm::VM* native_store_vm = nullptr;
@@ -1829,6 +1851,7 @@ Status RobloxExperienceComposition::Shutdown() {
     browser_service_bridge = std::move(browser_service_bridge_);
     permissions_bridge = std::move(permissions_bridge_);
     call_protocol_bridge = std::move(call_protocol_bridge_);
+    account_protocol_bridge = std::move(account_protocol_bridge_);
     web_surface_process = std::move(web_surface_process_);
     web_surface_logical_exit_observer_ = {};
     web_surface_route_ = WebSurfaceRoute::kNone;
@@ -1845,9 +1868,14 @@ Status RobloxExperienceComposition::Shutdown() {
   if (web_surface_process != nullptr) {
     (void)web_surface_process->RequestClose();
   }
-  Status status = call_protocol_bridge != nullptr
-                      ? call_protocol_bridge->Shutdown()
+  Status status = account_protocol_bridge != nullptr
+                      ? account_protocol_bridge->Shutdown()
                       : Status::Ok();
+  const Status call_status = call_protocol_bridge != nullptr
+                                 ? call_protocol_bridge->Shutdown()
+                                 : Status::Ok();
+  if (status.ok())
+    status = call_status;
   const Status permissions_status = permissions_bridge != nullptr
                                         ? permissions_bridge->Shutdown()
                                         : Status::Ok();
@@ -1869,6 +1897,7 @@ Status RobloxExperienceComposition::Shutdown() {
     status = bridge_status;
   }
   browser_service_bridge.reset();
+  account_protocol_bridge.reset();
   call_protocol_bridge.reset();
   permissions_bridge.reset();
   web_view_bridge.reset();

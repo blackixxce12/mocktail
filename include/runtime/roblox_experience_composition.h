@@ -15,6 +15,7 @@
 #include "mocktail/status.h"
 #include "runtime/owned_pthread.h"
 #include "runtime/roblox_browser_service_bridge.h"
+#include "runtime/roblox_account_protocol_bridge.h"
 #include "runtime/roblox_call_protocol_bridge.h"
 #include "runtime/roblox_experience_launch_bridge.h"
 #include "runtime/roblox_experience_presence.h"
@@ -262,6 +263,8 @@ class RobloxExperienceComposition final {
   std::unique_ptr<RobloxBrowserServiceBridge> browser_service_bridge_;
   std::unique_ptr<RobloxPermissionsBridge> permissions_bridge_;
   std::unique_ptr<RobloxCallProtocolBridge> call_protocol_bridge_;
+  // Optional: a failure to register it never blocks platform startup.
+  std::unique_ptr<RobloxAccountProtocolBridge> account_protocol_bridge_;
   std::shared_ptr<WebViewHelperProcess> web_surface_process_;
   std::shared_ptr<WebSurfaceExitTarget> web_surface_exit_target_;
   std::shared_ptr<LifecycleTarget> lifecycle_target_;
