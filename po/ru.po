@@ -2849,3 +2849,142 @@ msgstr "Папка логов"
 
 msgid "latest.log and one log per start in sessions/. Attach latest.log when you report a problem."
 msgstr "latest.log и по логу на каждый запуск в sessions/. Прикладывайте latest.log к сообщению о проблеме."
+
+# About page (about_page.cc).
+msgid "%d × %d at %d %% (%d × %d pixels)"
+msgstr "%d × %d при %d %% (%d × %d пикселей)"
+
+msgid "%d Hz"
+msgstr "%d Гц"
+
+msgid "Diagnostic info copied"
+msgstr "Диагностические сведения скопированы"
+
+msgid "Version %s"
+msgstr "Версия %s"
+
+msgid "Version %s · commit %s"
+msgstr "Версия %s · коммит %s"
+
+msgid "The version of Mocktail and of this settings window. Mention it, together with Copy diagnostic info below, when you report a problem."
+msgstr "Версия Mocktail и этого окна настроек. Указывайте её вместе со сведениями из «Скопировать диагностику» ниже, когда сообщаете о проблеме."
+
+msgid "The commit names the exact source code this build was made from."
+msgstr "Коммит обозначает точный исходный код, из которого собрана эта сборка."
+
+msgid "License & credits"
+msgstr "Лицензия и авторы"
+
+msgid "Apache License 2.0 · Mocktail Project Authors"
+msgstr "Apache License 2.0 · Mocktail Project Authors"
+
+msgid "Mocktail is free software under the Apache License 2.0, made by the Mocktail Project Authors."
+msgstr "Mocktail — свободная программа под лицензией Apache License 2.0, её создают Mocktail Project Authors."
+
+msgid "It is an independent community project, not affiliated with Roblox Corporation or VinegarHQ, and it does not include the Roblox client: Roblox is downloaded on first start."
+msgstr "Это независимый проект сообщества, не связанный с Roblox Corporation или VinegarHQ, и клиента Roblox в нём нет: Roblox скачивается при первом запуске."
+
+msgid "Desktop"
+msgstr "Рабочий стол"
+
+msgid "Looking…"
+msgstr "Определяется…"
+
+msgid "Unknown session"
+msgstr "Неизвестный сеанс"
+
+msgid "XWayland available"
+msgstr "XWayland доступен"
+
+msgid "no XWayland"
+msgstr "без XWayland"
+
+msgid "The display system and desktop this window runs in. The game window can use Wayland or, through XWayland, X11; the Display page decides which."
+msgstr "Графическая система и рабочий стол, в которых работает это окно. Окно игры может использовать Wayland или X11 через XWayland; что именно, решает раздел «Экран и окно»."
+
+msgid "On NVIDIA with Vulkan the automatic choice is X11 through XWayland, because NVIDIA's native Wayland path can hang."
+msgstr "На NVIDIA с Vulkan автоматически выбирается X11 через XWayland, потому что нативный Wayland у NVIDIA может зависать."
+
+msgid "Graphics card"
+msgstr "Видеокарта"
+
+msgid "No graphics card found"
+msgstr "Видеокарта не найдена"
+
+msgid "Vulkan driver: %s"
+msgstr "Драйвер Vulkan: %s"
+
+msgid "No Vulkan driver found"
+msgstr "Драйвер Vulkan не найден"
+
+msgid "The graphics cards in /sys/class/drm with their kernel drivers, named the way Mocktail's session log names them, and the Vulkan driver Roblox would use."
+msgstr "Видеокарты из /sys/class/drm с их драйверами ядра — так же, как их называет журнал сеанса Mocktail, — и драйвер Vulkan, который использовал бы Roblox."
+
+msgid "The Graphics page recommends a graphics backend from this."
+msgstr "По этим данным раздел «Графика» советует графический движок."
+
+msgid "Monitor"
+msgstr "Монитор"
+
+msgid "Not known yet"
+msgstr "Пока неизвестно"
+
+msgid "The monitor this window is on, in desktop units and in pixels, with its scale and refresh rate."
+msgstr "Монитор, на котором находится это окно: размер в единицах рабочего стола и в пикселях, масштаб и частота обновления."
+
+msgid "The Display page uses it to explain the window size and native resolution, and the Graphics page for “match display” frame rates."
+msgstr "Раздел «Экран и окно» использует эти данные, чтобы объяснить размер окна и нативное разрешение, а раздел «Графика» — для частоты кадров «как у экрана»."
+
+msgid "Processor and memory"
+msgstr "Процессор и память"
+
+msgid "%d cores, %d threads"
+msgstr "ядер: %d, потоков: %d"
+
+msgid "%.1f GiB of memory"
+msgstr "%.1f ГиБ памяти"
+
+msgid "The Performance page sizes Roblox's worker threads from the physical cores when multithreaded rendering or throughput mode is on."
+msgstr "Раздел «Производительность» подбирает число рабочих потоков Roblox по физическим ядрам, когда включены многопоточный рендеринг или режим пропускной способности."
+
+msgid "Copy diagnostic info"
+msgstr "Скопировать диагностику"
+
+msgid "Versions, this computer and your main settings"
+msgstr "Версии, сведения о компьютере и основные настройки"
+
+msgid "Copies a plain-text summary for a bug report: Mocktail's and Roblox's versions, the graphics card, display and desktop, and the main settings."
+msgstr "Копирует текстовую сводку для сообщения об ошибке: версии Mocktail и Roblox, видеокарту, монитор и рабочий стол, а также основные настройки."
+
+msgid "It holds no sign-in data, no values of environment variables, no proxy address and no Discord texts. Paste it into your report as it is."
+msgstr "В ней нет данных для входа, значений переменных окружения, адреса прокси и текстов для Discord. Вставьте её в сообщение как есть."
+
+msgid "Open logs folder"
+msgstr "Открыть папку логов"
+
+msgid "latest.log is the log of the last start"
+msgstr "latest.log — лог последнего запуска"
+
+msgid "Each start of Roblox writes a log in sessions/, and latest.log points at the newest one. Attach it when you report a problem."
+msgstr "Каждый запуск Roblox пишет лог в sessions/, а latest.log указывает на самый новый. Прикладывайте его к сообщению о проблеме."
+
+msgid "Play Roblox on Linux. Mocktail is an independent community project. It is not affiliated with Roblox Corporation or VinegarHQ, and the Roblox client is not included."
+msgstr "Играйте в Roblox на Linux. Mocktail — независимый проект сообщества. Он не связан с Roblox Corporation или VinegarHQ, и клиент Roblox в него не входит."
+
+msgid "This build of Mocktail"
+msgstr "Эта сборка Mocktail"
+
+msgid "The Roblox for Android build Mocktail runs"
+msgstr "Сборка Roblox для Android, которую запускает Mocktail"
+
+msgid "This computer"
+msgstr "Этот компьютер"
+
+msgid "What Mocktail found here; other pages base advice on it"
+msgstr "Что Mocktail нашёл на компьютере; на этом основаны советы других разделов"
+
+msgid "Diagnostics"
+msgstr "Диагностика"
+
+msgid "For reporting a problem to Mocktail's authors"
+msgstr "Для сообщений о проблемах авторам Mocktail"
