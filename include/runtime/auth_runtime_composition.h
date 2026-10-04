@@ -103,6 +103,20 @@ AuthRuntimeComposition ComposeAuthRuntime(
 bool PersistRobloxCookie(const std::filesystem::path& path,
                          std::string_view cookie_value);
 
+enum class BrowserSignInStatus {
+  kAccepted,
+  kRejected,
+  kUnverified,
+  kStoreFailed,
+};
+
+// Persists a browser sign-in cookie only after Roblox resolves its account.
+// WebKit can still hold a revoked session, so a rejected or unverified cookie
+// is never written. Blocks for one authentication request.
+BrowserSignInStatus PersistValidatedRobloxCookie(
+    const std::filesystem::path& path, services::AuthService& auth_service,
+    std::string_view cookie_value);
+
 }  // namespace runtime
 }  // namespace mocktail
 

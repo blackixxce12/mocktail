@@ -27,6 +27,7 @@ constexpr size_t kMaxPendingLaunchRequests = 8;
 constexpr size_t kLaunchWorkerStackSize = 64ULL * 1024 * 1024;
 constexpr std::chrono::milliseconds kWebSurfaceReadyTimeout{3000};
 constexpr char kRobloxBaseUrl[] = "https://www.roblox.com/";
+constexpr char kBrowserLoginUrl[] = "https://www.roblox.com/login";
 // Fixed web checkout. Engine-supplied strings are never handed to the host
 // URI launcher, and the browser keeps its own Roblox session: no credential
 // leaves Mocktail.
@@ -894,6 +895,8 @@ Status RobloxExperienceComposition::DispatchWebViewCookie(
 }
 
 Status RobloxExperienceComposition::AcceptWebViewRobloxCookie(
+    const std::shared_ptr<WebViewHelperProcess>& source_process,
+    uint64_t process_generation, uint64_t logical_generation,
     std::string_view value) {
   std::string canonical_header = ".ROBLOSECURITY=";
   canonical_header.append(value);
@@ -909,7 +912,34 @@ Status RobloxExperienceComposition::AcceptWebViewRobloxCookie(
   }
   const bool was_guest = vm->GetRobloxAuthIdentitySnapshot().user_id <= 0;
   if (!vm->DispatchRobloxCredential(credential.c_str(), credential.size())) {
-    return Unavailable("could not store WebView login credential");
+    // The credential sink refuses a session Roblox no longer accepts, such as
+    // one WebKit kept from an earlier sign-in. Clear it and show sign-in again
+    // instead of stopping the running client, but only on the surface that
+    // reported it: the check may have waited on Roblox, and a route opened
+    // meanwhile must not be sent to the sign-in page.
+    std::lock_guard<std::mutex> operation_lock(web_surface_operation_mutex_);
+    bool reporting_surface = false;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      reporting_surface =
+          source_process != nullptr && source_process == web_surface_process_ &&
+          process_generation != 0 &&
+          process_generation == web_surface_process_generation_ &&
+          logical_generation != 0 &&
+          logical_generation == web_surface_logical_generation_ &&
+          web_surface_route_ != WebSurfaceRoute::kNone;
+    }
+    if (!reporting_surface || !source_process->running()) {
+      std::fprintf(stderr, "  [auth] browser sign-in session was not "
+                           "accepted; its web surface has changed\n");
+      return Status::Ok();
+    }
+    std::fprintf(stderr,
+                 "  [auth] browser sign-in session was not accepted; "
+                 "reopening sign-in\n");
+    (void)source_process->ClearRobloxCookie();
+    (void)source_process->LoadUrl(kBrowserLoginUrl);
+    return Status::Ok();
   }
   {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -1074,7 +1104,8 @@ Status RobloxExperienceComposition::RouteCurrentWebSurfaceEvent(
     web_view_bridge = web_view_bridge_.get();
   }
   return event.type == WebViewHelperEventType::kRobloxCookie
-             ? AcceptWebViewRobloxCookie(event.payload)
+             ? AcceptWebViewRobloxCookie(source_process, process_generation,
+                                         logical_generation, event.payload)
              : RouteWebSurfaceEvent(route, event, web_view_bridge);
 }
 

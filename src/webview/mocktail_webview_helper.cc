@@ -20,6 +20,7 @@
 #include <deque>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -55,6 +56,8 @@ using mocktail::webview::ExtractExecuteRobloxCommand;
 using mocktail::webview::ExtractRobloxWkHybridCommand;
 using mocktail::webview::IsBrowserLoginUrl;
 using mocktail::webview::IsEssentialWebResource;
+using mocktail::webview::IsRobloxSecurityCookie;
+using mocktail::webview::kRobloxCookieOrigins;
 using mocktail::webview::ParseCaptchaEvent;
 using mocktail::webview::StorePurchaseNavigation;
 using mocktail::webview::UriPolicyResult;
@@ -98,6 +101,15 @@ struct AppState {
 struct CookieInstallContext {
   AppState* state = nullptr;
   uint64_t generation = 0;
+};
+
+struct CookieClearContext {
+  AppState* state = nullptr;
+  uint64_t generation = 0;
+  std::size_t origin = 0;
+  std::size_t pending_steps = 0;
+  std::size_t deleted = 0;
+  bool failed = false;
 };
 
 struct SurfaceState {
@@ -356,15 +368,6 @@ bool IsCookieOctet(unsigned char byte) {
          (byte >= 0x5d && byte <= 0x7e);
 }
 
-bool IsRobloxCookieDomain(const char* domain) {
-  if (domain == nullptr) {
-    return false;
-  }
-  const std::string_view value(domain);
-  return value == ".roblox.com" || value == "roblox.com" ||
-         value == "www.roblox.com";
-}
-
 void FinishRobloxCookieQuery(GObject* source, GAsyncResult* result,
                              gpointer user_data) {
   auto* state = static_cast<AppState*>(user_data);
@@ -373,16 +376,17 @@ void FinishRobloxCookieQuery(GObject* source, GAsyncResult* result,
       WEBKIT_COOKIE_MANAGER(source), result, &error);
 
   std::string candidate;
-  if (error == nullptr && state->browser_login_mode) {
+  // A query that raced a cookie rewrite may list a session being deleted.
+  if (error == nullptr && state->browser_login_mode &&
+      !state->cookie_install_in_flight) {
     for (GList* item = cookies; item != nullptr; item = item->next) {
       auto* cookie = static_cast<SoupCookie*>(item->data);
-      const char* name = soup_cookie_get_name(cookie);
       const char* value = soup_cookie_get_value(cookie);
       const char* path = soup_cookie_get_path(cookie);
-      if (name == nullptr || std::string_view(name) != ".ROBLOSECURITY" ||
+      if (!IsRobloxSecurityCookie(soup_cookie_get_name(cookie),
+                                  soup_cookie_get_domain(cookie)) ||
           value == nullptr || path == nullptr ||
           std::string_view(path) != "/" ||
-          !IsRobloxCookieDomain(soup_cookie_get_domain(cookie)) ||
           !soup_cookie_get_secure(cookie) ||
           !soup_cookie_get_http_only(cookie)) {
         continue;
@@ -421,7 +425,7 @@ void FinishRobloxCookieQuery(GObject* source, GAsyncResult* result,
 
 void RequestRobloxCookie(AppState* state) {
   if (!state->browser_login_mode || state->network_session == nullptr ||
-      state->terminating) {
+      state->terminating || state->cookie_install_in_flight) {
     return;
   }
   WebKitCookieManager* manager =
@@ -493,29 +497,89 @@ void FinishRobloxCookieInstall(GObject* source, GAsyncResult* result,
   StartInitialLoad(state);
 }
 
-void FinishRobloxCookieDelete(GObject* source, GAsyncResult* result,
-                              gpointer user_data) {
-  std::unique_ptr<CookieInstallContext> context(
-      static_cast<CookieInstallContext*>(user_data));
+void FinishRobloxCookieClear(CookieClearContext* clear) {
+  std::unique_ptr<CookieClearContext> context(clear);
   AppState* state = context->state;
-  GError* error = nullptr;
-  const bool deleted = webkit_cookie_manager_delete_cookie_finish(
-      WEBKIT_COOKIE_MANAGER(source), result, &error);
   state->cookie_install_in_flight = false;
   if (context->generation != state->cookie_generation) {
-    g_clear_error(&error);
     ApplyPendingRobloxCookie(state);
     return;
   }
-  if (!deleted) {
-    std::cerr << "[webview] stale Roblox cookie deletion failed\n";
-    g_clear_error(&error);
-    BeginTermination(state, "cookie deletion failed");
+  state->pending_cookie_operation = PendingRobloxCookieOperation::kNone;
+  if (context->failed) {
+    std::cerr << "[webview] stale Roblox cookie deletion failed; continuing "
+                 "navigation\n";
+  } else {
+    std::cerr << "[webview] Roblox cookie deleted before navigation count="
+              << context->deleted << '\n';
+  }
+  StartInitialLoad(state);
+}
+
+void QueryStaleRobloxCookies(CookieClearContext* context);
+
+void ReleaseRobloxCookieClearStep(CookieClearContext* context) {
+  if (--context->pending_steps != 0) {
     return;
   }
-  state->pending_cookie_operation = PendingRobloxCookieOperation::kNone;
-  std::cerr << "[webview] Roblox cookie deleted before navigation\n";
-  StartInitialLoad(state);
+  ++context->origin;
+  if (context->origin < std::size(kRobloxCookieOrigins) &&
+      context->generation == context->state->cookie_generation) {
+    QueryStaleRobloxCookies(context);
+    return;
+  }
+  FinishRobloxCookieClear(context);
+}
+
+void FinishRobloxCookieDelete(GObject* source, GAsyncResult* result,
+                              gpointer user_data) {
+  auto* context = static_cast<CookieClearContext*>(user_data);
+  GError* error = nullptr;
+  if (webkit_cookie_manager_delete_cookie_finish(WEBKIT_COOKIE_MANAGER(source),
+                                                 result, &error)) {
+    ++context->deleted;
+  } else {
+    context->failed = true;
+  }
+  g_clear_error(&error);
+  ReleaseRobloxCookieClearStep(context);
+}
+
+void FinishStaleRobloxCookieQuery(GObject* source, GAsyncResult* result,
+                                  gpointer user_data) {
+  auto* context = static_cast<CookieClearContext*>(user_data);
+  WebKitCookieManager* manager = WEBKIT_COOKIE_MANAGER(source);
+  GError* error = nullptr;
+  GList* cookies =
+      webkit_cookie_manager_get_cookies_finish(manager, result, &error);
+  if (error != nullptr) {
+    context->failed = true;
+    g_clear_error(&error);
+  }
+  // Deletion matches the stored value too, so delete the listed cookies
+  // themselves. The extra step keeps the query open until all are issued.
+  context->pending_steps = 1;
+  for (GList* item = cookies; item != nullptr; item = item->next) {
+    auto* cookie = static_cast<SoupCookie*>(item->data);
+    if (IsRobloxSecurityCookie(soup_cookie_get_name(cookie),
+                               soup_cookie_get_domain(cookie))) {
+      ++context->pending_steps;
+      webkit_cookie_manager_delete_cookie(manager, cookie, nullptr,
+                                          FinishRobloxCookieDelete, context);
+    }
+    soup_cookie_free(cookie);
+  }
+  g_list_free(cookies);
+  ReleaseRobloxCookieClearStep(context);
+}
+
+void QueryStaleRobloxCookies(CookieClearContext* context) {
+  WebKitCookieManager* manager = webkit_network_session_get_cookie_manager(
+      context->state->network_session);
+  webkit_cookie_manager_get_cookies(manager,
+                                    kRobloxCookieOrigins[context->origin],
+                                    nullptr, FinishStaleRobloxCookieQuery,
+                                    context);
 }
 
 void ApplyPendingRobloxCookie(AppState* state) {
@@ -535,19 +599,10 @@ void ApplyPendingRobloxCookie(AppState* state) {
     return;
   }
   if (state->pending_cookie_operation == PendingRobloxCookieOperation::kClear) {
-    SoupCookie* stale_cookie =
-        soup_cookie_new(".ROBLOSECURITY", "", ".roblox.com", "/", -1);
-    if (stale_cookie == nullptr) {
-      BeginTermination(state, "cookie deletion setup failed");
-      return;
-    }
-    WebKitCookieManager* manager =
-        webkit_network_session_get_cookie_manager(state->network_session);
+    // Remove every stored Roblox session scope before the next navigation.
     state->cookie_install_in_flight = true;
-    auto* context = new CookieInstallContext{state, state->cookie_generation};
-    webkit_cookie_manager_delete_cookie(manager, stale_cookie, nullptr,
-                                        FinishRobloxCookieDelete, context);
-    soup_cookie_free(stale_cookie);
+    QueryStaleRobloxCookies(
+        new CookieClearContext{state, state->cookie_generation});
     return;
   }
   if (state->pending_cookie_operation != PendingRobloxCookieOperation::kSet ||

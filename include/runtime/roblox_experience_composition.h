@@ -202,7 +202,12 @@ class RobloxExperienceComposition final {
       const std::shared_ptr<WebViewHelperProcess>& source_process,
       uint64_t process_generation, uint64_t logical_generation,
       const WebViewHelperEvent& event);
-  Status AcceptWebViewRobloxCookie(std::string_view value);
+  // The process and generations identify the surface that reported the
+  // cookie, as RouteCurrentWebSurfaceEvent checked them.
+  Status AcceptWebViewRobloxCookie(
+      const std::shared_ptr<WebViewHelperProcess>& source_process,
+      uint64_t process_generation, uint64_t logical_generation,
+      std::string_view value);
   Status OpenWebSurface(const std::string& url, const char* transport,
                         WebSurfaceRoute route,
                         WebViewHelperExitObserver exit_observer,

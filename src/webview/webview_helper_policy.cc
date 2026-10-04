@@ -160,6 +160,16 @@ bool IsBrowserLoginUrl(std::string_view url) {
   return browser_login;
 }
 
+bool IsRobloxSecurityCookie(const char* name, const char* domain) {
+  if (name == nullptr || domain == nullptr ||
+      std::string_view(name) != ".ROBLOSECURITY") {
+    return false;
+  }
+  const std::string_view value(domain);
+  return value == ".roblox.com" || value == "roblox.com" ||
+         value == "www.roblox.com";
+}
+
 bool IsEssentialWebResource(const char* uri) {
   if (uri == nullptr) return false;
   const UriPolicyResult policy = EvaluateNavigationUri(uri);

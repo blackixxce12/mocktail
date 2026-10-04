@@ -4,6 +4,7 @@
 #include <jsc/jsc.h>
 
 #include <cstdlib>
+#include <iterator>
 #include <string>
 #include <string_view>
 
@@ -330,6 +331,29 @@ TEST(WebViewHelperPolicyTest, KeepsNativeUserAgentForVerificationRoutes) {
            "https://example.org/login", "http://www.roblox.com/login",
        }) {
     EXPECT_FALSE(IsBrowserLoginUrl(url)) << url;
+  }
+}
+
+TEST(WebViewHelperPolicyTest, MatchesEveryRobloxSessionCookieScope) {
+  for (const char* domain : {".roblox.com", "roblox.com", "www.roblox.com"}) {
+    EXPECT_TRUE(IsRobloxSecurityCookie(".ROBLOSECURITY", domain)) << domain;
+  }
+  for (const char* domain : {"apis.roblox.com", ".www.roblox.com",
+                             "roblox.com.evil.example", "evilroblox.com", ""}) {
+    EXPECT_FALSE(IsRobloxSecurityCookie(".ROBLOSECURITY", domain)) << domain;
+  }
+  EXPECT_FALSE(IsRobloxSecurityCookie("RBXEventTrackerV2", ".roblox.com"));
+  EXPECT_FALSE(IsRobloxSecurityCookie(".roblosecurity", ".roblox.com"));
+  EXPECT_FALSE(IsRobloxSecurityCookie(nullptr, ".roblox.com"));
+  EXPECT_FALSE(IsRobloxSecurityCookie(".ROBLOSECURITY", nullptr));
+
+  // Host-only roblox.com cookies are listed only for the apex origin.
+  ASSERT_EQ(std::size(kRobloxCookieOrigins), 2U);
+  EXPECT_STREQ(kRobloxCookieOrigins[0], "https://www.roblox.com/");
+  EXPECT_STREQ(kRobloxCookieOrigins[1], "https://roblox.com/");
+  for (const char* origin : kRobloxCookieOrigins) {
+    EXPECT_TRUE(EvaluateNavigationUri(origin).privileged_bridge_allowed)
+        << origin;
   }
 }
 

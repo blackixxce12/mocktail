@@ -63,10 +63,16 @@ struct CookiePersistenceContext {
   std::filesystem::path path;
   std::weak_ptr<jnivm::VM> vm;
   std::shared_ptr<services::HttpClient> live_auth_http_client;
+  // Guards accepted_credential and identity promotion. Never held across a
+  // request to Roblox.
   std::mutex promotion_mutex;
+  // Engine cookie syncs replay the last session Roblox accepted.
+  SecureRobloxCredential accepted_credential;
 };
 
 void ClearSensitiveString(std::string* value);
+void RetireRejectedSavedCredential(const std::filesystem::path& path,
+                                   std::string_view credential);
 
 class ScopedFileDescriptor final {
  public:
@@ -313,38 +319,76 @@ bool PersistRobloxCredential(void* opaque, const char* data, size_t size) {
     return false;
   }
 
+  const std::shared_ptr<jnivm::VM> vm = context->vm.lock();
+  // A guest VM gets its session from a browser sign-in or a native login, and
+  // WebKit or the engine can replay one Roblox already revoked: check a new
+  // credential before it replaces the saved one. A VM whose account is
+  // already resolved saves the sessions the engine rotates without waiting.
+  bool check = false;
+  {
+    std::lock_guard<std::mutex> lock(context->promotion_mutex);
+    check = context->live_auth_http_client != nullptr &&
+            (vm == nullptr ||
+             vm->GetRobloxAuthIdentitySnapshot().user_id <= 0) &&
+            credential != context->accepted_credential.view();
+  }
+  services::AuthSession session;
+  if (check) {
+    services::AuthService auth_service(*context->live_auth_http_client);
+    session = auth_service.ResolveSession(credential, false);
+    if (session.status == services::AuthSessionStatus::kInvalid) {
+      std::fprintf(stderr,
+                   "  [auth] Roblox rejected a new sign-in session (HTTP %ld); "
+                   "it was not saved\n",
+                   session.http_status);
+      if (session.http_status == 401 || session.http_status == 403) {
+        RetireRejectedSavedCredential(context->path, credential);
+      }
+      return false;
+    }
+    if (session.status == services::AuthSessionStatus::kUnavailable) {
+      std::fprintf(stderr,
+                   "  [auth] new sign-in session could not be verified (%s); "
+                   "saving it unverified\n",
+                   session.error.c_str());
+    }
+  }
+
   std::string stored_credential(data, size);
   stored_credential.push_back('\n');
   const bool stored =
       WritePrivateFileAtomically(context->path, stored_credential);
   ClearSensitiveString(&stored_credential);
-  const std::shared_ptr<jnivm::VM> vm = context->vm.lock();
-  if (stored && vm != nullptr && context->live_auth_http_client != nullptr &&
-      vm->GetRobloxAuthIdentitySnapshot().user_id <= 0) {
+  if (!stored) {
+    // Roblox did not refuse this session, so it is still used for this run. A
+    // refusal would make the browser sign-in clear it from WebKit.
+    std::fprintf(stderr,
+                 "  [auth] could not save the sign-in session; using it for "
+                 "this run only\n");
+  }
+  if (session.status == services::AuthSessionStatus::kAuthenticated) {
     std::lock_guard<std::mutex> lock(context->promotion_mutex);
-    if (vm->GetRobloxAuthIdentitySnapshot().user_id <= 0) {
-      services::AuthService auth_service(*context->live_auth_http_client);
-      const services::AuthSession session =
-          auth_service.ResolveSession(credential, false);
-      if (session.status == services::AuthSessionStatus::kAuthenticated) {
-        jnivm::RobloxAuthIdentity identity;
-        identity.user_id = session.identity.user_id;
-        identity.username = session.identity.username;
-        identity.display_name = session.identity.display_name;
-        vm->SetRobloxAuthIdentity(identity);
-        std::fprintf(stderr,
-                     "  [auth] native sign-in identity promoted into the "
-                     "running VM\n");
-      }
+    context->accepted_credential =
+        SecureRobloxCredential(std::string(credential));
+    if (vm != nullptr && vm->GetRobloxAuthIdentitySnapshot().user_id <= 0) {
+      jnivm::RobloxAuthIdentity identity;
+      identity.user_id = session.identity.user_id;
+      identity.username = session.identity.username;
+      identity.display_name = session.identity.display_name;
+      vm->SetRobloxAuthIdentity(identity);
+      std::fprintf(stderr,
+                   "  [auth] native sign-in identity promoted into the "
+                   "running VM\n");
     }
   }
-  return stored;
+  return true;
 }
 
 void InstallCredentialPersistence(const std::shared_ptr<jnivm::VM>& vm,
                                   const RuntimePaths& paths,
                                   std::shared_ptr<services::HttpClient>
-                                      live_auth_http_client) {
+                                      live_auth_http_client,
+                                  std::string_view accepted_credential = {}) {
   if (vm == nullptr) {
     return;
   }
@@ -352,6 +396,8 @@ void InstallCredentialPersistence(const std::shared_ptr<jnivm::VM>& vm,
   context->path = paths.cookie_file();
   context->vm = vm;
   context->live_auth_http_client = std::move(live_auth_http_client);
+  context->accepted_credential =
+      SecureRobloxCredential(std::string(accepted_credential));
   vm->SetRobloxCredentialSink(
       std::move(context),
       jnivm::RobloxCredentialSinkCallbacks{&PersistRobloxCredential});
@@ -723,6 +769,32 @@ bool ClearRejectedCookieFile(const std::filesystem::path& path,
   return true;
 }
 
+// Matches ComposeAuthRuntime's recovery so a revoked session that was saved
+// earlier is not offered again on the next launch.
+void RetireRejectedSavedCredential(const std::filesystem::path& path,
+                                   std::string_view credential) {
+  CookieLoadResult saved = ReadCookieFile(path, false);
+  std::string saved_value =
+      services::AuthService::ExtractRoblosecurityValue(saved.value);
+  std::string rejected_value =
+      services::AuthService::ExtractRoblosecurityValue(credential);
+  if (saved.status == CookieLoadStatus::kFound && !saved_value.empty() &&
+      saved_value == rejected_value) {
+    std::string error;
+    if (ClearRejectedCookieFile(path, saved.value, &error)) {
+      std::fprintf(stderr, "  [auth] rejected saved Roblox session retired\n");
+    } else {
+      std::fprintf(stderr,
+                   "  [auth] rejected saved Roblox session was not retired: "
+                   "%s\n",
+                   error.c_str());
+    }
+  }
+  ClearSensitiveString(&saved.value);
+  ClearSensitiveString(&saved_value);
+  ClearSensitiveString(&rejected_value);
+}
+
 CookieLoadResult LoadSavedCookie(const Environment& environment,
                                  const RuntimePaths& paths) {
   std::optional<std::string> environment_cookie =
@@ -781,6 +853,32 @@ bool PersistRobloxCookie(const std::filesystem::path& path,
   const bool result = WritePrivateFileAtomically(path, formatted);
   ClearSensitiveString(&formatted);
   return result;
+}
+
+BrowserSignInStatus PersistValidatedRobloxCookie(
+    const std::filesystem::path& path, services::AuthService& auth_service,
+    std::string_view cookie_value) {
+  constexpr std::string_view kPrefix = ".ROBLOSECURITY=";
+  std::string header;
+  if (cookie_value.compare(0, kPrefix.size(), kPrefix) != 0) {
+    header = kPrefix;
+  }
+  header.append(cookie_value);
+  const services::AuthSession session =
+      auth_service.ResolveSession(header, false);
+  ClearSensitiveString(&header);
+  switch (session.status) {
+    case services::AuthSessionStatus::kAuthenticated:
+      return PersistRobloxCookie(path, cookie_value)
+                 ? BrowserSignInStatus::kAccepted
+                 : BrowserSignInStatus::kStoreFailed;
+    case services::AuthSessionStatus::kUnavailable:
+      return BrowserSignInStatus::kUnverified;
+    case services::AuthSessionStatus::kGuest:
+    case services::AuthSessionStatus::kInvalid:
+      break;
+  }
+  return BrowserSignInStatus::kRejected;
 }
 
 void SecurelyClearString(std::string* value) { ClearSensitiveString(value); }
@@ -916,8 +1014,8 @@ AuthRuntimeComposition ComposeAuthRuntime(
       identity.username = session.identity.username;
       identity.display_name = session.identity.display_name;
       jni_vm->SetRobloxAuthIdentity(identity);
-      InstallCredentialPersistence(jni_vm, paths,
-                                   live_auth_http_client);
+      InstallCredentialPersistence(jni_vm, paths, live_auth_http_client,
+                                   credential.view());
       if (!credential.empty()) {
         (void)jni_vm->DispatchRobloxCredential(credential.c_str(),
                                                credential.size());

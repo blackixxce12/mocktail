@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -16,6 +17,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <thread>
 #include <type_traits>
 #include <utility>
 
@@ -947,6 +949,303 @@ TEST(AuthRuntimeCompositionTest,
   auto java_cookie = static_cast<jstring>(env->CallStaticObjectMethod(
       cookie_manager, get_cookie, env->NewStringUTF("roblox.com")));
   EXPECT_EQ(ReadJavaString(env, java_cookie), dispatched_header);
+}
+
+TEST(AuthRuntimeCompositionTest,
+     GuestRuntimeRefusesRevokedDispatchedCredentialWithoutSavingIt) {
+  const TempDirectory directory;
+  MapEnvironment environment;
+  environment.Set("HOME", directory.path().string());
+  environment.Set("MOCKTAIL_ALLOW_NO_COOKIE_LUA_APP", "1");
+  const RuntimePaths paths = PathsFor(environment, directory);
+  auto http = std::make_shared<FakeHttpClient>();
+  http->response = {true, 401, {}, {}};
+  services::AuthService auth_service(*http);
+  AuthRuntimeComposition composition =
+      ComposeAuthRuntime(environment, paths, auth_service, http);
+  ASSERT_TRUE(composition);
+  ASSERT_EQ(composition.status, AuthRuntimeStatus::kGuest);
+
+  const std::string stale = ".ROBLOSECURITY=_|stale-webkit-session";
+  {
+    const ScopedRobloxCredentialBinding binding(composition.jni_vm.get(),
+                                                composition.credential);
+    ASSERT_TRUE(binding.bound());
+    EXPECT_FALSE(composition.jni_vm->DispatchRobloxCredential(stale.data(),
+                                                              stale.size()));
+    std::string current = "must be cleared";
+    EXPECT_TRUE(
+        composition.jni_vm->CopyRobloxCredentialFromProvider(&current));
+    EXPECT_TRUE(current.empty());
+  }
+
+  ASSERT_EQ(http->request_count, 1);
+  EXPECT_EQ(http->last_request.headers[1], "Cookie: " + stale);
+  EXPECT_EQ(composition.jni_vm->GetRobloxAuthIdentitySnapshot().user_id, -1);
+  EXPECT_FALSE(std::filesystem::exists(paths.cookie_file()));
+}
+
+TEST(AuthRuntimeCompositionTest,
+     RevokedDispatchedCredentialRetiresOnlyTheMatchingSavedCookie) {
+  const TempDirectory directory;
+  MapEnvironment environment;
+  environment.Set("HOME", directory.path().string());
+  environment.Set("MOCKTAIL_ALLOW_NO_COOKIE_LUA_APP", "1");
+  const RuntimePaths paths = PathsFor(environment, directory);
+  auto http = std::make_shared<FakeHttpClient>();
+  services::AuthService auth_service(*http);
+  AuthRuntimeComposition composition =
+      ComposeAuthRuntime(environment, paths, auth_service, http);
+  ASSERT_TRUE(composition);
+  ASSERT_EQ(composition.status, AuthRuntimeStatus::kGuest);
+
+  // A session saved without verification, for example while offline.
+  const std::string saved = std::string(".ROBLOSECURITY=") + kCredential;
+  const std::string other_cookies = "RBXEventTrackerV2=browserid=123456\n";
+  ASSERT_TRUE(WriteFile(paths.cookie_file(), saved + "\n" + other_cookies));
+  http->response = {true, 403, {}, {}};
+
+  const std::string different = ".ROBLOSECURITY=_|different-session";
+  EXPECT_FALSE(composition.jni_vm->DispatchRobloxCredential(
+      different.data(), different.size()));
+  EXPECT_EQ(ReadFile(paths.cookie_file()), saved + "\n" + other_cookies);
+
+  EXPECT_FALSE(
+      composition.jni_vm->DispatchRobloxCredential(saved.data(), saved.size()));
+  EXPECT_EQ(http->request_count, 2);
+  EXPECT_EQ(ReadFile(paths.cookie_file()),
+            std::string(saved.size(), ' ') + "\n" + other_cookies);
+
+  FakeHttpClient restart_http;
+  services::AuthService restart_auth_service(restart_http);
+  const AuthRuntimeComposition restarted =
+      ComposeAuthRuntime(environment, paths, restart_auth_service);
+  ASSERT_TRUE(restarted) << restarted.error;
+  EXPECT_EQ(restarted.status, AuthRuntimeStatus::kGuest);
+  EXPECT_FALSE(restarted.rejected_credential_retired);
+  EXPECT_EQ(restart_http.request_count, 0);
+}
+
+TEST(AuthRuntimeCompositionTest,
+     UnverifiableDispatchedCredentialIsSavedWithoutPromotion) {
+  const TempDirectory directory;
+  MapEnvironment environment;
+  environment.Set("HOME", directory.path().string());
+  environment.Set("MOCKTAIL_ALLOW_NO_COOKIE_LUA_APP", "1");
+  const RuntimePaths paths = PathsFor(environment, directory);
+  auto http = std::make_shared<FakeHttpClient>();
+  http->response = {false, 0, {}, "offline"};
+  services::AuthService auth_service(*http);
+  AuthRuntimeComposition composition =
+      ComposeAuthRuntime(environment, paths, auth_service, http);
+  ASSERT_TRUE(composition);
+  ASSERT_EQ(composition.status, AuthRuntimeStatus::kGuest);
+
+  const std::string saved = ".ROBLOSECURITY=_|offline-native-login";
+  EXPECT_TRUE(
+      composition.jni_vm->DispatchRobloxCredential(saved.data(), saved.size()));
+  EXPECT_EQ(http->request_count, 1);
+  EXPECT_EQ(ReadFile(paths.cookie_file()), saved + "\n");
+  EXPECT_EQ(composition.jni_vm->GetRobloxAuthIdentitySnapshot().user_id, -1);
+  std::string current;
+  EXPECT_TRUE(composition.jni_vm->CopyRobloxCredentialFromProvider(&current));
+  EXPECT_EQ(current, saved);
+}
+
+TEST(AuthRuntimeCompositionTest,
+     AcceptedDispatchedCredentialIsUsedWhenItCannotBeSaved) {
+  const TempDirectory directory;
+  MapEnvironment environment;
+  environment.Set("HOME", directory.path().string());
+  environment.Set("MOCKTAIL_ALLOW_NO_COOKIE_LUA_APP", "1");
+  const RuntimePaths paths = PathsFor(environment, directory);
+  auto http = std::make_shared<FakeHttpClient>();
+  http->response = {
+      true, 200, R"({"id":77,"name":"Fresh","displayName":"Fresh"})", {}};
+  services::AuthService auth_service(*http);
+  AuthRuntimeComposition composition =
+      ComposeAuthRuntime(environment, paths, auth_service, http);
+  ASSERT_TRUE(composition);
+  ASSERT_EQ(composition.status, AuthRuntimeStatus::kGuest);
+  // A directory where the cookie file belongs makes every save fail, like a
+  // full or read-only configuration directory.
+  ASSERT_TRUE(std::filesystem::create_directories(paths.cookie_file() /
+                                                  "blocker"));
+
+  // A failed save is not a refusal: browser sign-in clears refused sessions.
+  const std::string fresh = ".ROBLOSECURITY=_|fresh-unsaved-session";
+  EXPECT_TRUE(
+      composition.jni_vm->DispatchRobloxCredential(fresh.data(), fresh.size()));
+  EXPECT_EQ(http->request_count, 1);
+  EXPECT_TRUE(std::filesystem::is_directory(paths.cookie_file()));
+  EXPECT_EQ(composition.jni_vm->GetRobloxAuthIdentitySnapshot().user_id, 77);
+  std::string current;
+  EXPECT_TRUE(composition.jni_vm->CopyRobloxCredentialFromProvider(&current));
+  EXPECT_EQ(current, fresh);
+}
+
+TEST(AuthRuntimeCompositionTest,
+     AuthenticatedRuntimeSavesRotatedCredentialsWithoutChecking) {
+  const TempDirectory directory;
+  MapEnvironment environment;
+  environment.Set("HOME", directory.path().string());
+  const std::string current = std::string(".ROBLOSECURITY=") + kCredential;
+  environment.Set("MOCKTAIL_ROBLOX_COOKIES", current);
+  const RuntimePaths paths = PathsFor(environment, directory);
+  auto http = std::make_shared<FakeHttpClient>();
+  http->response = {
+      true, 200, R"({"id":55,"name":"Holder","displayName":"Holder"})", {}};
+  services::AuthService auth_service(*http);
+  AuthRuntimeComposition composition =
+      ComposeAuthRuntime(environment, paths, auth_service, http);
+  ASSERT_TRUE(composition);
+  ASSERT_EQ(composition.status, AuthRuntimeStatus::kAuthenticated);
+  ASSERT_EQ(http->request_count, 1);
+
+  const ScopedRobloxCredentialBinding binding(composition.jni_vm.get(),
+                                              composition.credential);
+  ASSERT_TRUE(binding.bound());
+  // Engine syncs replay the session the runtime already validated.
+  EXPECT_TRUE(composition.jni_vm->DispatchRobloxCredential(current.data(),
+                                                           current.size()));
+  EXPECT_EQ(http->request_count, 1);
+  EXPECT_EQ(ReadFile(paths.cookie_file()), current + "\n");
+
+  // The account is resolved, so a session the engine rotates is saved and
+  // used at once, as before; Roblox is not asked about it.
+  http->response = {true, 401, {}, {}};
+  const std::string rotated = ".ROBLOSECURITY=_|engine-rotation";
+  EXPECT_TRUE(composition.jni_vm->DispatchRobloxCredential(rotated.data(),
+                                                           rotated.size()));
+  EXPECT_EQ(http->request_count, 1);
+  EXPECT_EQ(ReadFile(paths.cookie_file()), rotated + "\n");
+  std::string provided;
+  EXPECT_TRUE(composition.jni_vm->CopyRobloxCredentialFromProvider(&provided));
+  EXPECT_EQ(provided, rotated);
+  EXPECT_EQ(composition.jni_vm->GetRobloxAuthIdentitySnapshot().user_id, 55);
+}
+
+TEST(AuthRuntimeCompositionTest,
+     AuthenticatedRuntimeMakesNoRequestForRotatedCredentials) {
+  const TempDirectory directory;
+  MapEnvironment environment;
+  environment.Set("HOME", directory.path().string());
+  environment.Set("MOCKTAIL_ROBLOX_COOKIES",
+                  std::string(".ROBLOSECURITY=") + kCredential);
+  const RuntimePaths paths = PathsFor(environment, directory);
+  auto http = std::make_shared<FakeHttpClient>();
+  http->response = {
+      true, 200, R"({"id":55,"name":"Holder","displayName":"Holder"})", {}};
+  services::AuthService auth_service(*http);
+  AuthRuntimeComposition composition =
+      ComposeAuthRuntime(environment, paths, auth_service, http);
+  ASSERT_TRUE(composition);
+  ASSERT_EQ(composition.status, AuthRuntimeStatus::kAuthenticated);
+  ASSERT_EQ(http->request_count, 1);
+
+  // The engine rotates sessions on its own threads; none of them may wait on
+  // Roblox.
+  http->before_response = [] {
+    ADD_FAILURE() << "a rotated session of a signed-in VM was sent to Roblox";
+  };
+  for (const char* rotated : {".ROBLOSECURITY=_|rotation-1",
+                              ".ROBLOSECURITY=_|rotation-2"}) {
+    const std::string credential(rotated);
+    EXPECT_TRUE(composition.jni_vm->DispatchRobloxCredential(
+        credential.data(), credential.size()));
+    EXPECT_EQ(ReadFile(paths.cookie_file()), credential + "\n");
+  }
+  EXPECT_EQ(http->request_count, 1);
+}
+
+TEST(AuthRuntimeCompositionTest, CheckingOneSessionDoesNotHoldUpAnother) {
+  const TempDirectory directory;
+  MapEnvironment environment;
+  environment.Set("HOME", directory.path().string());
+  environment.Set("MOCKTAIL_ALLOW_NO_COOKIE_LUA_APP", "1");
+  const RuntimePaths paths = PathsFor(environment, directory);
+  auto http = std::make_shared<FakeHttpClient>();
+  http->response = {
+      true, 200, R"({"id":77,"name":"Fresh","displayName":"Fresh"})", {}};
+  services::AuthService auth_service(*http);
+  AuthRuntimeComposition composition =
+      ComposeAuthRuntime(environment, paths, auth_service, http);
+  ASSERT_TRUE(composition);
+  ASSERT_EQ(composition.status, AuthRuntimeStatus::kGuest);
+
+  // While Roblox answers for the first session, a second one arrives on
+  // another thread and must not wait for that answer.
+  const std::string first = ".ROBLOSECURITY=_|first-session";
+  const std::string second = ".ROBLOSECURITY=_|second-session";
+  jnivm::VM* vm = composition.jni_vm.get();
+  std::atomic<bool> started{false};
+  std::atomic<bool> second_done{false};
+  bool second_in_time = false;
+  bool second_stored = false;
+  std::thread other;
+  http->before_response = [&] {
+    if (started.exchange(true)) {
+      return;
+    }
+    other = std::thread([&] {
+      second_stored = vm->DispatchRobloxCredential(second.data(), second.size());
+      second_done = true;
+    });
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!second_done && std::chrono::steady_clock::now() < deadline) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    second_in_time = second_done;
+  };
+  EXPECT_TRUE(vm->DispatchRobloxCredential(first.data(), first.size()));
+  ASSERT_TRUE(other.joinable());
+  other.join();
+  EXPECT_TRUE(second_in_time);
+  EXPECT_TRUE(second_stored);
+  EXPECT_EQ(http->request_count, 2);
+  EXPECT_EQ(vm->GetRobloxAuthIdentitySnapshot().user_id, 77);
+}
+
+TEST(AuthRuntimeCompositionTest,
+     BrowserSignInCookieIsPersistedOnlyAfterRobloxAcceptsIt) {
+  const TempDirectory directory;
+  const std::filesystem::path cookie_file =
+      directory.path() / "auth" / "roblox.cookie";
+  FakeHttpClient http;
+  services::AuthService auth_service(http);
+
+  http.response = {true, 401, {}, {}};
+  EXPECT_EQ(PersistValidatedRobloxCookie(cookie_file, auth_service,
+                                         "_|stale-browser-session"),
+            BrowserSignInStatus::kRejected);
+  EXPECT_EQ(http.last_request.headers[1],
+            "Cookie: .ROBLOSECURITY=_|stale-browser-session");
+  EXPECT_FALSE(std::filesystem::exists(cookie_file));
+
+  http.response = {false, 0, {}, "offline"};
+  EXPECT_EQ(PersistValidatedRobloxCookie(cookie_file, auth_service,
+                                         "_|unverified-browser-session"),
+            BrowserSignInStatus::kUnverified);
+  EXPECT_FALSE(std::filesystem::exists(cookie_file));
+
+  EXPECT_EQ(PersistValidatedRobloxCookie(cookie_file, auth_service, ""),
+            BrowserSignInStatus::kRejected);
+  EXPECT_EQ(http.request_count, 2);
+
+  http.response = {
+      true, 200, R"({"id":42,"name":"Browser","displayName":"Browser"})", {}};
+  EXPECT_EQ(PersistValidatedRobloxCookie(cookie_file, auth_service,
+                                         "_|fresh-browser-session"),
+            BrowserSignInStatus::kAccepted);
+  EXPECT_EQ(http.request_count, 3);
+  EXPECT_EQ(http.last_request.headers[1],
+            "Cookie: .ROBLOSECURITY=_|fresh-browser-session");
+  EXPECT_EQ(ReadFile(cookie_file),
+            ".ROBLOSECURITY=_|fresh-browser-session\n");
+  struct stat metadata = {};
+  ASSERT_EQ(lstat(cookie_file.c_str(), &metadata), 0);
+  EXPECT_EQ(metadata.st_mode & (S_IRWXG | S_IRWXO), 0U);
 }
 
 }  // namespace

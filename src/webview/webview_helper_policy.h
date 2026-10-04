@@ -19,6 +19,10 @@ inline constexpr char kCompatibilityHandler[] = "mocktailRobloxBridge";
 // never forwarded.
 inline constexpr char kWebRobuxPurchaseUrl[] =
     "https://www.roblox.com/upgrades/robux";
+// WebKit lists host-only cookies only for their own host, so clearing the
+// Roblox session must enumerate both the www and the apex origin.
+inline constexpr const char* kRobloxCookieOrigins[] = {
+    "https://www.roblox.com/", "https://roblox.com/"};
 
 enum class CaptchaEventType {
   kShown,
@@ -46,6 +50,7 @@ bool ShouldDisableWebViewHardwareAcceleration(
 const char* AndroidBridgeSource();
 std::string BuildRobloxAndroidUserAgent();
 bool IsBrowserLoginUrl(std::string_view url);
+bool IsRobloxSecurityCookie(const char* name, const char* domain);
 bool IsEssentialWebResource(const char* uri);
 // The Robux page served to the Android app ("GooglePlayStore" user agent)
 // starts a purchase by navigating to /mobile-app-upgrades/buy?id=<sku>&...;

@@ -8,10 +8,12 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -1112,13 +1114,17 @@ class RobloxExperienceCompositionWebSurfaceTest : public ::testing::Test {
       path = directory / "helper";
       std::ofstream output(path);
       output << R"PY(#!/usr/bin/env python3
-import socket, sys
+import os, socket, sys
 sys.stdin.buffer.read()
 s = socket.socket(fileno=198)
 s.settimeout(5)
 s.send(b'MWVE' + bytes([1, 3, 0, 0]) + bytes(4))
+operations = open(os.path.join(os.path.dirname(sys.argv[0]), 'operations'), 'w')
 while True:
     packet = s.recv(1024 * 1024)
+    if packet:
+        operations.write('%d\n' % packet[5])
+        operations.flush()
     if not packet or packet[5] == 5:
         break
 )PY";
@@ -1133,6 +1139,13 @@ while True:
       std::error_code error;
       if (!directory.empty())
         std::filesystem::remove_all(directory, error);
+    }
+
+    // Control operation codes the helper received, one per line.
+    std::string Operations() const {
+      std::ifstream input(directory / "operations");
+      return {std::istreambuf_iterator<char>(input),
+              std::istreambuf_iterator<char>()};
     }
 
     std::filesystem::path directory;
@@ -1194,6 +1207,20 @@ while True:
 
   static Status Close(RobloxExperienceComposition* composition) {
     return composition->CloseWebSurface();
+  }
+
+  // A cookie report from the attached helper, as surface generation
+  // |process_generation|/|logical_generation| sent it.
+  static Status AcceptCookie(RobloxExperienceComposition* composition,
+                             uint64_t process_generation,
+                             uint64_t logical_generation,
+                             std::string_view value) {
+    WebViewHelperEvent event;
+    event.type = WebViewHelperEventType::kRobloxCookie;
+    event.payload = std::string(value);
+    return composition->RouteCurrentWebSurfaceEvent(
+        composition->web_surface_process_, process_generation,
+        logical_generation, event);
   }
 
   static Status RouteEvent(RobloxExperienceComposition* composition,
@@ -1357,6 +1384,97 @@ TEST_F(RobloxExperienceCompositionWebSurfaceTest,
     EXPECT_EQ(probe->calls, generation - 6);
     (void)helper.process->RequestClose();
   }
+}
+
+TEST_F(RobloxExperienceCompositionWebSurfaceTest,
+       RefusedBrowserSessionIsClearedWithoutStoppingTheClient) {
+  Helper helper;
+  ASSERT_FALSE(helper.path.empty());
+  jnivm::VM vm;
+  // The production sink refuses a session Roblox rejects, such as a revoked
+  // one that WebKit kept from an earlier sign-in.
+  vm.SetRobloxCredentialSink(
+      std::make_shared<int>(0),
+      jnivm::RobloxCredentialSinkCallbacks{
+          [](void*, const char*, std::size_t) { return false; }});
+  RobloxExperienceComposition composition(
+      {vm.GetJavaVM(), &vm, Prepare}, RobloxExperienceMessageBusSymbols{},
+      RobloxWebViewMessageBusSymbols{}, RobloxBrowserServiceSymbols{},
+      RobloxPermissionsMessageBusSymbols{}, RobloxGameSessionSymbols{},
+      RobloxExperienceJniFactory{}, RobloxFreshLaunchPresentBoundary{},
+      RobloxGameSurfaceJniConfig{}, nullptr);
+  const auto launched =
+      LaunchWebViewHelper(helper.path, "https://www.roblox.com/login");
+  ASSERT_TRUE(launched) << launched.error;
+  helper.process = launched.process;
+  ASSERT_TRUE(helper.process->WaitUntilReady(std::chrono::seconds(2)));
+  AttachProcess(&composition, helper.process);
+  Activate(&composition, false, 1, 1, std::make_shared<ExitProbe>());
+
+  EXPECT_TRUE(AcceptCookie(&composition, 1, 1, "_|stale-webkit-session").ok());
+  EXPECT_FALSE(CookieSynchronized(&composition));
+  EXPECT_EQ(vm.GetRobloxAuthIdentitySnapshot().user_id, -1);
+
+  (void)helper.process->RequestClose();
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (helper.process->running() &&
+         std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  ASSERT_FALSE(helper.process->running());
+  // Clear the WebKit session, reload sign-in, then the explicit close.
+  EXPECT_EQ(helper.Operations(), "9\n1\n5\n");
+}
+
+TEST_F(RobloxExperienceCompositionWebSurfaceTest,
+       RefusedBrowserSessionLeavesARouteOpenedMeanwhileAlone) {
+  Helper helper;
+  ASSERT_FALSE(helper.path.empty());
+  jnivm::VM vm;
+  RobloxExperienceComposition composition(
+      {vm.GetJavaVM(), &vm, Prepare}, RobloxExperienceMessageBusSymbols{},
+      RobloxWebViewMessageBusSymbols{}, RobloxBrowserServiceSymbols{},
+      RobloxPermissionsMessageBusSymbols{}, RobloxGameSessionSymbols{},
+      RobloxExperienceJniFactory{}, RobloxFreshLaunchPresentBoundary{},
+      RobloxGameSurfaceJniConfig{}, nullptr);
+  // Roblox refuses the session only after the engine reused the surface for
+  // another route.
+  struct Reroute {
+    RobloxExperienceComposition* composition = nullptr;
+    std::shared_ptr<ExitProbe> probe;
+  };
+  vm.SetRobloxCredentialSink(
+      std::make_shared<Reroute>(
+          Reroute{&composition, std::make_shared<ExitProbe>()}),
+      jnivm::RobloxCredentialSinkCallbacks{
+          [](void* context, const char*, std::size_t) {
+            auto* reroute = static_cast<Reroute*>(context);
+            Activate(reroute->composition, true, 1, 2, reroute->probe);
+            return false;
+          }});
+  const auto launched =
+      LaunchWebViewHelper(helper.path, "https://www.roblox.com/login");
+  ASSERT_TRUE(launched) << launched.error;
+  helper.process = launched.process;
+  ASSERT_TRUE(helper.process->WaitUntilReady(std::chrono::seconds(2)));
+  AttachProcess(&composition, helper.process);
+  Activate(&composition, false, 1, 1, std::make_shared<ExitProbe>());
+
+  EXPECT_TRUE(AcceptCookie(&composition, 1, 1, "_|stale-webkit-session").ok());
+  EXPECT_FALSE(CookieSynchronized(&composition));
+  EXPECT_TRUE(HasProcess(&composition));
+
+  (void)helper.process->RequestClose();
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (helper.process->running() &&
+         std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  ASSERT_FALSE(helper.process->running());
+  // Only the explicit close: the new route was not sent to sign-in.
+  EXPECT_EQ(helper.Operations(), "5\n");
 }
 
 TEST_F(RobloxExperienceCompositionWebSurfaceTest,
