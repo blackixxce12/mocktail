@@ -635,9 +635,10 @@ class ComboBinding final : public RowBinding {
 
   static void SetupSelected(GtkSignalListItemFactory*, GObject* object,
                             gpointer) {
+    // Option labels are short; ellipsizing would hide them whenever the
+    // subtitle is long.
     GtkWidget* label = gtk_label_new(nullptr);
     gtk_label_set_xalign(GTK_LABEL(label), 1.0F);
-    gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
     gtk_list_item_set_child(GTK_LIST_ITEM(object), label);
   }
 
