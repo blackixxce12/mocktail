@@ -33,6 +33,8 @@
 #include "runtime/fleasion.h"
 #include "runtime/game_mode.h"
 #include "runtime/graphics_launch_policy.h"
+#include "runtime/launcher_policy.h"
+#include "runtime/launcher_ui_launch.h"
 #include "runtime/managed_environment.h"
 #include "runtime/memory_limit.h"
 #include "runtime/payload_update_preflight.h"
@@ -224,8 +226,9 @@ void ConfigureHostDriverEnvironment() {
 
 int main(int argc, char* argv[]) {
   // Taken before Mocktail exports its own settings, which a restart after
-  // website sign-in computes again.
-  const mocktail::runtime::ProcessStartState process_start =
+  // website sign-in computes again. The settings window may drop the user's
+  // managed variables from it.
+  mocktail::runtime::ProcessStartState process_start =
       mocktail::runtime::CaptureProcessStartState();
   // From the same snapshot, so before anything below exports its own
   // values: the variables the user's shell or shortcut set to override
@@ -380,6 +383,81 @@ int main(int argc, char* argv[]) {
           environment, "Mocktail could not prepare its configuration.");
     }
     return EXIT_FAILURE;
+  }
+  if (command_line.options.mode == mocktail::runtime::CommandMode::kRun) {
+    // The settings window runs here: the config file exists, the instance
+    // lock is held, and nothing has been loaded or exported from the config
+    // yet, so every later load sees what the window saved. It also writes
+    // the account selection read just below.
+    mocktail::runtime::LauncherInputs launcher_inputs;
+    launcher_inputs.run_mode = true;
+    launcher_inputs.external_launch_request =
+        external_launch_request.has_value();
+    mocktail::runtime::ReadLauncherEnvironment(environment, &launcher_inputs);
+    launcher_inputs.cli_force_show = command_line.options.launcher ==
+                                     mocktail::runtime::LauncherRequest::kShow;
+    launcher_inputs.cli_skip = command_line.options.launcher ==
+                               mocktail::runtime::LauncherRequest::kSkip;
+    const std::filesystem::path launcher_helper =
+        mocktail::runtime::ResolveLauncherUiHelperPath(environment);
+    launcher_inputs.helper_present = !launcher_helper.empty();
+    launcher_inputs.show_on_start = mocktail::runtime::ReadLauncherShowOnStart(
+        paths.config_file(), environment);
+    const mocktail::runtime::LauncherDecision launcher_decision =
+        mocktail::runtime::DecideLauncher(launcher_inputs);
+    // Anything this start executes again skips the window.
+    (void)setenv(std::string(mocktail::runtime::kLauncherDecidedVariable)
+                     .c_str(),
+                 "1", 1);
+    if (launcher_decision == mocktail::runtime::LauncherDecision::kShow) {
+      std::cout << "  [launcher] opening the settings window ("
+                << mocktail::runtime::DescribeLauncherDecision(launcher_inputs)
+                << ")\n"
+                << std::flush;
+      mocktail::runtime::LauncherUiLaunchOptions launcher_options;
+      launcher_options.helper = launcher_helper;
+      launcher_options.config_file = paths.config_file();
+      launcher_options.user_managed_environment = user_managed_environment;
+      launcher_options.config_created = config_bootstrap.created();
+      launcher_options.original_environment = process_start.environment;
+      const mocktail::runtime::LauncherUiRun launcher_run =
+          mocktail::runtime::RunLauncherUi(
+              launcher_helper,
+              mocktail::runtime::BuildLauncherUiEnvironment(
+                  environ, launcher_options));
+      if (!launcher_run.result.has_value()) {
+        std::cerr << "  [launcher] " << launcher_run.error;
+        if (launcher_run.signal != 0) {
+          std::cerr << " (signal " << launcher_run.signal << ")";
+        } else if (launcher_run.exit_status > 0) {
+          std::cerr << " (exit status " << launcher_run.exit_status << ")";
+        }
+        std::cerr << "; starting Roblox\n";
+      }
+      switch (launcher_run.decision()) {
+        case mocktail::runtime::LauncherUiResult::kQuit:
+          std::cout << "  [launcher] closed without playing\n";
+          support_bundle_guard.Disarm();
+          return EXIT_SUCCESS;
+        case mocktail::runtime::LauncherUiResult::kPlayIgnoringEnvironment: {
+          // The window moved these values into config.yaml; the command
+          // line's own values stay.
+          const std::vector<std::string> removed =
+              mocktail::runtime::RemoveUserManagedEnvironment(
+                  user_managed_environment,
+                  mocktail::runtime::CommandLineEnvironmentNames(
+                      command_line.options),
+                  &process_start.environment);
+          std::cout << "  [launcher] ignoring " << removed.size()
+                    << " environment override(s) for this launch\n";
+          break;
+        }
+        case mocktail::runtime::LauncherUiResult::kPlay:
+          break;
+      }
+    } else if (!launcher_inputs.helper_present) {
+      std::cout << "  [launcher] settings window helper not found\n";
+    }
   }
   // Every start, website joins included, signs in from the account selected
   // in the saved-account store, so the selection has to be read after

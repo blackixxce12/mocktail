@@ -752,6 +752,7 @@ target_link_libraries(mocktail PRIVATE
   mocktail_account_store
   mocktail_auth_runtime_composition
   mocktail_failure_dialog_runtime
+  mocktail_launcher_ui_launch
   mocktail_fmod_jni_audio_bridge
   mocktail_roblox_output_device_runtime
   mocktail_roblox_fullscreen_runtime
