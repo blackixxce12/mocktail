@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -747,123 +748,145 @@ TEST(LauncherConfigDocumentTest, CopiesAMissingNestedBlockFromTheTemplate) {
   ASSERT_TRUE(document.Validate(&error)) << error;
 }
 
-// Stands in for the first-run template with a section the user's file does
-// not have yet (the launcher's own sections are added this way).
-std::string TemplateWithExtraSection(bool at_end) {
-  std::string text(runtime::DefaultRuntimeConfigYaml());
-  const std::string section =
-      "# Settings window.\n"
-      "launcher:\n"
-      "  # Boolean (default: true): show the settings window first.\n"
-      "  show_on_start: true\n"
-      "  # String (default: graphics): page opened first.\n"
-      "  # first_page: graphics\n";
-  if (at_end) {
-    return text + "\n" + section;
+// A hand-written first-run template with the shipped template's section
+// order but only keys the loader knows today, so these tests do not change
+// whenever the shipped template gains sections.
+std::string FixtureTemplate() {
+  return ReadFile(std::filesystem::path(MOCKTAIL_TEST_SOURCE_DIR) /
+                  "tests/fixtures/launcher/template_config.yaml");
+}
+
+// text without [from, to): drops sections to make an older-looking file.
+std::string WithoutRange(std::string text, std::string_view from,
+                         std::string_view to) {
+  const std::size_t begin = text.find(from);
+  const std::size_t end = to.empty() ? text.size() : text.find(to, begin);
+  if (begin == std::string::npos || end == std::string::npos) {
+    ADD_FAILURE() << "fixture text not found: " << from;
+    return text;
   }
-  const std::size_t network = text.find("\nnetwork:\n");
-  text.insert(network + 1, section + "\n");
+  text.erase(begin, end - begin);
   return text;
 }
 
 TEST(LauncherConfigDocumentTest, AppendsAMissingSectionAtItsTemplatePosition) {
-  const std::string original = Fixture();
+  const std::string original =
+      WithoutRange(Fixture(), "audio:\n", "integrations:\n");
   ConfigDocument document = ConfigDocument::FromBytes(original);
-  document.SetTemplate(TemplateWithExtraSection(false));
+  document.SetTemplate(FixtureTemplate());
   std::string error;
-  ASSERT_TRUE(document.Set("launcher.show_on_start", "false",
-                           ScalarKind::kBool, &error))
+  ASSERT_EQ(document.Get("audio.output_device"), std::nullopt);
+  ASSERT_TRUE(document.Set("audio.output_device", "Встроенный звук",
+                           ScalarKind::kString, &error))
       << error;
   const LineDiff diff = Diff(original, document.bytes());
   EXPECT_TRUE(diff.removed.empty());
   EXPECT_EQ(diff.added,
-            (Lines{"# Settings window.", "launcher:",
-                   "  # Boolean (default: true): show the settings window "
-                   "first.",
-                   "  show_on_start: false",
-                   "  # String (default: graphics): page opened first.",
-                   "  # first_page: graphics", ""}));
-  EXPECT_NE(document.bytes().find("  high_dpi: true\n"
+            (Lines{"# Sound devices.", "audio:",
+                   "  # String (default: default): output device name "
+                   "printed during startup.",
+                   "  output_device: \"Встроенный звук\"",
+                   "  # String (default: default): input device name, "
+                   "id:<number>, or disabled.",
+                   "  # input_device: disabled", ""}));
+  // Template order: after performance, before integrations.
+  EXPECT_NE(document.bytes().find("  gamemode: on\n"
                                   "\n"
-                                  "# Settings window.\n"
-                                  "launcher:\n"),
-            std::string::npos);
-  EXPECT_NE(document.bytes().find("  # first_page: graphics\n"
+                                  "# Sound devices.\n"
+                                  "audio:\n"),
+            std::string::npos)
+      << document.bytes();
+  EXPECT_NE(document.bytes().find("  # input_device: disabled\n"
                                   "\n"
-                                  "network:\n"),
-            std::string::npos);
-  EXPECT_EQ(document.Get("launcher.show_on_start"), "false");
+                                  "integrations:\n"),
+            std::string::npos)
+      << document.bytes();
 
   // The copied section's commented example is used for the next key.
-  ASSERT_TRUE(document.Set("launcher.first_page", "accounts",
-                           ScalarKind::kEnum, &error))
+  ASSERT_TRUE(document.Set("audio.input_device", "disabled", ScalarKind::kEnum,
+                           &error))
       << error;
-  EXPECT_NE(document.bytes().find("  first_page: accounts\n\nnetwork:\n"),
-            std::string::npos);
+  EXPECT_NE(document.bytes().find("  input_device: disabled\n"
+                                  "\n"
+                                  "integrations:\n"),
+            std::string::npos)
+      << document.bytes();
   ASSERT_TRUE(document.Validate(&error)) << error;
-  EXPECT_TRUE(LoadWithRealLoader(document.bytes()));
+  const runtime::RuntimeConfigLoadResult loaded =
+      LoadWithRealLoader(document.bytes());
+  ASSERT_TRUE(loaded) << loaded.error;
+  EXPECT_EQ(loaded.config.audio_output_device(), "Встроенный звук");
+  EXPECT_EQ(loaded.config.audio_input_device(), "disabled");
 }
 
 TEST(LauncherConfigDocumentTest, KeepsTemplateOrderForSeveralNewSections) {
-  std::string template_yaml(runtime::DefaultRuntimeConfigYaml());
-  const std::size_t network = template_yaml.find("\nnetwork:\n");
-  template_yaml.insert(network + 1,
-                       "# Launcher-managed sections.\n"
-                       "display:\n"
-                       "  # auto, wayland or x11.\n"
-                       "  server: auto\n"
-                       "\n"
-                       "account:\n"
-                       "  # native or browser.\n"
-                       "  sign_in: native\n"
-                       "\n");
-  const std::string original = Fixture();
+  const std::string original =
+      WithoutRange(Fixture(), "performance:\n", "integrations:\n");
   ConfigDocument document = ConfigDocument::FromBytes(original);
-  document.SetTemplate(template_yaml);
+  document.SetTemplate(FixtureTemplate());
   std::string error;
   // The later section first: the earlier one must still go above it.
-  ASSERT_TRUE(document.Set("account.sign_in", "browser", ScalarKind::kEnum,
+  ASSERT_TRUE(document.Set("audio.input_device", "disabled", ScalarKind::kEnum,
                            &error))
       << error;
-  ASSERT_TRUE(document.Set("display.server", "wayland", ScalarKind::kEnum,
+  ASSERT_TRUE(document.Set("performance.gamemode", "on", ScalarKind::kEnum,
                            &error))
       << error;
-  EXPECT_NE(document.bytes().find("  high_dpi: true\n"
-                                  "\n"
-                                  "# Launcher-managed sections.\n"
-                                  "display:\n"
-                                  "  # auto, wayland or x11.\n"
-                                  "  server: wayland\n"
-                                  "\n"
-                                  "account:\n"
-                                  "  # native or browser.\n"
-                                  "  sign_in: browser\n"
-                                  "\n"
-                                  "network:\n"),
-            std::string::npos)
+  EXPECT_NE(
+      document.bytes().find(
+          "  vsync: off\n"
+          "\n"
+          "performance:\n"
+          "  # Boolean (default: false): size Roblox queues from every "
+          "physical core.\n"
+          "  multithreaded_rendering: false\n"
+          "  # String (default: auto): request Feral GameMode: auto, on, or "
+          "off.\n"
+          "  gamemode: on\n"
+          "\n"
+          "# Sound devices.\n"
+          "audio:\n"
+          "  # String (default: default): output device name printed during "
+          "startup.\n"
+          "  output_device: default\n"
+          "  # String (default: default): input device name, id:<number>, or "
+          "disabled.\n"
+          "  input_device: disabled\n"
+          "\n"
+          "integrations:\n"),
+      std::string::npos)
       << document.bytes();
   EXPECT_TRUE(Diff(original, document.bytes()).removed.empty());
   ASSERT_TRUE(document.Validate(&error)) << error;
+  const runtime::RuntimeConfigLoadResult loaded =
+      LoadWithRealLoader(document.bytes());
+  ASSERT_TRUE(loaded) << loaded.error;
+  EXPECT_EQ(loaded.config.performance().game_mode, runtime::GameModePolicy::kOn);
+  EXPECT_EQ(loaded.config.audio_input_device(), "disabled");
 }
 
 TEST(LauncherConfigDocumentTest, AppendsATrailingTemplateSectionAtTheEnd) {
-  const std::string original = Fixture();
+  // The fixture ends with updates: and the note above it.
+  const std::string original =
+      WithoutRange(Fixture(), "\n# Обновления", std::string_view());
   ConfigDocument document = ConfigDocument::FromBytes(original);
-  document.SetTemplate(TemplateWithExtraSection(true));
+  document.SetTemplate(FixtureTemplate());
   std::string error;
-  ASSERT_TRUE(document.Set("launcher.show_on_start", "false",
-                           ScalarKind::kBool, &error))
+  ASSERT_TRUE(document.Set("updates.automatic", "false", ScalarKind::kBool,
+                           &error))
       << error;
   EXPECT_EQ(document.bytes(),
             original +
                 "\n"
-                "# Settings window.\n"
-                "launcher:\n"
-                "  # Boolean (default: true): show the settings window "
-                "first.\n"
-                "  show_on_start: false\n"
-                "  # String (default: graphics): page opened first.\n"
-                "  # first_page: graphics\n");
+                "# Roblox updates.\n"
+                "updates:\n"
+                "  # Boolean (default: true): install verified Roblox updates "
+                "automatically.\n"
+                "  automatic: false\n"
+                "  # String (default: apk-pure): APK provider. Supported "
+                "values: auto, apk-pure.\n"
+                "  # source: auto\n");
+  ASSERT_TRUE(document.Validate(&error)) << error;
 
   // A section the template does not know is still written, plainly.
   ConfigDocument plain = ConfigDocument::FromBytes("version: 1\nupdates:\n"
@@ -874,6 +897,48 @@ TEST(LauncherConfigDocumentTest, AppendsATrailingTemplateSectionAtTheEnd) {
   EXPECT_EQ(plain.bytes(),
             "version: 1\nupdates:\n  automatic: true\n\ninput:\n"
             "  touch_enabled: true\n");
+}
+
+TEST(LauncherConfigDocumentTest, CopiesAMissingSectionFromTheShippedTemplate) {
+  // By default sections come from DefaultRuntimeConfigYaml(). Only the shape
+  // is checked here, so the template's wording can change freely.
+  const std::string original =
+      WithoutRange(Fixture(), "network:\n", "# Обновления");
+  ConfigDocument document = ConfigDocument::FromBytes(original);
+  std::string error;
+  ASSERT_TRUE(document.Set("network.use_system_proxy", "true",
+                           ScalarKind::kBool, &error))
+      << error;
+  const LineDiff diff = Diff(original, document.bytes());
+  EXPECT_TRUE(diff.removed.empty());
+  const std::vector<std::string> shipped =
+      SplitLines(std::string(runtime::DefaultRuntimeConfigYaml()));
+  bool header = false;
+  bool value = false;
+  for (const std::string& line : diff.added) {
+    if (line == "network:") {
+      header = true;
+    }
+    if (line == "  use_system_proxy: true") {
+      value = true;
+      continue;
+    }
+    EXPECT_NE(std::find(shipped.begin(), shipped.end(), line), shipped.end())
+        << "not a template line: " << line;
+  }
+  EXPECT_TRUE(header);
+  EXPECT_TRUE(value);
+  EXPECT_GT(diff.added.size(), 3U);  // the template's comments came along
+  // Template order: network sits before updates and the note above it.
+  EXPECT_LT(document.bytes().find("\nnetwork:\n"),
+            document.bytes().find("# Обновления"));
+  EXPECT_GT(document.bytes().find("\nnetwork:\n"),
+            document.bytes().find("  high_dpi: true\n"));
+  ASSERT_TRUE(document.Validate(&error)) << error;
+  const runtime::RuntimeConfigLoadResult loaded =
+      LoadWithRealLoader(document.bytes());
+  ASSERT_TRUE(loaded) << loaded.error;
+  EXPECT_TRUE(loaded.config.use_system_proxy());
 }
 
 TEST(LauncherConfigDocumentTest, NeverLeavesAnEmptySectionHeader) {
@@ -1080,7 +1145,7 @@ TEST(LauncherConfigDocumentTest, ValidateReportsLoaderErrorsWithLines) {
 
   // Unknown top-level sections are ignored by this loader, as at startup.
   ConfigDocument future = ConfigDocument::FromBytes(
-      "version: 1\nlauncher:\n  show_on_start: true\n");
+      "version: 1\nsome_future_section:\n  some_key: true\n");
   EXPECT_TRUE(future.Validate(&error)) << error;
 }
 
