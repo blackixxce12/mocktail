@@ -614,7 +614,7 @@ add_executable(window_state_store_test
   window_state_store_test.cc
 )
 target_link_libraries(window_state_store_test PRIVATE
-  mocktail_window
+  mocktail_window_state
   GTest::gtest_main
 )
 mocktail_apply_compile_options(window_state_store_test)

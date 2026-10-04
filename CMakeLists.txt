@@ -472,6 +472,14 @@ foreach(stub_target IN ITEMS
   mocktail_apply_compile_options(${stub_target})
 endforeach()
 
+# The launcher edits window-state.json too, so the store stays free of SDL.
+add_library(mocktail_window_state STATIC
+  src/window/window_state_store.cc
+)
+target_include_directories(mocktail_window_state PUBLIC include src)
+mocktail_apply_compile_options(mocktail_window_state)
+target_link_libraries(mocktail_window_state PRIVATE nlohmann_json::nlohmann_json)
+
 add_library(mocktail_window STATIC
   src/window/roblox_fullscreen_menu_request_gate.cc
   src/window/video_driver_policy.cc
@@ -482,13 +490,13 @@ add_library(mocktail_window STATIC
   src/window/window_game_surface_bridge.cc
   src/window/window_pointer_capture_owner.cc
   src/window/window_resize_readiness_gate.cc
-  src/window/window_state_store.cc
   src/window/window_surface_lifecycle.cc
   src/window/window_text_input_owner.cc
 )
 target_include_directories(mocktail_window PUBLIC src)
 mocktail_apply_compile_options(mocktail_window)
 target_link_libraries(mocktail_window PUBLIC
+  mocktail_window_state
   Mocktail::PlatformSdl
   Mocktail::SdlVulkanWsi
   SDL3::SDL3
