@@ -1,6 +1,7 @@
 #ifndef MOCKTAIL_RUNTIME_ROBLOX_TEXT_INPUT_JNI_BRIDGE_H_
 #define MOCKTAIL_RUNTIME_ROBLOX_TEXT_INPUT_JNI_BRIDGE_H_
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -42,6 +43,8 @@ class RobloxTextInputJniBridgeBackend {
       uint64_t generation, const window::TextInputArea& area,
       const window::TextInputOptions& options) = 0;
   virtual bool RequestHideTextInput(uint64_t generation) = 0;
+  // Paces TextBox geometry polling; tests substitute a manual clock.
+  virtual std::chrono::steady_clock::time_point Now() = 0;
 };
 
 // Guest callbacks enqueue commands that the SDL pre-pump drains on its main

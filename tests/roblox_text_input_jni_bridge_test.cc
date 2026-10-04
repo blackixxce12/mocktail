@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <chrono>
 #include <memory>
 #include <string>
 #include <utility>
@@ -116,6 +117,8 @@ class FakeBackend final : public RobloxTextInputJniBridgeBackend {
     return allow_hide;
   }
 
+  std::chrono::steady_clock::time_point Now() override { return now; }
+
   bool Pump() { return pump == nullptr || pump(pump_context); }
 
   bool allow_registration = true;
@@ -152,6 +155,7 @@ class FakeBackend final : public RobloxTextInputJniBridgeBackend {
   Status properties_status = Status::Ok();
   window::PreTextInputPumpCallback pump = nullptr;
   void* pump_context = nullptr;
+  std::chrono::steady_clock::time_point now;
   std::vector<bool> owner_transitions;
   std::vector<std::string> calls;
 };
@@ -807,10 +811,62 @@ TEST(RobloxTextInputJniBridgeTest,
   EXPECT_EQ(backend->last_properties.area_height, 64);
 
   backend->calls.clear();
+  backend->now += std::chrono::seconds(1);
   for (int pump = 0; pump < 8; ++pump) {
     ASSERT_TRUE(backend->Pump());
   }
   EXPECT_EQ(backend->calls, (std::vector<std::string>{"query:1"}));
+  EXPECT_TRUE(bridge->Shutdown().ok());
+}
+
+TEST(RobloxTextInputJniBridgeTest,
+     UnthrottledPumpsPollFocusedGeometryAtABoundedRate) {
+  jnivm::VM vm;
+  auto backend = std::make_shared<FakeBackend>();
+  std::unique_ptr<RobloxTextInputJniBridge> bridge;
+  ASSERT_TRUE(
+      RobloxTextInputJniBridge::CreateForTesting(&vm, backend, &bridge).ok());
+  ASSERT_TRUE(vm.DispatchRobloxTextInputShow(ShowRequest(43, "chat")));
+  ASSERT_TRUE(backend->Pump());
+  backend->query_result.available = true;
+  backend->query_result.info.width = 200.0F;
+  backend->query_result.info.height = 30.0F;
+  backend->query_result.info.text_input_type = 1;
+
+  // The first poll of a focus session keeps the pump-count cadence.
+  for (int pump = 0; pump < 8; ++pump) {
+    ASSERT_TRUE(backend->Pump());
+  }
+  EXPECT_EQ(backend->query_calls, 1);
+
+  // Without vsync the loop pumps far faster than geometry can change.
+  for (int pump = 0; pump < 10000; ++pump) {
+    ASSERT_TRUE(backend->Pump());
+  }
+  backend->now += std::chrono::milliseconds(1);
+  for (int pump = 0; pump < 100; ++pump) {
+    ASSERT_TRUE(backend->Pump());
+  }
+  EXPECT_EQ(backend->query_calls, 1);
+
+  backend->now += std::chrono::milliseconds(100);
+  ASSERT_TRUE(backend->Pump());
+  EXPECT_EQ(backend->query_calls, 2);
+  for (int pump = 0; pump < 100; ++pump) {
+    ASSERT_TRUE(backend->Pump());
+  }
+  EXPECT_EQ(backend->query_calls, 2);
+
+  // A new focus session polls without waiting for the previous interval.
+  ASSERT_TRUE(vm.DispatchRobloxTextInputHide());
+  ASSERT_TRUE(backend->Pump());
+  ASSERT_TRUE(vm.DispatchRobloxTextInputShow(ShowRequest(44, "next")));
+  ASSERT_TRUE(backend->Pump());
+  for (int pump = 0; pump < 8; ++pump) {
+    ASSERT_TRUE(backend->Pump());
+  }
+  EXPECT_EQ(backend->query_calls, 3);
+  EXPECT_EQ(backend->active_generation, 2U);
   EXPECT_TRUE(bridge->Shutdown().ok());
 }
 

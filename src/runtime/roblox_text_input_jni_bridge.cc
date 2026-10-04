@@ -1,6 +1,7 @@
 #include "runtime/roblox_text_input_jni_bridge.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -22,6 +23,7 @@ namespace {
 constexpr std::size_t kMaximumPendingTextCommands = 64;
 constexpr std::size_t kMaximumPendingTextBytes = 4U * 1024U * 1024U;
 constexpr uint32_t kGeometryRefreshPumpInterval = 8;
+constexpr std::chrono::milliseconds kGeometryRefreshMinimumInterval{50};
 
 void SecureClear(std::string* value) {
   if (value == nullptr) {
@@ -176,6 +178,9 @@ class ProductionTextInputBackend final
   }
   bool RequestHideTextInput(uint64_t generation) override {
     return window::RequestHideTextInput(generation);
+  }
+  std::chrono::steady_clock::time_point Now() override {
+    return std::chrono::steady_clock::now();
   }
 
  private:
@@ -462,7 +467,8 @@ struct RobloxTextInputJniBridge::State {
   // Android's RbxKeyboard follows that layout; keep the host overlay attached
   // by polling only while a TextBox owns focus. Unchanged snapshots are
   // discarded before they reach SDL or the rasterizer.
-  void AppendGeometryRefresh(std::deque<Command>* pending) {
+  void AppendGeometryRefresh(std::chrono::steady_clock::time_point now,
+                             std::deque<Command>* pending) {
     if (pending == nullptr) {
       return;
     }
@@ -482,11 +488,20 @@ struct RobloxTextInputJniBridge::State {
     if (already_refreshing != pending->end()) {
       return;
     }
-    ++geometry_refresh_pumps;
     if (geometry_refresh_pumps < kGeometryRefreshPumpInterval) {
+      ++geometry_refresh_pumps;
+    }
+    // An unthrottled present policy pumps thousands of times per second, so
+    // the pump count alone would poll libroblox every few hundred
+    // microseconds. The time floor never delays a focus session's first poll.
+    if (geometry_refresh_pumps < kGeometryRefreshPumpInterval ||
+        (geometry_refresh_generation == active_generation &&
+         now - last_geometry_refresh < kGeometryRefreshMinimumInterval)) {
       return;
     }
     geometry_refresh_pumps = 0;
+    geometry_refresh_generation = active_generation;
+    last_geometry_refresh = now;
     Command command;
     command.type = CommandType::kRecoverGeometry;
     command.generation = active_generation;
@@ -600,7 +615,7 @@ struct RobloxTextInputJniBridge::State {
       applied_handle = 0;
     }
 
-    AppendGeometryRefresh(&pending);
+    AppendGeometryRefresh(backend->Now(), &pending);
 
     bool success = true;
     for (Command& command : pending) {
@@ -854,6 +869,8 @@ struct RobloxTextInputJniBridge::State {
   jnivm::RobloxTextBoxInfo active_geometry;
   bool has_active_geometry = false;
   uint32_t geometry_refresh_pumps = 0;
+  uint64_t geometry_refresh_generation = 0;
+  std::chrono::steady_clock::time_point last_geometry_refresh;
   bool desired_active = false;
   std::size_t pending_text_bytes = 0;
   bool accepting = true;

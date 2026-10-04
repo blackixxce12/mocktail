@@ -133,6 +133,56 @@ void ReleaseFocus(JNIEnv* env, jclass clazz, jlong handle) {
   Record("release", env, clazz, {static_cast<double>(handle)});
 }
 
+// Android releases the local references a native method leaves behind when it
+// returns to Java, so these stand-ins for the libroblox TextBox exports do not
+// delete theirs either.
+jobject FrameReliantTextBoxInfo(JNIEnv* env, jclass) {
+  jclass info_class =
+      env->FindClass("com/roblox/engine/jni/model/NativeTextBoxInfo");
+  jmethodID constructor =
+      env->GetMethodID(info_class, "<init>", "(FFFFFZIIIIIIZZ)V");
+  (void)env->NewStringUTF("TextBox");
+  return env->NewObject(info_class, constructor, 69.0, 36.0, 633.0, 36.0,
+                        16.0, JNI_FALSE, 2, 1, 0, 0, 3, 0, JNI_FALSE,
+                        JNI_FALSE);
+}
+
+// libroblox converts TextBox strings through String.getBytes("UTF-8") and
+// never deletes the String class reference.
+std::string FrameReliantUtf8(JNIEnv* env, jstring text) {
+  jclass string_class = env->GetObjectClass(text);
+  jmethodID get_bytes =
+      env->GetMethodID(string_class, "getBytes", "(Ljava/lang/String;)[B");
+  jstring charset = env->NewStringUTF("UTF-8");
+  auto bytes = static_cast<jbyteArray>(
+      env->CallObjectMethod(text, get_bytes, charset));
+  env->DeleteLocalRef(charset);
+  const jsize size = env->GetArrayLength(bytes);
+  jbyte* data = env->GetByteArrayElements(bytes, nullptr);
+  std::string utf8(reinterpret_cast<const char*>(data),
+                   static_cast<std::size_t>(size));
+  env->ReleaseByteArrayElements(bytes, data, JNI_ABORT);
+  env->DeleteLocalRef(bytes);
+  return utf8;
+}
+
+void FrameReliantSyncText(JNIEnv* env, jclass, jstring text, jint) {
+  (void)FrameReliantUtf8(env, text);
+}
+
+// libroblox reports TextBox text through onLuaTextBoxChangedCallback with a
+// Java string it never deletes.
+void FrameReliantPassText(JNIEnv* env, jclass, jlong, jstring text, jboolean,
+                          jint) {
+  const std::string utf8 = FrameReliantUtf8(env, text);
+  jclass java_interface =
+      env->FindClass("com/roblox/engine/jni/NativeGLJavaInterface");
+  jmethodID changed = env->GetStaticMethodID(
+      java_interface, "onLuaTextBoxChangedCallback", "(Ljava/lang/String;)V");
+  env->CallStaticVoidMethod(java_interface, changed,
+                            env->NewStringUTF(utf8.c_str()));
+}
+
 void Prepare(void* context) {
   auto* pair = static_cast<std::pair<jnivm::VM*, Probe*>*>(context);
   ASSERT_NE(pair, nullptr);
@@ -477,6 +527,43 @@ TEST_F(RobloxInputNativeAdapterTest,
   EXPECT_EQ(snapshot.ignored_text_events, 0u);
   EXPECT_EQ(snapshot.active_keys, 0u);
   EXPECT_EQ(snapshot.native_errors, 0u);
+}
+
+TEST_F(RobloxInputNativeAdapterTest,
+       FocusedTextBoxPollingAndTypingDoNotExhaustJniHandles) {
+  RobloxInputSymbols symbols = Symbols();
+  symbols.get_text_box_info = FrameReliantTextBoxInfo;
+  symbols.sync_textbox_text_and_cursor_position2 = FrameReliantSyncText;
+  symbols.pass_text = FrameReliantPassText;
+  RobloxInputNativeAdapter adapter(Environment(), symbols);
+  ASSERT_TRUE(adapter.Initialize().ok());
+  const RobloxTextSink text = adapter.Sink().text;
+  constexpr char kText[] = "hello";
+  constexpr std::size_t kTextSize = sizeof(kText) - 1;
+
+  // Three times the 100000-slot JNI handle table: one reference left behind
+  // per geometry poll or keystroke exhausts it long before the loop ends.
+  constexpr int kIterations = 300000;
+  for (int i = 0; i < kIterations; ++i) {
+    RobloxNativeTextBoxInfoQueryResult result;
+    const Status query = adapter.QueryCurrentTextBoxInfo(&result);
+    ASSERT_TRUE(query.ok()) << "poll " << i << ": " << query.message();
+    ASSERT_TRUE(result.available) << "poll " << i;
+    const Status sync = text.sync(text.context, kText, kTextSize, 5);
+    ASSERT_TRUE(sync.ok()) << "sync " << i << ": " << sync.message();
+    const Status pass =
+        text.pass_text(text.context, 42, kText, kTextSize, false, 5);
+    ASSERT_TRUE(pass.ok()) << "pass " << i << ": " << pass.message();
+  }
+
+  // Nearly the whole table is still free afterwards.
+  JNIEnv* env = vm_->GetJNIEnv();
+  ASSERT_EQ(env->PushLocalFrame(16), JNI_OK);
+  for (int i = 0; i < 90000; ++i) {
+    ASSERT_NE(env->NewStringUTF("probe"), nullptr) << "probe " << i;
+  }
+  env->PopLocalFrame(nullptr);
+  EXPECT_TRUE(adapter.Release().ok());
 }
 
 }  // namespace

@@ -14,6 +14,7 @@ namespace {
 constexpr char kNativeInputClassName[] =
     "com/roblox/engine/jni/NativeInputInterface";
 constexpr char kNativeGlClassName[] = "com/roblox/engine/jni/NativeGLInterface";
+constexpr jint kNativeCallLocalFrameCapacity = 16;
 
 Status FailedPrecondition(const char* message) {
   return Status::Error(
@@ -30,6 +31,30 @@ Status Unsupported(const char* message) {
   return Status::Error(StatusCode::kUnsupported,
                        message != nullptr ? message : "input is unsupported");
 }
+
+// Android releases the local references a native method leaves behind when it
+// returns to Java. The host is that Java caller here; without a frame those
+// references stay in the thread's base frame and their JNI handle slots are
+// never reclaimed.
+class ScopedLocalFrame final {
+ public:
+  explicit ScopedLocalFrame(JNIEnv* env)
+      : env_(env),
+        pushed_(env != nullptr &&
+                env->PushLocalFrame(kNativeCallLocalFrameCapacity) == JNI_OK) {}
+  ~ScopedLocalFrame() {
+    if (pushed_) {
+      env_->PopLocalFrame(nullptr);
+    }
+  }
+
+  ScopedLocalFrame(const ScopedLocalFrame&) = delete;
+  ScopedLocalFrame& operator=(const ScopedLocalFrame&) = delete;
+
+ private:
+  JNIEnv* const env_;
+  const bool pushed_;
+};
 
 jstring NewJavaString(JNIEnv* env, const char* utf8, std::size_t size) {
   if (env == nullptr || (utf8 == nullptr && size != 0)) {
@@ -192,6 +217,7 @@ Status RobloxInputNativeAdapter::QueryCurrentTextBoxInfo(
   if (!status.ok()) {
     return status;
   }
+  ScopedLocalFrame frame(env);
   return QueryRobloxNativeTextBoxInfo(env, native_gl_class_,
                                       symbols_.get_text_box_info, result);
 }
@@ -461,6 +487,7 @@ Status RobloxInputNativeAdapter::SyncText(const char* utf8, std::size_t size,
   if (!status.ok()) {
     return status;
   }
+  ScopedLocalFrame frame(env);
   jstring text = NewJavaString(env, utf8, size);
   if (text == nullptr) {
     status = CheckJniException(env, "allocate Roblox TextBox Java string");
@@ -483,6 +510,7 @@ Status RobloxInputNativeAdapter::PassText(int64_t textbox_handle,
   if (!status.ok()) {
     return status;
   }
+  ScopedLocalFrame frame(env);
   jstring text = NewJavaString(env, utf8, size);
   if (text == nullptr) {
     status = CheckJniException(env, "allocate Roblox TextBox Java string");
@@ -503,6 +531,7 @@ Status RobloxInputNativeAdapter::ReturnPressed(int64_t textbox_handle) {
   if (!status.ok()) {
     return status;
   }
+  ScopedLocalFrame frame(env);
   symbols_.return_pressed_from_on_screen_keyboard(
       env, native_gl_class_, static_cast<jlong>(textbox_handle));
   return CheckJniException(env, "nativeReturnPressedFromOnScreenKeyboard");
@@ -515,6 +544,7 @@ Status RobloxInputNativeAdapter::ReleaseFocus(int64_t textbox_handle) {
   if (!status.ok()) {
     return status;
   }
+  ScopedLocalFrame frame(env);
   symbols_.release_focus(env, native_gl_class_,
                          static_cast<jlong>(textbox_handle));
   return CheckJniException(env, "nativeReleaseFocus");
