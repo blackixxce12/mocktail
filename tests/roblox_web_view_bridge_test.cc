@@ -1218,6 +1218,83 @@ TEST(RobloxWebViewBridgeTest,
   g_web_view_probe = nullptr;
 }
 
+// The generic challenge URL as the LuaApp builds it: "%schallenge/cdn/hybrid?"
+// followed by "key=value&" pairs (getBaseQueryParameters, then
+// getChallengeTypeQueryParameters). Identifiers are placeholders.
+constexpr char kDeviceIntegrityChallengeUrl[] =
+    "https://www.roblox.com/challenge/cdn/hybrid?app-type=android&"
+    "dark-mode=true&challenge-type=generic&"
+    "generic-challenge-id=00000000-0000-0000-0000-000000000000&"
+    "generic-challenge-type=deviceintegrity&"
+    "challenge-metadata-json=%7B%22integrityType%22%3A%22playintegrity%22%7D&";
+
+std::string GenericChallengeUrl(const std::string& type) {
+  return "https://www.roblox.com/challenge/cdn/hybrid?app-type=android&"
+         "challenge-type=generic&"
+         "generic-challenge-id=00000000-0000-0000-0000-000000000000&"
+         "generic-challenge-type=" +
+         type + "&challenge-metadata-json=%7B%7D&";
+}
+
+TEST(RobloxWebViewParserTest, ReadsGenericChallengeTypeFromLuaAppUrls) {
+  EXPECT_EQ(RobloxGenericChallengeType(kDeviceIntegrityChallengeUrl),
+            "deviceintegrity");
+  EXPECT_EQ(RobloxGenericChallengeType(GenericChallengeUrl("DeviceIntegrity")),
+            "deviceintegrity");
+  EXPECT_EQ(
+      RobloxGenericChallengeType(GenericChallengeUrl("device%69ntegrity")),
+      "deviceintegrity");
+  EXPECT_EQ(RobloxGenericChallengeType(GenericChallengeUrl("proofofwork")),
+            "proofofwork");
+  EXPECT_EQ(RobloxGenericChallengeType(
+                "www:challenge/cdn/hybrid?generic-challenge-type=captcha"),
+            "captcha");
+  // The type is read only from its own parameter, not from encoded metadata
+  // and not from the fragment.
+  EXPECT_EQ(RobloxGenericChallengeType(
+                "https://www.roblox.com/challenge/cdn/hybrid?"
+                "challenge-metadata-json=%7B%22generic-challenge-type%22%3A"
+                "%22deviceintegrity%22%7D&generic-challenge-type=captcha"),
+            "captcha");
+  EXPECT_EQ(RobloxGenericChallengeType(
+                "https://www.roblox.com/challenge/cdn/hybrid?"
+                "generic-challenge-type=captcha#generic-challenge-type="
+                "deviceintegrity"),
+            "captcha");
+  // Only Roblox challenge routes are read.
+  EXPECT_EQ(RobloxGenericChallengeType(
+                "https://www.roblox.com/games/1?generic-challenge-type="
+                "deviceintegrity"),
+            "");
+  EXPECT_EQ(RobloxGenericChallengeType(
+                "https://example.com/challenge/cdn/hybrid?"
+                "generic-challenge-type=deviceintegrity"),
+            "");
+  EXPECT_EQ(RobloxGenericChallengeType(
+                "https://www.roblox.com/challenge/cdn/hybrid?challenge-type="
+                "captcha"),
+            "");
+  // A malformed escape or an oversized value is not guessed at.
+  EXPECT_EQ(RobloxGenericChallengeType(GenericChallengeUrl("device%zzity")),
+            "");
+  EXPECT_EQ(RobloxGenericChallengeType(GenericChallengeUrl("deviceint%6")),
+            "");
+  EXPECT_EQ(
+      RobloxGenericChallengeType(GenericChallengeUrl(std::string(65, 'a'))),
+      "");
+
+  for (const char* type :
+       {"deviceintegrity", "privateaccesstoken", "deviceaccesstoken"}) {
+    EXPECT_TRUE(IsUnsatisfiableRobloxChallengeType(type)) << type;
+  }
+  for (const char* type :
+       {"", "captcha", "captchav2", "turnstile", "proofofwork",
+        "twostepverification", "forcetwostepverification", "reauthentication",
+        "securityquestions", "emailverification", "deviceintegrityx"}) {
+    EXPECT_FALSE(IsUnsatisfiableRobloxChallengeType(type)) << type;
+  }
+}
+
 } // namespace
 } // namespace runtime
 } // namespace mocktail

@@ -13,6 +13,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "mocktail/status.h"
 #include "runtime/roblox_game_session_native_adapter.h"
@@ -43,6 +44,19 @@ struct RobloxWebViewOpenRequest {
   std::optional<bool> back_button_visible;
   std::optional<bool> hide_header;
 };
+
+// Roblox's LuaApp renders a generic security challenge at
+// <base>challenge/cdn/hybrid?..., naming its kind in the
+// generic-challenge-type query parameter (for example deviceintegrity). This
+// returns that value decoded and in lower case, or an empty string when |url|
+// is not a Roblox challenge URL or names no generic challenge type.
+std::string RobloxGenericChallengeType(std::string_view url);
+
+// True for challenge types only a certified device can answer: Google Play
+// Integrity (deviceintegrity), Apple Private Access Tokens
+// (privateaccesstoken) and console platform tokens (deviceaccesstoken).
+// Mocktail cannot produce any of them, so such a page can never be finished.
+bool IsUnsatisfiableRobloxChallengeType(std::string_view type);
 
 // WebViewProtocol.mutateWindow is a partial update. Field absence must remain
 // distinguishable from an explicitly supplied empty string or false value.

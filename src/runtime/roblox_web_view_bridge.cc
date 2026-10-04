@@ -2,6 +2,8 @@
 
 #include <curl/curl.h>
 
+#include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <cstdio>
 #include <nlohmann/json.hpp>
@@ -93,6 +95,57 @@ bool IsLoginChallengeUrl(std::string_view url) {
     }
   }
   return false;
+}
+
+// The LuaApp builds challenge URLs as "%schallenge/cdn/hybrid?%s%s" from
+// "key=value&" pairs; a generic challenge names its kind in this parameter.
+constexpr std::string_view kGenericChallengeTypeParameter =
+    "generic-challenge-type";
+constexpr std::size_t kMaximumChallengeTypeBytes = 64;
+constexpr std::string_view kUnsatisfiableChallengeTypes[] = {
+    // Google Play Integrity: the Android client's password login asks for it
+    // and Linux has no certified Play Services to answer.
+    "deviceintegrity",
+    // Apple Private Access Token, issued only to Apple devices.
+    "privateaccesstoken",
+    // Platform token from Xbox, PlayStation or Quest system software.
+    "deviceaccesstoken",
+};
+
+int HexDigitValue(char digit) {
+  if (digit >= '0' && digit <= '9') return digit - '0';
+  if (digit >= 'a' && digit <= 'f') return digit - 'a' + 10;
+  if (digit >= 'A' && digit <= 'F') return digit - 'A' + 10;
+  return -1;
+}
+
+// Decodes one form-encoded query component. A malformed escape or an
+// oversized result fails, so a crafted value cannot alias a known type.
+bool DecodeQueryComponent(std::string_view encoded, std::size_t maximum_bytes,
+                          std::string* decoded) {
+  decoded->clear();
+  for (std::size_t index = 0; index < encoded.size(); ++index) {
+    char byte = encoded[index];
+    if (byte == '+') {
+      byte = ' ';
+    } else if (byte == '%') {
+      if (index + 2 >= encoded.size()) {
+        return false;
+      }
+      const int high = HexDigitValue(encoded[index + 1]);
+      const int low = HexDigitValue(encoded[index + 2]);
+      if (high < 0 || low < 0) {
+        return false;
+      }
+      byte = static_cast<char>(high * 16 + low);
+      index += 2;
+    }
+    if (decoded->size() == maximum_bytes) {
+      return false;
+    }
+    decoded->push_back(byte);
+  }
+  return true;
 }
 
 Status Invalid(std::string message) {
@@ -206,6 +259,51 @@ Status ParseOptionalWebViewBoolean(const nlohmann::json& document,
 }
 
 } // namespace
+
+std::string RobloxGenericChallengeType(std::string_view url) {
+  if (url.size() > kMaximumRobloxWebViewUrlBytes || !IsLoginChallengeUrl(url)) {
+    return {};
+  }
+  const std::size_t query_start = url.find('?');
+  if (query_start == std::string_view::npos) {
+    return {};
+  }
+  std::string_view query = url.substr(query_start + 1);
+  query = query.substr(0, query.find('#'));
+  while (!query.empty()) {
+    const std::size_t end = query.find('&');
+    const std::string_view pair = query.substr(0, end);
+    query = end == std::string_view::npos ? std::string_view{}
+                                          : query.substr(end + 1);
+    const std::size_t equals = pair.find('=');
+    std::string key;
+    if (equals == std::string_view::npos ||
+        !DecodeQueryComponent(pair.substr(0, equals),
+                              kGenericChallengeTypeParameter.size(), &key) ||
+        !EqualsIgnoreCase(key, kGenericChallengeTypeParameter)) {
+      continue;
+    }
+    std::string type;
+    if (!DecodeQueryComponent(pair.substr(equals + 1),
+                              kMaximumChallengeTypeBytes, &type)) {
+      return {};
+    }
+    for (char& byte : type) {
+      byte = static_cast<char>(std::tolower(static_cast<unsigned char>(byte)));
+    }
+    return type;
+  }
+  return {};
+}
+
+bool IsUnsatisfiableRobloxChallengeType(std::string_view type) {
+  for (const std::string_view unsatisfiable : kUnsatisfiableChallengeTypes) {
+    if (EqualsIgnoreCase(type, unsatisfiable)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 struct RobloxWebViewBridge::RawCallbackTarget {
   std::mutex mutex;
@@ -1224,7 +1322,17 @@ Status RobloxWebViewBridge::DispatchOpenRequest(
     if (request.title.empty()) {
       request.title = "Roblox verification";
     }
-    std::fprintf(stderr, "  [webview] presenting login verification window\n");
+    // The type tells which challenges reach Linux users; the URL itself
+    // carries the challenge id and metadata and is never logged.
+    const std::string challenge_type = RobloxGenericChallengeType(request.url);
+    const bool printable_type =
+        !challenge_type.empty() &&
+        std::all_of(challenge_type.begin(), challenge_type.end(),
+                    [](unsigned char byte) { return std::isalnum(byte) != 0; });
+    std::fprintf(stderr,
+                 "  [webview] presenting login verification window%s%s\n",
+                 printable_type ? " type=" : "",
+                 printable_type ? challenge_type.c_str() : "");
   }
   if (browser_login_fallback) {
     request.url = kBrowserLoginUrl;
