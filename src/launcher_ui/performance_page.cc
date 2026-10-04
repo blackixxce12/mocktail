@@ -521,7 +521,9 @@ GtkWidget* BuildGameModeRow(LauncherContext* context,
       text = _("Installed");
       style = "success";
     }
-    gtk_widget_set_visible(badge, text != nullptr);
+    // A narrow window keeps the room for the title; the subtitle says the
+    // same.
+    gtk_widget_set_visible(badge, text != nullptr && !context->narrow());
     if (text == nullptr) return;
     gtk_label_set_text(GTK_LABEL(badge), text);
     for (const char* css : {"dim-label", "warning", "success"}) {
@@ -532,16 +534,21 @@ GtkWidget* BuildGameModeRow(LauncherContext* context,
                                    GTK_ACCESSIBLE_PROPERTY_LABEL,
                                    Format(_("GameMode: %s"), text).c_str(), -1);
   };
-  const LauncherContext::ListenerId id = context->OnMachineChanged(update);
+  struct Listeners {
+    LauncherContext* context;
+    LauncherContext::ListenerId machine;
+    LauncherContext::ListenerId layout;
+  };
   // The badge dies with the row; stop updating it then.
   g_object_set_data_full(
-      G_OBJECT(badge), "mocktail-listener",
-      new std::pair<LauncherContext*, LauncherContext::ListenerId>(context, id),
+      G_OBJECT(badge), "mocktail-listeners",
+      new Listeners{context, context->OnMachineChanged(update),
+                    context->OnLayoutChanged([update](bool) { update(); })},
       [](gpointer data) {
-        auto* listener = static_cast<
-            std::pair<LauncherContext*, LauncherContext::ListenerId>*>(data);
-        listener->first->RemoveListener(listener->second);
-        delete listener;
+        auto* listeners = static_cast<Listeners*>(data);
+        listeners->context->RemoveListener(listeners->machine);
+        listeners->context->RemoveListener(listeners->layout);
+        delete listeners;
       });
   update();
   return row;
