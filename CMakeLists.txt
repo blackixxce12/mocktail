@@ -591,6 +591,7 @@ target_link_libraries(mocktail_config_editor
 # environment overrides, machine profile, recommendations and search. Unit
 # tested without a display; the GTK helper below is a thin layer over it.
 add_library(mocktail_launcher_ui_model STATIC
+  src/launcher_ui/accounts_model.cc
   src/launcher_ui/env_overrides.cc
   src/launcher_ui/machine_profile.cc
   src/launcher_ui/recommendations.cc
