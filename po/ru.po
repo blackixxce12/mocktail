@@ -1535,3 +1535,83 @@ msgstr "Звуковые устройства"
 
 msgid "Listed by the names the game uses; changes apply at the next start"
 msgstr "Названия те же, что видит игра; изменения вступят в силу при следующем запуске"
+
+# Accounts page and the launch bar's account chip (accounts_page.cc,
+# accounts_controller.cc).
+msgid "Checking saved accounts…"
+msgstr "Проверка сохранённых аккаунтов…"
+
+msgid "Finish signing in, or close the sign-in window"
+msgstr "Завершите вход или закройте окно входа"
+
+msgid "An older saved sign-in could not be moved into the account list: %s"
+msgstr "Не удалось перенести вход из прежней версии в список аккаунтов: %s"
+
+msgid "Saved accounts could not be checked: %s"
+msgstr "Не удалось проверить сохранённые аккаунты: %s"
+
+msgid "Saved %s, the account you signed in with in Roblox"
+msgstr "Аккаунт %s, в который вы вошли в Roblox, сохранён"
+
+msgid "Account managed by environment override"
+msgstr "Аккаунт задан переменной окружения"
+
+msgid "Saved accounts cannot be read"
+msgstr "Не удаётся прочитать сохранённые аккаунты"
+
+msgid "Wait until the saved accounts are checked"
+msgstr "Дождитесь окончания проверки сохранённых аккаунтов"
+
+msgid "A sign-in window is already open"
+msgstr "Окно входа уже открыто"
+
+msgid "Signing in is not available in the self-test"
+msgstr "Во время самопроверки вход недоступен"
+
+msgid "The sign-in window is not installed (mocktail_webview_helper is missing)"
+msgstr "Окно входа не установлено (нет mocktail_webview_helper)"
+
+msgid "The sign-in window could not be prepared: %s"
+msgstr "Не удалось подготовить окно входа: %s"
+
+msgid "Add Roblox account"
+msgstr "Добавить аккаунт Roblox"
+
+msgid "Sign in to Roblox again as %s"
+msgstr "Повторный вход в Roblox: %s"
+
+msgid "The sign-in window could not open: %s"
+msgstr "Не удалось открыть окно входа: %s"
+
+msgid "Roblox did not accept that sign-in. Try again in the sign-in window."
+msgstr "Roblox не принял этот вход. Попробуйте ещё раз в окне входа."
+
+msgid "Roblox could not be reached to check the sign-in. Mocktail tries again in a few seconds."
+msgstr "Не удалось связаться с Roblox, чтобы проверить вход. Mocktail повторит попытку через несколько секунд."
+
+msgid "Signing in did not finish: %s"
+msgstr "Вход не завершён: %s"
+
+msgid "Signed in as %s, a different account than %s. Both are saved."
+msgstr "Выполнен вход в %s — это не %s, а другой аккаунт. Сохранены оба."
+
+msgid "Signed in as %s"
+msgstr "Выполнен вход: %s"
+
+msgid "Remove %s?"
+msgstr "Удалить %s?"
+
+msgid "Mocktail deletes this account's saved sign-in from this computer when you save or play. Roblox's servers are not told, so the account and its sign-ins elsewhere are not affected. To play with it here again, sign in again."
+msgstr "Mocktail удалит сохранённый вход этого аккаунта с этого компьютера, когда вы сохраните изменения или начнёте игру. Серверы Roblox об этом не узнают, поэтому сам аккаунт и входы в него на других устройствах не пострадают. Чтобы снова играть им здесь, войдите ещё раз."
+
+msgid "_Remove"
+msgstr "_Удалить"
+
+msgid "%s will be removed when you save or play"
+msgstr "Аккаунт %s будет удалён при сохранении или запуске игры"
+
+msgid "Saved accounts: %s"
+msgstr "Сохранённые аккаунты: %s"
+
+msgid "The account for this launch could not be selected: %s"
+msgstr "Не удалось выбрать аккаунт для этого запуска: %s"

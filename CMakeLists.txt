@@ -654,6 +654,7 @@ if(MOCKTAIL_BUILD_LAUNCHER_UI)
 
   add_executable(mocktail_launcher_ui
     src/launcher_ui/about_page.cc
+    src/launcher_ui/accounts_controller.cc
     src/launcher_ui/accounts_page.cc
     src/launcher_ui/advanced_page.cc
     src/launcher_ui/audio_page.cc

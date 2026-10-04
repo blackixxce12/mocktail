@@ -1,6 +1,7 @@
 # Source files with translatable strings of the settings window.
 # xgettext --keyword=_ --keyword=N_ --keyword=ngettext:1,2 --from-code=UTF-8
 src/launcher_ui/about_page.cc
+src/launcher_ui/accounts_controller.cc
 src/launcher_ui/accounts_page.cc
 src/launcher_ui/advanced_page.cc
 src/launcher_ui/audio_page.cc
