@@ -707,8 +707,27 @@ std::string SessionLog::Header(const Environment& environment,
   return output.str();
 }
 
-void SessionLog::Stop() {
+void SessionLog::FinishBeforeExec(std::chrono::milliseconds writer_timeout) {
   if (!active_) return;
+  RestoreOriginalStreams();
+  // Reaped here, the writer does not outlive the exec as a child the new
+  // process never waits for, and this log is complete before the next one
+  // starts.
+  const pid_t child = static_cast<pid_t>(logger_process_);
+  const auto deadline = std::chrono::steady_clock::now() + writer_timeout;
+  while (true) {
+    const pid_t waited = waitpid(child, nullptr, WNOHANG);
+    if (waited == child || (waited < 0 && errno != EINTR) ||
+        std::chrono::steady_clock::now() >= deadline) {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  logger_process_ = -1;
+  active_ = false;
+}
+
+void SessionLog::RestoreOriginalStreams() {
   std::cout.flush();
   std::cerr.flush();
   (void)fflush(nullptr);
@@ -718,6 +737,11 @@ void SessionLog::Stop() {
   close(original_stderr_);
   original_stdout_ = -1;
   original_stderr_ = -1;
+}
+
+void SessionLog::Stop() {
+  if (!active_) return;
+  RestoreOriginalStreams();
   const pid_t child = static_cast<pid_t>(logger_process_);
   while (waitpid(child, nullptr, 0) < 0 && errno == EINTR) {
   }

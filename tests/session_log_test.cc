@@ -143,6 +143,82 @@ TEST(SessionLogTest, PreservesSessionsStartedInTheSameSecond) {
             std::filesystem::canonical(second));
 }
 
+// Before a restart the log ends and its writer is reaped: the log is complete
+// before the new process starts its own, and no child is left behind that the
+// new process image would never wait for.
+TEST(SessionLogTest, FinishBeforeExecEndsTheLogAndReapsItsWriter) {
+  TemporaryDirectory temporary;
+  const MapEnvironment environment({
+      {"HOME", (temporary.root() / "home").string()},
+      {"MOCKTAIL_STATE_ROOT", (temporary.root() / "state").string()},
+  });
+  const RuntimePaths paths = RuntimePaths::FromEnvironment(environment);
+  std::filesystem::path session_path;
+  {
+    SessionLog log = SessionLog::Start(environment, paths);
+    ASSERT_TRUE(log) << log.error();
+    session_path = log.path();
+    std::cout << "before-restart-marker\n" << std::flush;
+    log.FinishBeforeExec(std::chrono::seconds(5));
+    EXPECT_FALSE(log.active());
+    errno = 0;
+    EXPECT_EQ(waitpid(-1, nullptr, WNOHANG), -1);
+    EXPECT_EQ(errno, ECHILD);
+    std::cout << "after-restart-marker\n" << std::flush;
+    std::cerr << "after-restart-marker\n" << std::flush;
+  }
+  const std::string contents = ReadFile(session_path);
+  EXPECT_NE(contents.find("before-restart-marker"), std::string::npos);
+  EXPECT_EQ(contents.find("after-restart-marker"), std::string::npos);
+}
+
+// A helper that outlives the run, such as a browser it opened, still holds
+// the log's pipe. The restart does not wait for it; the writer keeps logging
+// what the helper prints and ends with it.
+TEST(SessionLogTest, FinishBeforeExecDoesNotWaitForAHelperHoldingTheLog) {
+  TemporaryDirectory temporary;
+  const MapEnvironment environment({
+      {"HOME", (temporary.root() / "home").string()},
+      {"MOCKTAIL_STATE_ROOT", (temporary.root() / "state").string()},
+  });
+  const RuntimePaths paths = RuntimePaths::FromEnvironment(environment);
+  std::filesystem::path session_path;
+  {
+    SessionLog log = SessionLog::Start(environment, paths);
+    ASSERT_TRUE(log) << log.error();
+    session_path = log.path();
+    // Created after the writer was forked, so only the helper waits on it.
+    int release[2] = {-1, -1};
+    ASSERT_EQ(pipe(release), 0);
+    const pid_t helper = fork();
+    ASSERT_GE(helper, 0);
+    if (helper == 0) {
+      close(release[1]);
+      char byte = 0;
+      const ssize_t released = read(release[0], &byte, 1);
+      (void)released;
+      constexpr char kMarker[] = "helper-marker\n";
+      const ssize_t written =
+          write(STDOUT_FILENO, kMarker, sizeof(kMarker) - 1);
+      (void)written;
+      _exit(0);
+    }
+    close(release[0]);
+    const auto started = std::chrono::steady_clock::now();
+    log.FinishBeforeExec(std::chrono::milliseconds(100));
+    EXPECT_LT(std::chrono::steady_clock::now() - started,
+              std::chrono::seconds(2));
+    EXPECT_FALSE(log.active());
+
+    close(release[1]);
+    int status = 0;
+    ASSERT_EQ(waitpid(helper, &status, 0), helper);
+    // The writer, the only child left, ends once the helper has exited.
+    EXPECT_GT(waitpid(-1, &status, 0), 0);
+  }
+  EXPECT_NE(ReadFile(session_path).find("helper-marker"), std::string::npos);
+}
+
 TEST(SessionLogTest, SkipsIsolatedCanary) {
   TemporaryDirectory temporary;
   const MapEnvironment environment({

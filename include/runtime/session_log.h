@@ -50,7 +50,15 @@ class SessionLog final {
   std::string Header(const Environment& environment, const RuntimePaths& paths,
                      std::string_view graphics_backend) const;
 
+  // Ends the log before this process execs a new Mocktail, which starts its
+  // own: stdout and stderr go back to the original streams, and the writer
+  // gets the end of its input once no helper process holds the pipe. It is
+  // waited for at most |writer_timeout|, so a helper that outlives the run
+  // cannot hold up the restart; that writer then ends with the helper.
+  void FinishBeforeExec(std::chrono::milliseconds writer_timeout);
+
  private:
+  void RestoreOriginalStreams();
   void Stop();
 
   bool attempted_ = false;

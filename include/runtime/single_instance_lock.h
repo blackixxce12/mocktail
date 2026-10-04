@@ -44,6 +44,12 @@ class SingleInstanceLock final {
   const std::filesystem::path& path() const { return path_; }
   const std::string& error() const { return error_; }
 
+  // Unlocks before exec. The session log writer is forked after the lock is
+  // taken and keeps a copy of the descriptor; when a helper still holds its
+  // pipe it outlives the exec, and closing ours alone would leave the lock
+  // held until that writer exits.
+  void Release();
+
  private:
   SingleInstanceLock(int descriptor, Status status, std::filesystem::path path,
                      std::string error);

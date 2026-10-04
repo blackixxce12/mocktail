@@ -39,6 +39,7 @@
 #include "runtime/platform_cache_migration.h"
 #include "runtime/process_diagnostics.h"
 #include "runtime/process_launch_policy.h"
+#include "runtime/process_relaunch.h"
 #include "runtime/roblox_desktop_app_policy.h"
 #include "runtime/roblox_experience_launch_bridge.h"
 #include "runtime/roblox_fullscreen_runtime_bridge.h"
@@ -301,6 +302,10 @@ void ConfigureHostDriverEnvironment() {
 }  // namespace
 
 int main(int argc, char* argv[]) {
+  // Taken before Mocktail exports its own settings, which a restart after
+  // website sign-in computes again.
+  const mocktail::runtime::ProcessStartState process_start =
+      mocktail::runtime::CaptureProcessStartState();
   ConfigureHostDriverEnvironment();
   const auto process_started_at = std::chrono::system_clock::now();
   mocktail::runtime::CommandLineParseResult command_line =
@@ -376,6 +381,16 @@ int main(int argc, char* argv[]) {
           &command_line_error)) {
     std::cerr << "[FATAL] " << command_line_error << '\n';
     return EXIT_FAILURE;
+  }
+  // Built before argv is scrubbed; it never carries the website launch.
+  std::vector<std::string> relaunch_arguments;
+  if (command_line.options.mode == mocktail::runtime::CommandMode::kRun &&
+      !mocktail::runtime::BuildProcessRelaunchArguments(
+          command_line.options, argc, argv, &relaunch_arguments,
+          &command_line_error)) {
+    std::cerr << "  [runtime] restart after website sign-in unavailable: "
+              << command_line_error << '\n';
+    relaunch_arguments.clear();
   }
   mocktail::runtime::ScrubCommandLineLaunchArguments(&command_line.options,
                                                      argc, argv);
@@ -1182,6 +1197,28 @@ int main(int argc, char* argv[]) {
       command_line.options.mode == mocktail::runtime::CommandMode::kRun) {
     failure_dialog.MarkSuccessful();
     support_bundle_guard.Disarm();
+    if (mocktail::runtime::ProcessRelaunchRequested()) {
+      // Website sign-in saved a session the running LuaApp could not adopt;
+      // a fresh start loads it like any signed-in launch. The new process
+      // writes its own log and takes the lock itself.
+      std::string relaunch_error = "restart arguments are unavailable";
+      if (!relaunch_arguments.empty()) {
+        std::cout << "  [runtime] starting Mocktail again to sign in\n";
+        session_log.FinishBeforeExec(std::chrono::seconds(2));
+        if (instance_lock.has_value()) {
+          instance_lock->Release();
+        }
+        (void)mocktail::runtime::ExecProcessRelaunch(
+            process_start, relaunch_arguments, &relaunch_error);
+      }
+      // After a failed exec the log has ended; this reaches the console.
+      std::cerr << "  [runtime] " << relaunch_error
+                << "; open Mocktail again to continue signed in\n";
+      (void)mocktail::runtime::ShowWarningDialog(
+          environment,
+          "Mocktail could not restart after you signed in on the Roblox "
+          "website. Open Mocktail again to continue.");
+    }
     // Guest atexit handlers target workers that cannot be joined. Host
     // shutdown is already complete here, so do not re-enter guest teardown.
     std::cout.flush();

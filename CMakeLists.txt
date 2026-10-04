@@ -298,6 +298,7 @@ add_library(mocktail_runtime STATIC
   src/runtime/roblox_account_protocol_bridge.cc
   src/runtime/payload_update_preflight.cc
   src/runtime/process_launch_policy.cc
+  src/runtime/process_relaunch.cc
   src/runtime/process_diagnostics.cc
   src/runtime/runtime_config.cc
   src/runtime/runtime_config_bootstrap.cc

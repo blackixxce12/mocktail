@@ -260,6 +260,13 @@ target_link_libraries(browser_tracker_service_test PRIVATE
 )
 mocktail_apply_compile_options(browser_tracker_service_test)
 
+add_executable(process_relaunch_test process_relaunch_test.cc)
+target_link_libraries(process_relaunch_test PRIVATE
+  Mocktail::Runtime
+  GTest::gtest_main
+)
+mocktail_apply_compile_options(process_relaunch_test)
+
 add_executable(command_line_test command_line_test.cc)
 target_link_libraries(command_line_test PRIVATE
   Mocktail::Runtime
@@ -956,6 +963,7 @@ gtest_discover_tests(game_mode_link_namespace_test PROPERTIES
 gtest_discover_tests(memory_limit_test)
 gtest_discover_tests(runtime_paths_test)
 gtest_discover_tests(single_instance_lock_test)
+gtest_discover_tests(process_relaunch_test)
 gtest_discover_tests(supported_launch_policy_test)
 gtest_discover_tests(process_launch_policy_test)
 gtest_discover_tests(platform_cache_migration_test)

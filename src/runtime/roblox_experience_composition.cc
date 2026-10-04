@@ -1000,6 +1000,21 @@ Status RobloxExperienceComposition::AcceptWebViewRobloxCookie(
                    "  [auth] browser sign-in accepted into the running VM\n");
     }
   }
+  if (website_sign_in) {
+    // The LuaApp checks its session only at startup, and the engine's cookie
+    // jar was filled then too, so its login screen cannot pick this session
+    // up. Starting again loads the saved session as on any signed-in launch.
+    // Until then nothing may replace it: the engine can still sync the
+    // session the LuaApp signed out of while it shuts down.
+    vm->ClearRobloxCredentialSink();
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      relaunch_requested_ = true;
+    }
+    std::fprintf(stderr,
+                 "  [auth] website sign-in saved; restarting Roblox so it "
+                 "starts signed in\n");
+  }
   return Status::Ok();
 }
 
@@ -1953,6 +1968,11 @@ Status RobloxExperienceComposition::Shutdown() {
 bool RobloxExperienceComposition::subscribed() const {
   std::lock_guard<std::mutex> lock(mutex_);
   return subscribed_;
+}
+
+bool RobloxExperienceComposition::relaunch_requested() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return relaunch_requested_;
 }
 
 GameSessionSnapshot RobloxExperienceComposition::Snapshot() const {

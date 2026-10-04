@@ -147,6 +147,10 @@ class RobloxExperienceComposition final {
 
   bool subscribed() const;
   GameSessionSnapshot Snapshot() const;
+  // True once the website sign-in that replaced a challenge Linux cannot
+  // answer has saved its session. The LuaApp reads its session only when it
+  // starts, so the owner stops the main loop and starts Mocktail again.
+  bool relaunch_requested() const;
 
  private:
   friend class RobloxExperienceCompositionWebSurfaceTest;
@@ -283,6 +287,7 @@ class RobloxExperienceComposition final {
   bool clear_persisted_web_view_cookie_ = false;
   // The current surface is the website sign-in that replaced a challenge.
   bool web_surface_website_sign_in_ = false;
+  bool relaunch_requested_ = false;
   std::deque<RobloxExperienceLaunchRequest> pending_launch_requests_;
   struct PendingNativeStorePurchase {
     jlong player_id = 0;

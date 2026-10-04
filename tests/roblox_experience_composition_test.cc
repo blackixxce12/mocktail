@@ -1784,6 +1784,7 @@ TEST_F(RobloxExperienceCompositionWebSurfaceTest,
                     .ok());
     helper.process = CurrentProcess(composition.get());
     ASSERT_NE(helper.process, nullptr);
+    EXPECT_FALSE(composition->relaunch_requested());
     ASSERT_TRUE(Close(composition.get()).ok());
     ASSERT_TRUE(WaitForExit(helper.process));
     EXPECT_EQ(probe->calls, 1);
@@ -1796,7 +1797,8 @@ TEST_F(RobloxExperienceCompositionWebSurfaceTest,
 
 // The account was resolved at startup and the LuaApp signed out since, as in
 // the session that showed the Play Integrity demand. The website sign-in still
-// finishes once its session is saved: its window closes.
+// finishes: its window closes and Mocktail asks to start again, because the
+// running LuaApp reads its session only at startup.
 TEST_F(RobloxExperienceCompositionWebSurfaceTest,
        AcceptedWebsiteSignInFinishesOnAResolvedVm) {
   Helper helper;
@@ -1835,6 +1837,7 @@ TEST_F(RobloxExperienceCompositionWebSurfaceTest,
   EXPECT_TRUE(AcceptCookie(&composition, process_generation,
                            logical_generation, "refused-session")
                   .ok());
+  EXPECT_FALSE(composition.relaunch_requested());
   EXPECT_TRUE(HasProcess(&composition));
   EXPECT_EQ(probe->calls, 0);
 
@@ -1842,6 +1845,7 @@ TEST_F(RobloxExperienceCompositionWebSurfaceTest,
                            logical_generation, "accepted-session")
                   .ok());
   EXPECT_EQ(sink->calls, 2);
+  EXPECT_TRUE(composition.relaunch_requested());
   EXPECT_FALSE(HasProcess(&composition));
   EXPECT_EQ(probe->calls, 1);
   EXPECT_EQ(CookieValue(&composition), "accepted-session");
@@ -1849,10 +1853,17 @@ TEST_F(RobloxExperienceCompositionWebSurfaceTest,
   // Opened without a session, cleared and reloaded after the refusal, closed
   // after the acceptance.
   EXPECT_EQ(helper.Operations(), "9\n2\n3\n6\n7\n9\n1\n5\n");
+  // Until the restart nothing replaces the saved session, such as the one
+  // the LuaApp signed out of, synced by the engine while it shuts down.
+  constexpr char kStaleSession[] = ".ROBLOSECURITY=signed-out-session";
+  EXPECT_FALSE(
+      vm.DispatchRobloxCredential(kStaleSession, sizeof(kStaleSession) - 1));
+  EXPECT_EQ(sink->calls, 2);
 }
 
 // MOCKTAIL_NATIVE_LOGIN=0 keeps its sign-in window tied to Roblox's challenge;
-// on a VM that was already signed in at startup it does not close the window.
+// on a VM that was already signed in at startup it neither closes the window
+// nor restarts.
 TEST_F(RobloxExperienceCompositionWebSurfaceTest,
        TiedBrowserSignInStaysOpenOnAResolvedVm) {
   Helper helper;
@@ -1883,6 +1894,7 @@ TEST_F(RobloxExperienceCompositionWebSurfaceTest,
   EXPECT_TRUE(AcceptCookie(&composition, process_generation,
                            logical_generation, "accepted-session")
                   .ok());
+  EXPECT_FALSE(composition.relaunch_requested());
   EXPECT_TRUE(HasProcess(&composition));
   EXPECT_EQ(probe->calls, 0);
   ASSERT_TRUE(Close(&composition).ok());

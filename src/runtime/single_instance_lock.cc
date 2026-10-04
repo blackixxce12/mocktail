@@ -140,6 +140,19 @@ SingleInstanceLock::~SingleInstanceLock() {
   }
 }
 
+void SingleInstanceLock::Release() {
+  if (descriptor_ < 0) {
+    return;
+  }
+  if (status_ == Status::kAcquired) {
+    (void)flock(descriptor_, LOCK_UN);
+  }
+  close(descriptor_);
+  descriptor_ = -1;
+  // No longer held: acquired() is false from here on.
+  status_ = Status::kError;
+}
+
 SingleInstanceLock::SingleInstanceLock(SingleInstanceLock&& other) noexcept
     : descriptor_(other.descriptor_),
       status_(other.status_),

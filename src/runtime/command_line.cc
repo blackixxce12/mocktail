@@ -266,6 +266,9 @@ std::string CommandLineUsage(const std::string& program_name) {
          "window.\n"
       << "  Roblox may still open a WebView for required verification "
          "challenges.\n"
+      << "  If it asks for device attestation such as Google Play Integrity, "
+         "website sign-in opens instead.\n"
+      << "  After signing in there, Mocktail restarts signed in.\n"
       << "  New credentials are stored privately.\n\n"
       << "Additional runtime options are available as MOCKTAIL_* environment "
          "variables.\n";

@@ -67,6 +67,7 @@
 #include "runtime/jnivm_platform_web_callbacks.h"
 #include "runtime/owned_pthread.h"
 #include "runtime/platform_cache_migration.h"
+#include "runtime/process_relaunch.h"
 #include "runtime/roblox_app_lifecycle.h"
 #include "runtime/roblox_capability_resolver.h"
 #include "runtime/roblox_platform_web_symbols.h"
@@ -7036,6 +7037,14 @@ int mocktail::legacy::Run(const runtime::CommandLineOptions& options,
           std::cerr << "[FATAL] Roblox platform event delivery failed: "
                     << platform_event_status.message() << '\n';
           game_surface_events_completed = false;
+          break;
+        }
+        if (experience_composition->relaunch_requested()) {
+          // Website sign-in saved a session the running LuaApp cannot adopt.
+          // Shut down normally; main() starts Mocktail again afterwards.
+          mocktail::runtime::RequestProcessRelaunch();
+          std::cout << "  [main] restarting Roblox to finish website sign-in\n"
+                    << std::flush;
           break;
         }
       }
