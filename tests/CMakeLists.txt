@@ -281,6 +281,13 @@ target_link_libraries(managed_environment_test PRIVATE
 )
 mocktail_apply_compile_options(managed_environment_test)
 
+add_executable(launcher_policy_test launcher_policy_test.cc)
+target_link_libraries(launcher_policy_test PRIVATE
+  Mocktail::Runtime
+  GTest::gtest_main
+)
+mocktail_apply_compile_options(launcher_policy_test)
+
 add_executable(roblox_launch_uri_test roblox_launch_uri_test.cc)
 target_link_libraries(roblox_launch_uri_test PRIVATE
   Mocktail::Runtime
@@ -987,6 +994,7 @@ gtest_discover_tests(roblox_desktop_app_policy_test)
 gtest_discover_tests(browser_tracker_service_test)
 gtest_discover_tests(command_line_test)
 gtest_discover_tests(managed_environment_test)
+gtest_discover_tests(launcher_policy_test)
 gtest_discover_tests(roblox_launch_uri_test)
 gtest_discover_tests(external_launch_broker_test)
 gtest_discover_tests(webview_helper_launcher_test)
