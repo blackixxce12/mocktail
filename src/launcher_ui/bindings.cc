@@ -485,6 +485,13 @@ class ComboBinding final : public RowBinding {
  public:
   ComboBinding(LauncherContext* context, RowSpec spec, ComboSpec combo)
       : RowBinding(context, std::move(spec)), combo_(std::move(combo)) {}
+  ~ComboBinding() override {
+    if (value_label_ != nullptr) {
+      g_object_remove_weak_pointer(G_OBJECT(value_label_),
+                                   reinterpret_cast<gpointer*>(&value_label_));
+    }
+    context_->RemoveListener(layout_listener_);
+  }
 
   GtkWidget* Build() {
     GtkWidget* row = adw_combo_row_new();
@@ -511,6 +518,8 @@ class ComboBinding final : public RowBinding {
     row_ = row;  // Rebuild() needs it before Attach().
     g_signal_connect(row, "notify::selected", G_CALLBACK(OnSelected), this);
     Attach(row, RowKind::kCombo);
+    layout_listener_ =
+        context_->OnLayoutChanged([this](bool) { FitValueLabel(); });
     return row;
   }
 
@@ -645,31 +654,55 @@ class ComboBinding final : public RowBinding {
 
   static void SetupSelected(GtkSignalListItemFactory*, GObject* object,
                             gpointer) {
-    // Option labels are short, and the row asks for room to show them in
-    // full: ellipsizing from nothing would hide them whenever the subtitle
-    // is long. Only a longer label ("Mocktail default (level 3)") gives way
-    // in a narrow window, down to kMinimumValueChars, instead of squeezing
-    // the title to a letter per line; see BindSelected.
     GtkWidget* label = gtk_label_new(nullptr);
     gtk_label_set_xalign(GTK_LABEL(label), 1.0F);
-    gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
     gtk_list_item_set_child(GTK_LIST_ITEM(object), label);
   }
 
   static void BindSelected(GtkSignalListItemFactory*, GObject* object,
-                           gpointer) {
-    constexpr glong kMinimumValueChars = 12;
+                           gpointer data) {
+    auto* binding = static_cast<ComboBinding*>(data);
     GtkListItem* item = GTK_LIST_ITEM(object);
     GtkStringObject* string = GTK_STRING_OBJECT(gtk_list_item_get_item(item));
     GtkWidget* label = gtk_list_item_get_child(item);
     const char* text = gtk_string_object_get_string(string);
     gtk_label_set_text(GTK_LABEL(label), text);
     gtk_widget_set_tooltip_text(label, text);
-    // A short label keeps its whole width; a long one at least
-    // kMinimumValueChars.
+    if (binding->value_label_ != label) {
+      if (binding->value_label_ != nullptr) {
+        g_object_remove_weak_pointer(
+            G_OBJECT(binding->value_label_),
+            reinterpret_cast<gpointer*>(&binding->value_label_));
+      }
+      binding->value_label_ = label;
+      g_object_add_weak_pointer(
+          G_OBJECT(label),
+          reinterpret_cast<gpointer*>(&binding->value_label_));
+    }
+    binding->FitValueLabel();
+  }
+
+  // The current value is shown in full in the wide layout. GtkBox shares
+  // spare width equally between the title column and the suffixes, so an
+  // ellipsizing label lost the end of a long value ("Mocktail default
+  // (level 3)") even in a wide window. In the narrow layout a long value
+  // gives way, down to kMinimumValueChars, instead of squeezing the title
+  // to a letter per line; labels up to that length never shrink. The full
+  // value is in the tooltip.
+  void FitValueLabel() {
+    constexpr glong kMinimumValueChars = 12;
+    if (value_label_ == nullptr) return;
+    GtkLabel* label = GTK_LABEL(value_label_);
+    if (!context_->narrow()) {
+      gtk_label_set_ellipsize(label, PANGO_ELLIPSIZE_NONE);
+      gtk_label_set_width_chars(label, -1);
+      return;
+    }
+    gtk_label_set_ellipsize(label, PANGO_ELLIPSIZE_END);
     gtk_label_set_width_chars(
-        GTK_LABEL(label),
-        static_cast<int>(std::min(g_utf8_strlen(text, -1), kMinimumValueChars)));
+        label, static_cast<int>(std::min(
+                   g_utf8_strlen(gtk_label_get_text(label), -1),
+                   kMinimumValueChars)));
   }
 
   static void SetupListItem(GtkSignalListItemFactory*, GObject* object,
@@ -748,6 +781,9 @@ class ComboBinding final : public RowBinding {
 
   ComboSpec combo_;
   GtkStringList* model_ = nullptr;
+  // The label showing the current value (SetupSelected), while it exists.
+  GtkWidget* value_label_ = nullptr;
+  LauncherContext::ListenerId layout_listener_ = 0;
   std::vector<int> visible_;
   std::vector<std::string> labels_;
   std::string custom_value_;
