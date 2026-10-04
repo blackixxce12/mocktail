@@ -1,8 +1,11 @@
 #include "runtime/roblox_web_view_bridge.h"
 
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <optional>
 #include <string>
@@ -10,6 +13,8 @@
 #include <vector>
 
 #include "jnivm/jnivm.h"
+#include "runtime/environment.h"
+#include "runtime/runtime_config_file.h"
 
 namespace mocktail {
 namespace runtime {
@@ -868,6 +873,77 @@ TEST_P(RobloxNativeLoginTest, NativeLoginPreservesHiddenNonChallengeWindows) {
 INSTANTIATE_TEST_SUITE_P(
     DefaultAndExplicit, RobloxNativeLoginTest,
     ::testing::Values(std::optional<bool>{}, std::optional<bool>{true}));
+
+// Snapshot of the whole process environment, put back on destruction, for
+// tests that run the real config export.
+class ScopedProcessEnvironment final {
+ public:
+  ScopedProcessEnvironment() {
+    for (char** entry = environ; entry != nullptr && *entry != nullptr;
+         ++entry) {
+      saved_.emplace_back(*entry);
+    }
+  }
+
+  ~ScopedProcessEnvironment() {
+    (void)clearenv();
+    for (const std::string& entry : saved_) {
+      const std::size_t equals = entry.find('=');
+      if (equals != std::string::npos) {
+        (void)setenv(entry.substr(0, equals).c_str(),
+                     entry.substr(equals + 1).c_str(), 1);
+      }
+    }
+  }
+
+ private:
+  std::vector<std::string> saved_;
+};
+
+// account.sign_in reaches the bridge only through the config export that
+// main runs before the game starts, the same path the first-launch prompt
+// reads MOCKTAIL_NATIVE_LOGIN from.
+TEST(RobloxWebViewBridgeTest, AccountSignInFromConfigRoutesLoginChallenges) {
+  const ScopedProcessEnvironment restore;
+  char pattern[] = "/tmp/mocktail_sign_in_XXXXXX";
+  ASSERT_NE(mkdtemp(pattern), nullptr);
+  const std::filesystem::path directory(pattern);
+  const std::filesystem::path config = directory / "config.yaml";
+
+  for (const bool browser : {true, false}) {
+    SCOPED_TRACE(browser ? "browser" : "native");
+    ASSERT_EQ(unsetenv("MOCKTAIL_NATIVE_LOGIN"), 0);
+    std::ofstream(config, std::ios::trunc)
+        << "version: 1\naccount:\n  sign_in: "
+        << (browser ? "browser" : "native") << "\n";
+    const RuntimeConfigLoadResult loaded =
+        LoadRuntimeConfig(ProcessEnvironment(), config);
+    ASSERT_TRUE(loaded) << loaded.error;
+    std::string error;
+    ASSERT_TRUE(ExportRuntimeConfigEnvironment(loaded.config, &error))
+        << error;
+
+    jnivm::VM vm;
+    JNIEnv* env = vm.GetJNIEnv();
+    jclass bus_class =
+        env->FindClass("com/roblox/universalapp/messagebus/MessageBus");
+    jobject bus = env->AllocObject(bus_class);
+    WebViewBridgeProbe probe;
+    g_web_view_probe = &probe;
+    RobloxWebViewBridge bridge = MakeBridge(&vm, bus, &probe);
+    ASSERT_TRUE(bridge.Initialize().ok());
+    const std::string challenge =
+        "https://www.roblox.com/view-generic-challenge?subdomain=login";
+    ASSERT_TRUE(
+        bridge.HandleOwnedMessage("{\"url\":\"" + challenge + "\"}").ok());
+    EXPECT_EQ(probe.request.url,
+              browser ? "https://www.roblox.com/login" : challenge);
+    EXPECT_TRUE(bridge.Shutdown().ok());
+    g_web_view_probe = nullptr;
+  }
+  std::error_code ignored;
+  std::filesystem::remove_all(directory, ignored);
+}
 
 TEST(RobloxWebViewBridgeTest, MainGameActivityOpensThroughHostSink) {
   jnivm::VM vm;

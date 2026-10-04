@@ -77,6 +77,13 @@ bool SetDefault(const char* name, const std::string& value,
   return SetValue(name, value, error);
 }
 
+// "default" is engine.graphics_quality's own word for an unset level.
+bool GraphicsQualityLeftToDefault() {
+  const char* current = std::getenv("MOCKTAIL_GRAPHICS_QUALITY");
+  return current == nullptr || current[0] == '\0' ||
+         std::strcmp(current, "default") == 0;
+}
+
 bool IsStrictOpenGlName(const std::string& name) {
   return name == "opengl" || name == "gles";
 }
@@ -301,9 +308,13 @@ bool ApplyGraphicsLaunchPolicy(const RuntimeConfig& config,
       return false;
     }
     // Low FRM only on Intel-only machines. Hybrid NVIDIA/AMD laptops should
-    // keep the desktop quality default on the discrete GPU.
+    // keep the desktop quality default on the discrete GPU. A configured
+    // engine.graphics_quality wins: publishing "1" here would beat the YAML
+    // value in every later config load, because the environment wins there.
     if (gpus.intel && !gpus.nvidia && !gpus.amd &&
-        !SetDefault("MOCKTAIL_GRAPHICS_QUALITY", "1", error)) {
+        config.engine().graphics_quality.mode == GraphicsQualityMode::kDefault &&
+        GraphicsQualityLeftToDefault() &&
+        !SetValue("MOCKTAIL_GRAPHICS_QUALITY", "1", error)) {
       return false;
     }
   }

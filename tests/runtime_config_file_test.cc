@@ -179,6 +179,22 @@ TEST(RuntimeConfigBootstrapTest,
             "# Boolean (default: false): render at physical display-pixel density instead\n  "
             "# of the logical desktop resolution. Enable only for sharper high-DPI output.\n  "
             "high_dpi: false",
+           "# or x11. auto prefers Wayland but uses X11 (XWayland) for NVIDIA "
+           "with direct\n  # Vulkan. SDL_VIDEODRIVER, when set, still takes "
+           "precedence.\n  server: auto",
+           "# String (default: remember): window state at start: remember (the "
+           "mode the\n  # last session ended in), windowed, maximized, or "
+           "fullscreen.\n  start_mode: remember",
+           "# String (default: native): sign in on Roblox's own welcome screen "
+           "(native)\n  # or in Mocktail's browser sign-in window (browser).\n  "
+           "sign_in: native",
+           "# Vulkan on Intel-only graphics), manual leaves Roblox's in-game "
+           "graphics\n  # slider in control, and an integer from 1 to 21 "
+           "forces that level.\n  graphics_quality: default",
+           "# Boolean (default: true): show the Mocktail settings window before "
+           "Roblox\n  # starts. Website joins never show it; `mocktail "
+           "--launcher` shows it and\n  # `mocktail --play` skips it regardless "
+           "of this setting.\n  show_on_start: true",
            "# HostAbi profile, run two isolated canaries with the selected "
            "graphics\n  "
            "# backend, and promote only on success. An existing current "
@@ -1091,6 +1107,373 @@ TEST(RuntimeConfigFileTest, FleasionEnvironmentRoundTripsAndHostsModeDoesNotSetP
   EXPECT_TRUE(resolved.fleasion_valid());
   EXPECT_EQ(resolved.fleasion_proxy_mode(), "hosts");
   ASSERT_TRUE(ExportRuntimeConfigEnvironment(RuntimeConfig::FromEnvironment(MapEnvironment()), &error));
+}
+
+// Saves the listed variables, clears them for the test, and puts the saved
+// values back afterwards so export tests do not leak into each other.
+class ScopedEnvironment {
+ public:
+  explicit ScopedEnvironment(std::vector<std::string> names)
+      : names_(std::move(names)) {
+    for (const std::string& name : names_) {
+      const char* value = getenv(name.c_str());
+      saved_.push_back(value == nullptr ? std::nullopt
+                                        : std::optional<std::string>(value));
+      unsetenv(name.c_str());
+    }
+  }
+
+  ~ScopedEnvironment() {
+    for (std::size_t index = 0; index < names_.size(); ++index) {
+      if (saved_[index].has_value()) {
+        setenv(names_[index].c_str(), saved_[index]->c_str(), 1);
+      } else {
+        unsetenv(names_[index].c_str());
+      }
+    }
+  }
+
+  ScopedEnvironment(const ScopedEnvironment&) = delete;
+  ScopedEnvironment& operator=(const ScopedEnvironment&) = delete;
+
+ private:
+  std::vector<std::string> names_;
+  std::vector<std::optional<std::string>> saved_;
+};
+
+std::optional<std::string> GetVariable(const char* name) {
+  const char* value = getenv(name);
+  return value == nullptr ? std::nullopt : std::optional<std::string>(value);
+}
+
+TEST(RuntimeConfigFileTest, ShippedTemplateDefaultsTheLauncherSections) {
+  TemporaryDirectory temporary;
+  const std::filesystem::path file =
+      temporary.Write(DefaultRuntimeConfigYaml());
+
+  const RuntimeConfigLoadResult loaded =
+      LoadRuntimeConfig(MapEnvironment(), file);
+
+  ASSERT_TRUE(loaded) << loaded.error;
+  EXPECT_EQ(loaded.config.display().server, DisplayServer::kAuto);
+  EXPECT_EQ(loaded.config.display().start_mode, WindowStartMode::kRemember);
+  EXPECT_EQ(loaded.config.account().sign_in, SignInMethod::kNative);
+  EXPECT_EQ(loaded.config.engine().graphics_quality, GraphicsQuality{});
+  EXPECT_TRUE(loaded.config.launcher().show_on_start);
+  // New keys live in new top-level sections so that older Mocktail builds,
+  // which ignore unknown sections, still start with this file.
+  const std::string defaults(DefaultRuntimeConfigYaml());
+  for (const std::string_view section :
+       {"\ndisplay:\n", "\naccount:\n", "\nengine:\n", "\nlauncher:\n"}) {
+    EXPECT_NE(defaults.find(section), std::string::npos) << section;
+  }
+}
+
+TEST(RuntimeConfigFileTest, LoadsEveryLauncherManagedValue) {
+  TemporaryDirectory temporary;
+  struct Case {
+    const char* yaml;
+    DisplayServer server;
+    WindowStartMode start_mode;
+    SignInMethod sign_in;
+    GraphicsQuality quality;
+    bool show_on_start;
+  };
+  for (const Case& entry : {
+           Case{"display:\n  server: auto\n  start_mode: remember\n"
+                "account:\n  sign_in: native\n"
+                "engine:\n  graphics_quality: default\n"
+                "launcher:\n  show_on_start: true\n",
+                DisplayServer::kAuto, WindowStartMode::kRemember,
+                SignInMethod::kNative, GraphicsQuality{}, true},
+           Case{"display:\n  server: wayland\n  start_mode: windowed\n"
+                "account:\n  sign_in: browser\n"
+                "engine:\n  graphics_quality: manual\n"
+                "launcher:\n  show_on_start: false\n",
+                DisplayServer::kWayland, WindowStartMode::kWindowed,
+                SignInMethod::kBrowser,
+                GraphicsQuality{GraphicsQualityMode::kManual, 0}, false},
+           Case{"display:\n  server: x11\n  start_mode: maximized\n"
+                "engine:\n  graphics_quality: 1\n",
+                DisplayServer::kX11, WindowStartMode::kMaximized,
+                SignInMethod::kNative,
+                GraphicsQuality{GraphicsQualityMode::kLevel, 1}, true},
+           Case{"display:\n  start_mode: fullscreen\n"
+                "engine:\n  graphics_quality: \"21\"\n",
+                DisplayServer::kAuto, WindowStartMode::kFullscreen,
+                SignInMethod::kNative,
+                GraphicsQuality{GraphicsQualityMode::kLevel, 21}, true},
+       }) {
+    const std::filesystem::path file =
+        temporary.Write(std::string("version: 1\n") + entry.yaml);
+    const RuntimeConfigLoadResult loaded =
+        LoadRuntimeConfig(MapEnvironment(), file);
+    ASSERT_TRUE(loaded) << loaded.error << '\n' << entry.yaml;
+    EXPECT_EQ(loaded.config.display().server, entry.server) << entry.yaml;
+    EXPECT_EQ(loaded.config.display().start_mode, entry.start_mode)
+        << entry.yaml;
+    EXPECT_EQ(loaded.config.account().sign_in, entry.sign_in) << entry.yaml;
+    EXPECT_EQ(loaded.config.engine().graphics_quality, entry.quality)
+        << entry.yaml;
+    EXPECT_EQ(loaded.config.launcher().show_on_start, entry.show_on_start)
+        << entry.yaml;
+  }
+}
+
+TEST(RuntimeConfigFileTest, RejectsInvalidLauncherManagedValuesByKey) {
+  TemporaryDirectory temporary;
+  struct Case {
+    const char* section;
+    const char* key;
+    const char* value;
+  };
+  for (const Case& entry : {
+           Case{"display", "server", "X11"},
+           Case{"display", "server", "xwayland"},
+           Case{"display", "server", "\"\""},
+           Case{"display", "start_mode", "maximised"},
+           Case{"display", "start_mode", "true"},
+           Case{"account", "sign_in", "webview"},
+           Case{"account", "sign_in", "0"},
+           Case{"engine", "graphics_quality", "0"},
+           Case{"engine", "graphics_quality", "22"},
+           Case{"engine", "graphics_quality", "-1"},
+           Case{"engine", "graphics_quality", "3.5"},
+           Case{"engine", "graphics_quality", "auto"},
+           Case{"engine", "graphics_quality", "high"},
+           Case{"engine", "graphics_quality", "\"\""},
+           Case{"launcher", "show_on_start", "yes"},
+           Case{"launcher", "show_on_start", "1"},
+           Case{"launcher", "show_on_start", "True"},
+       }) {
+    const std::filesystem::path file = temporary.Write(
+        std::string("version: 1\n") + entry.section + ":\n  " + entry.key +
+        ": " + entry.value + "\n");
+    const RuntimeConfigLoadResult loaded =
+        LoadRuntimeConfig(MapEnvironment(), file);
+    const std::string key = std::string(entry.section) + "." + entry.key;
+    EXPECT_FALSE(loaded) << key << ": " << entry.value;
+    EXPECT_NE(loaded.error.find(key), std::string::npos)
+        << key << ": " << entry.value << " -> " << loaded.error;
+  }
+}
+
+TEST(RuntimeConfigFileTest, RejectsUnknownKeysAndNonMappingsInNewSections) {
+  TemporaryDirectory temporary;
+  for (const char* key :
+       {"display.video_driver", "account.selected", "engine.msaa",
+        "launcher.last_page"}) {
+    const std::string dotted(key);
+    const std::size_t dot = dotted.find('.');
+    const std::filesystem::path file = temporary.Write(
+        "version: 1\n" + dotted.substr(0, dot) + ":\n  " +
+        dotted.substr(dot + 1) + ": true\n");
+    const RuntimeConfigLoadResult loaded =
+        LoadRuntimeConfig(MapEnvironment(), file);
+    EXPECT_FALSE(loaded) << key;
+    EXPECT_EQ(loaded.error, "unknown runtime configuration key: " + dotted);
+  }
+  for (const char* section : {"display", "account", "engine", "launcher"}) {
+    for (const char* body : {":\n", ": auto\n", ":\n  server:\n    - x11\n"}) {
+      const std::filesystem::path file =
+          temporary.Write(std::string("version: 1\n") + section + body);
+      const RuntimeConfigLoadResult loaded =
+          LoadRuntimeConfig(MapEnvironment(), file);
+      EXPECT_FALSE(loaded) << section << body;
+      EXPECT_NE(loaded.error.find(section), std::string::npos)
+          << section << body << " -> " << loaded.error;
+    }
+  }
+}
+
+TEST(RuntimeConfigFileTest, EnvironmentOverridesLauncherManagedYaml) {
+  TemporaryDirectory temporary;
+  const std::filesystem::path file = temporary.Write(R"yaml(
+version: 1
+display:
+  server: x11
+  start_mode: maximized
+account:
+  sign_in: native
+engine:
+  graphics_quality: 12
+launcher:
+  show_on_start: true
+)yaml");
+
+  RuntimeConfigLoadResult loaded = LoadRuntimeConfig(
+      MapEnvironment({
+          {"MOCKTAIL_DISPLAY_SERVER", "wayland"},
+          {"MOCKTAIL_WINDOW_START_MODE", "fullscreen"},
+          {"MOCKTAIL_NATIVE_LOGIN", "0"},
+          {"MOCKTAIL_GRAPHICS_QUALITY", "manual"},
+          {"MOCKTAIL_LAUNCHER_SHOW_ON_START", "0"},
+      }),
+      file);
+  ASSERT_TRUE(loaded) << loaded.error;
+  EXPECT_EQ(loaded.config.display().server, DisplayServer::kWayland);
+  EXPECT_EQ(loaded.config.display().start_mode, WindowStartMode::kFullscreen);
+  EXPECT_EQ(loaded.config.account().sign_in, SignInMethod::kBrowser);
+  EXPECT_EQ(loaded.config.engine().graphics_quality.mode,
+            GraphicsQualityMode::kManual);
+  EXPECT_FALSE(loaded.config.launcher().show_on_start);
+
+  // The legacy sign-in variable only ever meant "browser" for exactly "0",
+  // and the rendering preset always read auto and 0 as "leave the slider".
+  for (const char* native : {"1", "yes", "native"}) {
+    loaded = LoadRuntimeConfig(
+        MapEnvironment({{"MOCKTAIL_NATIVE_LOGIN", native}}),
+        temporary.Write("version: 1\naccount:\n  sign_in: browser\n"));
+    ASSERT_TRUE(loaded) << loaded.error;
+    EXPECT_EQ(loaded.config.account().sign_in, SignInMethod::kNative)
+        << native;
+  }
+  for (const char* manual : {"auto", "0", "manual"}) {
+    loaded = LoadRuntimeConfig(
+        MapEnvironment({{"MOCKTAIL_GRAPHICS_QUALITY", manual}}), file);
+    ASSERT_TRUE(loaded) << loaded.error;
+    EXPECT_EQ(loaded.config.engine().graphics_quality.mode,
+              GraphicsQualityMode::kManual)
+        << manual;
+  }
+  loaded = LoadRuntimeConfig(
+      MapEnvironment({{"MOCKTAIL_GRAPHICS_QUALITY", "1"}}), file);
+  ASSERT_TRUE(loaded) << loaded.error;
+  EXPECT_EQ(loaded.config.engine().graphics_quality,
+            (GraphicsQuality{GraphicsQualityMode::kLevel, 1}));
+
+  // A present but empty variable hides the YAML value, as everywhere else.
+  loaded = LoadRuntimeConfig(MapEnvironment({
+                                 {"MOCKTAIL_DISPLAY_SERVER", ""},
+                                 {"MOCKTAIL_WINDOW_START_MODE", ""},
+                                 {"MOCKTAIL_GRAPHICS_QUALITY", ""},
+                                 {"MOCKTAIL_LAUNCHER_SHOW_ON_START", ""},
+                             }),
+                             temporary.Write(R"yaml(
+version: 1
+display:
+  server: x11
+  start_mode: windowed
+engine:
+  graphics_quality: 4
+launcher:
+  show_on_start: false
+)yaml"));
+  ASSERT_TRUE(loaded) << loaded.error;
+  EXPECT_EQ(loaded.config.display().server, DisplayServer::kAuto);
+  EXPECT_EQ(loaded.config.display().start_mode, WindowStartMode::kRemember);
+  EXPECT_EQ(loaded.config.engine().graphics_quality, GraphicsQuality{});
+  EXPECT_TRUE(loaded.config.launcher().show_on_start);
+}
+
+TEST(RuntimeConfigFileTest, RejectsInvalidLauncherManagedVariables) {
+  TemporaryDirectory temporary;
+  const std::filesystem::path file = temporary.Write("version: 1\n");
+  for (const auto& [name, value] : {
+           std::pair<const char*, const char*>("MOCKTAIL_DISPLAY_SERVER",
+                                               "xorg"),
+           {"MOCKTAIL_WINDOW_START_MODE", "minimized"},
+           {"MOCKTAIL_GRAPHICS_QUALITY", "25"},
+           {"MOCKTAIL_GRAPHICS_QUALITY", "ultra"},
+           {"MOCKTAIL_LAUNCHER_SHOW_ON_START", "maybe"},
+       }) {
+    const RuntimeConfigLoadResult loaded =
+        LoadRuntimeConfig(MapEnvironment({{name, value}}), file);
+    EXPECT_FALSE(loaded) << name << '=' << value;
+    EXPECT_NE(loaded.error.find(name), std::string::npos)
+        << name << '=' << value << " -> " << loaded.error;
+
+    std::string error;
+    const RuntimeConfig invalid =
+        RuntimeConfig::FromEnvironment(MapEnvironment({{name, value}}));
+    EXPECT_FALSE(ExportRuntimeConfigEnvironment(invalid, &error))
+        << name << '=' << value;
+    EXPECT_FALSE(error.empty());
+  }
+}
+
+TEST(RuntimeConfigFileTest, ExportsLauncherManagedSettings) {
+  const ScopedEnvironment scoped({
+      "MOCKTAIL_DISPLAY_SERVER",
+      "MOCKTAIL_WINDOW_START_MODE",
+      "MOCKTAIL_NATIVE_LOGIN",
+      "MOCKTAIL_GRAPHICS_QUALITY",
+      "MOCKTAIL_LAUNCHER_SHOW_ON_START",
+  });
+  TemporaryDirectory temporary;
+  std::string error;
+  RuntimeConfigLoadResult loaded = LoadRuntimeConfig(
+      MapEnvironment(), temporary.Write(R"yaml(
+version: 1
+display:
+  server: wayland
+  start_mode: fullscreen
+account:
+  sign_in: browser
+engine:
+  graphics_quality: 7
+launcher:
+  show_on_start: false
+)yaml"));
+  ASSERT_TRUE(loaded) << loaded.error;
+  ASSERT_TRUE(ExportRuntimeConfigEnvironment(loaded.config, &error)) << error;
+  EXPECT_EQ(GetVariable("MOCKTAIL_DISPLAY_SERVER"), "wayland");
+  EXPECT_EQ(GetVariable("MOCKTAIL_WINDOW_START_MODE"), "fullscreen");
+  EXPECT_EQ(GetVariable("MOCKTAIL_NATIVE_LOGIN"), "0");
+  EXPECT_EQ(GetVariable("MOCKTAIL_GRAPHICS_QUALITY"), "7");
+  EXPECT_EQ(GetVariable("MOCKTAIL_LAUNCHER_SHOW_ON_START"), "0");
+
+  // The exported values read back to the same settings, which is what every
+  // later reader in the game process relies on.
+  const RuntimeConfig resolved =
+      RuntimeConfig::FromEnvironment(ProcessEnvironment());
+  EXPECT_EQ(resolved.display().server, DisplayServer::kWayland);
+  EXPECT_EQ(resolved.display().start_mode, WindowStartMode::kFullscreen);
+  EXPECT_EQ(resolved.account().sign_in, SignInMethod::kBrowser);
+  EXPECT_EQ(resolved.engine().graphics_quality,
+            (GraphicsQuality{GraphicsQualityMode::kLevel, 7}));
+  EXPECT_FALSE(resolved.launcher().show_on_start);
+
+  loaded = LoadRuntimeConfig(
+      MapEnvironment(),
+      temporary.Write("version: 1\nengine:\n  graphics_quality: manual\n"));
+  ASSERT_TRUE(loaded) << loaded.error;
+  ASSERT_TRUE(ExportRuntimeConfigEnvironment(loaded.config, &error)) << error;
+  EXPECT_EQ(GetVariable("MOCKTAIL_DISPLAY_SERVER"), "auto");
+  EXPECT_EQ(GetVariable("MOCKTAIL_WINDOW_START_MODE"), "remember");
+  EXPECT_EQ(GetVariable("MOCKTAIL_NATIVE_LOGIN"), "1");
+  EXPECT_EQ(GetVariable("MOCKTAIL_GRAPHICS_QUALITY"), "manual");
+  EXPECT_EQ(GetVariable("MOCKTAIL_LAUNCHER_SHOW_ON_START"), "1");
+}
+
+TEST(RuntimeConfigFileTest, DefaultGraphicsQualityLeavesThePresetInCharge) {
+  const ScopedEnvironment scoped({"MOCKTAIL_GRAPHICS_QUALITY"});
+  TemporaryDirectory temporary;
+  const std::filesystem::path file =
+      temporary.Write("version: 1\nengine:\n  graphics_quality: default\n");
+  std::string error;
+
+  // Unset stays unset, so the preset keeps its level 3.
+  RuntimeConfigLoadResult loaded =
+      LoadRuntimeConfig(ProcessEnvironment(), file);
+  ASSERT_TRUE(loaded) << loaded.error;
+  ASSERT_TRUE(ExportRuntimeConfigEnvironment(loaded.config, &error)) << error;
+  EXPECT_EQ(GetVariable("MOCKTAIL_GRAPHICS_QUALITY"), std::nullopt);
+
+  // The Intel-only level published by the graphics launch policy survives.
+  ASSERT_EQ(setenv("MOCKTAIL_GRAPHICS_QUALITY", "1", 1), 0);
+  loaded = LoadRuntimeConfig(ProcessEnvironment(), file);
+  ASSERT_TRUE(loaded) << loaded.error;
+  ASSERT_TRUE(ExportRuntimeConfigEnvironment(loaded.config, &error)) << error;
+  EXPECT_EQ(GetVariable("MOCKTAIL_GRAPHICS_QUALITY"), "1");
+
+  // The preset does not know the word "default"; it must never see it.
+  ASSERT_EQ(setenv("MOCKTAIL_GRAPHICS_QUALITY", "default", 1), 0);
+  loaded = LoadRuntimeConfig(ProcessEnvironment(), file);
+  ASSERT_TRUE(loaded) << loaded.error;
+  EXPECT_EQ(loaded.config.engine().graphics_quality, GraphicsQuality{});
+  ASSERT_TRUE(ExportRuntimeConfigEnvironment(loaded.config, &error)) << error;
+  EXPECT_EQ(GetVariable("MOCKTAIL_GRAPHICS_QUALITY"), std::nullopt);
 }
 
 }  // namespace

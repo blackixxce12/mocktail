@@ -89,6 +89,16 @@ TEST(RuntimeConfigTest, UsesSupportedDefaults) {
   EXPECT_TRUE(config.discord_rpc_valid());
   EXPECT_FALSE(config.has_unsafe_detached_thread_overrides());
   EXPECT_TRUE(config.unsafe_detached_thread_overrides().empty());
+  EXPECT_EQ(config.display().server, DisplayServer::kAuto);
+  EXPECT_TRUE(config.display().server_valid);
+  EXPECT_EQ(config.display().start_mode, WindowStartMode::kRemember);
+  EXPECT_TRUE(config.display().start_mode_valid);
+  EXPECT_EQ(config.account().sign_in, SignInMethod::kNative);
+  EXPECT_EQ(config.engine().graphics_quality.mode,
+            GraphicsQualityMode::kDefault);
+  EXPECT_TRUE(config.engine().graphics_quality_valid);
+  EXPECT_TRUE(config.launcher().show_on_start);
+  EXPECT_TRUE(config.launcher().show_on_start_valid);
 }
 
 TEST(RuntimeConfigTest, ReadsTypedRuntimeValues) {
@@ -471,6 +481,110 @@ TEST(RuntimeConfigTest, ReportsUnsafeOverridesInStablePolicyOrder) {
                 "MOCKTAIL_CALL_REAL_APP_BRIDGE_START_THREAD",
                 "MOCKTAIL_SEND_GAME_LOADED_THREAD",
             }));
+}
+
+TEST(RuntimeConfigTest, LauncherManagedNamesRoundTrip) {
+  for (const DisplayServer server :
+       {DisplayServer::kAuto, DisplayServer::kWayland, DisplayServer::kX11}) {
+    EXPECT_EQ(ParseDisplayServer(DisplayServerName(server)), server);
+  }
+  for (const WindowStartMode mode :
+       {WindowStartMode::kRemember, WindowStartMode::kWindowed,
+        WindowStartMode::kMaximized, WindowStartMode::kFullscreen}) {
+    EXPECT_EQ(ParseWindowStartMode(WindowStartModeName(mode)), mode);
+  }
+  for (const SignInMethod method :
+       {SignInMethod::kNative, SignInMethod::kBrowser}) {
+    EXPECT_EQ(ParseSignInMethod(SignInMethodName(method)), method);
+  }
+  EXPECT_EQ(GraphicsQualityName(GraphicsQuality{}), "default");
+  EXPECT_EQ(GraphicsQualityName({GraphicsQualityMode::kManual, 0}), "manual");
+  for (int level = kMinimumGraphicsQualityLevel;
+       level <= kMaximumGraphicsQualityLevel; ++level) {
+    const GraphicsQuality quality{GraphicsQualityMode::kLevel, level};
+    EXPECT_EQ(GraphicsQualityName(quality), std::to_string(level));
+    EXPECT_EQ(ParseGraphicsQuality(GraphicsQualityName(quality)), quality);
+  }
+}
+
+TEST(RuntimeConfigTest, LauncherManagedParsersAcceptOnlyCanonicalSpellings) {
+  for (const char* rejected : {"", "Auto", "WAYLAND", "x", "xwayland",
+                               "wayland,x11", " x11"}) {
+    EXPECT_FALSE(ParseDisplayServer(rejected).has_value()) << rejected;
+  }
+  for (const char* rejected :
+       {"", "last", "maximised", "Fullscreen", "window"}) {
+    EXPECT_FALSE(ParseWindowStartMode(rejected).has_value()) << rejected;
+  }
+  for (const char* rejected : {"", "0", "1", "webview", "Browser"}) {
+    EXPECT_FALSE(ParseSignInMethod(rejected).has_value()) << rejected;
+  }
+  for (const char* rejected : {"", "0", "22", "-3", "+3", "3 ", "3.0", "auto",
+                               "Manual", "99999999999999999999"}) {
+    EXPECT_FALSE(ParseGraphicsQuality(rejected).has_value()) << rejected;
+  }
+  // Leading zeros are a spelling of the same decimal level.
+  EXPECT_EQ(ParseGraphicsQuality("07"),
+            (GraphicsQuality{GraphicsQualityMode::kLevel, 7}));
+}
+
+TEST(RuntimeConfigTest, GraphicsQualityVariableKeepsLegacyManualSpellings) {
+  for (const char* manual : {"auto", "0", "manual"}) {
+    EXPECT_EQ(ParseGraphicsQualityVariable(manual),
+              (GraphicsQuality{GraphicsQualityMode::kManual, 0}))
+        << manual;
+  }
+  EXPECT_EQ(ParseGraphicsQualityVariable("default"), GraphicsQuality{});
+  EXPECT_EQ(ParseGraphicsQualityVariable("21"),
+            (GraphicsQuality{GraphicsQualityMode::kLevel, 21}));
+  for (const char* rejected : {"22", "-1", "high", " 3"}) {
+    EXPECT_FALSE(ParseGraphicsQualityVariable(rejected).has_value())
+        << rejected;
+  }
+}
+
+TEST(RuntimeConfigTest, EnvironmentSwitchAcceptsTheUsualSpellings) {
+  for (const char* enabled : {"1", "true", "on"}) {
+    EXPECT_EQ(ParseEnvironmentSwitch(enabled), true) << enabled;
+  }
+  for (const char* disabled : {"0", "false", "off"}) {
+    EXPECT_EQ(ParseEnvironmentSwitch(disabled), false) << disabled;
+  }
+  for (const char* rejected : {"", "yes", "no", "TRUE", "2"}) {
+    EXPECT_FALSE(ParseEnvironmentSwitch(rejected).has_value()) << rejected;
+  }
+}
+
+TEST(RuntimeConfigTest, ReadsLauncherManagedSettingsFromEnvironment) {
+  const RuntimeConfig config = RuntimeConfig::FromEnvironment(MapEnvironment({
+      {"MOCKTAIL_DISPLAY_SERVER", "x11"},
+      {"MOCKTAIL_WINDOW_START_MODE", "windowed"},
+      {"MOCKTAIL_NATIVE_LOGIN", "0"},
+      {"MOCKTAIL_GRAPHICS_QUALITY", "9"},
+      {"MOCKTAIL_LAUNCHER_SHOW_ON_START", "off"},
+  }));
+  EXPECT_EQ(config.display().server, DisplayServer::kX11);
+  EXPECT_EQ(config.display().start_mode, WindowStartMode::kWindowed);
+  EXPECT_EQ(config.account().sign_in, SignInMethod::kBrowser);
+  EXPECT_EQ(config.engine().graphics_quality,
+            (GraphicsQuality{GraphicsQualityMode::kLevel, 9}));
+  EXPECT_FALSE(config.launcher().show_on_start);
+
+  const RuntimeConfig invalid = RuntimeConfig::FromEnvironment(MapEnvironment({
+      {"MOCKTAIL_DISPLAY_SERVER", "mir"},
+      {"MOCKTAIL_WINDOW_START_MODE", "hidden"},
+      {"MOCKTAIL_GRAPHICS_QUALITY", "40"},
+      {"MOCKTAIL_LAUNCHER_SHOW_ON_START", "sometimes"},
+  }));
+  EXPECT_FALSE(invalid.display().server_valid);
+  EXPECT_FALSE(invalid.display().start_mode_valid);
+  EXPECT_FALSE(invalid.engine().graphics_quality_valid);
+  EXPECT_FALSE(invalid.launcher().show_on_start_valid);
+  // Invalid values keep the defaults, so nothing downstream sees garbage.
+  EXPECT_EQ(invalid.display().server, DisplayServer::kAuto);
+  EXPECT_EQ(invalid.display().start_mode, WindowStartMode::kRemember);
+  EXPECT_EQ(invalid.engine().graphics_quality, GraphicsQuality{});
+  EXPECT_TRUE(invalid.launcher().show_on_start);
 }
 
 }  // namespace

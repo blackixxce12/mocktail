@@ -204,6 +204,11 @@ bool ValidateAndMap(const ValueMap& yaml, ValueMap* environment,
       "integrations.discord_rpc.text.playing",
       "integrations.discord_rpc.text.state",
       "integrations.discord_rpc.text.unknown_place",
+      "display.server",
+      "display.start_mode",
+      "account.sign_in",
+      "engine.graphics_quality",
+      "launcher.show_on_start",
   };
   for (const auto& [key, ignored] : yaml) {
     if (supported.find(key) == supported.end()) {
@@ -565,6 +570,57 @@ bool ValidateAndMap(const ValueMap& yaml, ValueMap* environment,
     }
     (*environment)[std::string(field.variable)] = *configured;
   }
+  if (const auto server = value("display.server"); server.has_value()) {
+    const std::optional<DisplayServer> parsed = ParseDisplayServer(*server);
+    if (!parsed.has_value()) {
+      *error = "display.server must be auto, wayland, or x11";
+      return false;
+    }
+    (*environment)["MOCKTAIL_DISPLAY_SERVER"] =
+        std::string(DisplayServerName(*parsed));
+  }
+  if (const auto start_mode = value("display.start_mode");
+      start_mode.has_value()) {
+    const std::optional<WindowStartMode> parsed =
+        ParseWindowStartMode(*start_mode);
+    if (!parsed.has_value()) {
+      *error =
+          "display.start_mode must be remember, windowed, maximized, or "
+          "fullscreen";
+      return false;
+    }
+    (*environment)["MOCKTAIL_WINDOW_START_MODE"] =
+        std::string(WindowStartModeName(*parsed));
+  }
+  if (const auto sign_in = value("account.sign_in"); sign_in.has_value()) {
+    const std::optional<SignInMethod> parsed = ParseSignInMethod(*sign_in);
+    if (!parsed.has_value()) {
+      *error = "account.sign_in must be native or browser";
+      return false;
+    }
+    (*environment)["MOCKTAIL_NATIVE_LOGIN"] =
+        *parsed == SignInMethod::kBrowser ? "0" : "1";
+  }
+  if (const auto quality = value("engine.graphics_quality");
+      quality.has_value()) {
+    const std::optional<GraphicsQuality> parsed = ParseGraphicsQuality(*quality);
+    if (!parsed.has_value()) {
+      *error =
+          "engine.graphics_quality must be default, manual, or a level from "
+          "1 to 21";
+      return false;
+    }
+    (*environment)["MOCKTAIL_GRAPHICS_QUALITY"] = GraphicsQualityName(*parsed);
+  }
+  if (const auto show_on_start = value("launcher.show_on_start");
+      show_on_start.has_value()) {
+    bool parsed = false;
+    if (!ParseBoolean(*show_on_start, &parsed)) {
+      *error = "launcher.show_on_start must be true or false";
+      return false;
+    }
+    (*environment)["MOCKTAIL_LAUNCHER_SHOW_ON_START"] = parsed ? "1" : "0";
+  }
   return true;
 }
 
@@ -673,7 +729,9 @@ bool LoadYaml(const std::filesystem::path& path, ValueMap* values, bool* loaded,
       } else if (key == "runtime" || key == "appearance" ||
                  key == "graphics" || key == "performance" ||
                  key == "audio" || key == "window" || key == "input" ||
-                 key == "compatibility" || key == "network") {
+                 key == "compatibility" || key == "network" ||
+                 key == "display" || key == "account" || key == "engine" ||
+                 key == "launcher") {
         valid = ReadMapping(&document, value_node, key, values, error);
       } else if (key == "integrations") {
         valid = ReadNestedMapping(&document, value_node, key, 2, values, error);
@@ -720,6 +778,22 @@ bool UnsetEnvironmentValue(const char* name, std::string* error) {
     *error = std::string("cannot clear resolved runtime setting: ") + name;
   }
   return false;
+}
+
+// The default leaves MOCKTAIL_GRAPHICS_QUALITY to the rendering preset, which
+// uses level 3 while the variable is unset and keeps the Intel-only level 1
+// that ApplyGraphicsLaunchPolicy may already have published. Only the literal
+// "default", which the preset does not understand, is removed.
+bool ExportGraphicsQuality(const GraphicsQuality& quality, std::string* error) {
+  if (quality.mode != GraphicsQualityMode::kDefault) {
+    return SetEnvironmentValue("MOCKTAIL_GRAPHICS_QUALITY",
+                               GraphicsQualityName(quality), error);
+  }
+  const char* current = std::getenv("MOCKTAIL_GRAPHICS_QUALITY");
+  if (current != nullptr && std::string_view(current) == "default") {
+    return UnsetEnvironmentValue("MOCKTAIL_GRAPHICS_QUALITY", error);
+  }
+  return true;
 }
 
 }  // namespace
@@ -773,6 +847,23 @@ RuntimeConfigLoadResult LoadRuntimeConfig(
     result.error = "CA bundle path is invalid";
   } else if (!result.config.discord_rpc_valid()) {
     result.error = "Discord Rich Presence configuration is invalid";
+  } else if (!result.config.display().server_valid) {
+    // YAML values were validated above, so only the variable can be wrong.
+    result.error =
+        "display server is invalid: MOCKTAIL_DISPLAY_SERVER must be auto, "
+        "wayland, or x11";
+  } else if (!result.config.display().start_mode_valid) {
+    result.error =
+        "window start mode is invalid: MOCKTAIL_WINDOW_START_MODE must be "
+        "remember, windowed, maximized, or fullscreen";
+  } else if (!result.config.engine().graphics_quality_valid) {
+    result.error =
+        "graphics quality is invalid: MOCKTAIL_GRAPHICS_QUALITY must be "
+        "default, manual, or a level from 1 to 21";
+  } else if (!result.config.launcher().show_on_start_valid) {
+    result.error =
+        "launcher start policy is invalid: MOCKTAIL_LAUNCHER_SHOW_ON_START "
+        "must be true or false";
   }
   return result;
 }
@@ -828,6 +919,24 @@ bool ExportRuntimeConfigEnvironment(const RuntimeConfig& config,
   if (!config.discord_rpc_valid()) {
     if (error != nullptr) {
       *error = "cannot export an invalid Discord Rich Presence policy";
+    }
+    return false;
+  }
+  if (!config.display().server_valid || !config.display().start_mode_valid) {
+    if (error != nullptr) {
+      *error = "cannot export an invalid display policy";
+    }
+    return false;
+  }
+  if (!config.engine().graphics_quality_valid) {
+    if (error != nullptr) {
+      *error = "cannot export an invalid graphics quality";
+    }
+    return false;
+  }
+  if (!config.launcher().show_on_start_valid) {
+    if (error != nullptr) {
+      *error = "cannot export an invalid launcher start policy";
     }
     return false;
   }
@@ -928,8 +1037,24 @@ bool ExportRuntimeConfigEnvironment(const RuntimeConfig& config,
       SetEnvironmentValue("MOCKTAIL_DISCORD_RPC_TEXT_STATE",
                           config.discord_rpc().text.state, error) &&
       SetEnvironmentValue("MOCKTAIL_DISCORD_RPC_TEXT_UNKNOWN_PLACE",
-                          config.discord_rpc().text.unknown_place, error);
+                          config.discord_rpc().text.unknown_place, error) &&
+      SetEnvironmentValue(
+          "MOCKTAIL_DISPLAY_SERVER",
+          std::string(DisplayServerName(config.display().server)), error) &&
+      SetEnvironmentValue(
+          "MOCKTAIL_WINDOW_START_MODE",
+          std::string(WindowStartModeName(config.display().start_mode)),
+          error) &&
+      SetEnvironmentValue(
+          "MOCKTAIL_NATIVE_LOGIN",
+          config.account().sign_in == SignInMethod::kBrowser ? "0" : "1",
+          error) &&
+      SetEnvironmentValue("MOCKTAIL_LAUNCHER_SHOW_ON_START",
+                          config.launcher().show_on_start ? "1" : "0", error);
   if (!base_exported) {
+    return false;
+  }
+  if (!ExportGraphicsQuality(config.engine().graphics_quality, error)) {
     return false;
   }
   if (!SetEnvironmentValue("MOCKTAIL_FLEASION_ENABLED",

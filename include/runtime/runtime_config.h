@@ -65,6 +65,94 @@ struct DiscordRpcConfig {
   DiscordRpcTextConfig text;
 };
 
+// display.server. Auto keeps the window policy's own choice (XWayland for
+// NVIDIA with direct Vulkan); the others force that SDL video driver.
+enum class DisplayServer {
+  kAuto,
+  kWayland,
+  kX11,
+};
+
+// display.start_mode. Remember restores the presentation the game recorded
+// in window-state.json; the others replace it for this start only.
+enum class WindowStartMode {
+  kRemember,
+  kWindowed,
+  kMaximized,
+  kFullscreen,
+};
+
+// account.sign_in. Browser is the WebKit sign-in window that
+// MOCKTAIL_NATIVE_LOGIN=0 selects.
+enum class SignInMethod {
+  kNative,
+  kBrowser,
+};
+
+enum class GraphicsQualityMode {
+  // Mocktail's rendering preset level when that preset is active.
+  kDefault,
+  // No FRM override: Roblox's in-game graphics slider stays in control.
+  kManual,
+  // Force FIntDebugFRMQualityLevelOverride to `level`.
+  kLevel,
+};
+
+inline constexpr int kMinimumGraphicsQualityLevel = 1;
+inline constexpr int kMaximumGraphicsQualityLevel = 21;
+
+struct GraphicsQuality {
+  GraphicsQualityMode mode = GraphicsQualityMode::kDefault;
+  int level = 0;
+
+  bool operator==(const GraphicsQuality& other) const {
+    return mode == other.mode && level == other.level;
+  }
+  bool operator!=(const GraphicsQuality& other) const {
+    return !(*this == other);
+  }
+};
+
+struct DisplayConfig {
+  DisplayServer server = DisplayServer::kAuto;
+  bool server_valid = true;
+  WindowStartMode start_mode = WindowStartMode::kRemember;
+  bool start_mode_valid = true;
+};
+
+struct AccountConfig {
+  SignInMethod sign_in = SignInMethod::kNative;
+};
+
+struct EngineConfig {
+  GraphicsQuality graphics_quality;
+  bool graphics_quality_valid = true;
+};
+
+struct LauncherConfig {
+  bool show_on_start = true;
+  bool show_on_start_valid = true;
+};
+
+// Parsers accept exactly the lowercase config.yaml spelling, and names return
+// it. MOCKTAIL_DISPLAY_SERVER and MOCKTAIL_WINDOW_START_MODE carry the same
+// spelling; MOCKTAIL_NATIVE_LOGIN keeps its 1/0 form.
+std::optional<DisplayServer> ParseDisplayServer(std::string_view value);
+std::string_view DisplayServerName(DisplayServer server);
+std::optional<WindowStartMode> ParseWindowStartMode(std::string_view value);
+std::string_view WindowStartModeName(WindowStartMode mode);
+std::optional<SignInMethod> ParseSignInMethod(std::string_view value);
+std::string_view SignInMethodName(SignInMethod method);
+// config.yaml form: default, manual, or a level from 1 to 21.
+std::optional<GraphicsQuality> ParseGraphicsQuality(std::string_view value);
+// MOCKTAIL_GRAPHICS_QUALITY form: the config.yaml form plus the spellings the
+// rendering preset has always treated as manual (auto and 0).
+std::optional<GraphicsQuality> ParseGraphicsQualityVariable(
+    std::string_view value);
+std::string GraphicsQualityName(const GraphicsQuality& quality);
+// Switch-style variables: 1, true or on; 0, false or off.
+std::optional<bool> ParseEnvironmentSwitch(std::string_view value);
+
 std::optional<NetworkProxyConfig> ParseNetworkProxyConfig(
     std::string_view host, std::string_view port,
     std::string_view scheme = "http");
@@ -128,6 +216,10 @@ class RuntimeConfig {
   }
   const DiscordRpcConfig& discord_rpc() const { return discord_rpc_; }
   bool discord_rpc_valid() const { return discord_rpc_valid_; }
+  const DisplayConfig& display() const { return display_; }
+  const AccountConfig& account() const { return account_; }
+  const EngineConfig& engine() const { return engine_; }
+  const LauncherConfig& launcher() const { return launcher_; }
 
   // These legacy opt-ins create workers that do not own their VM/JNI state.
   // Empty and "0" values are disabled; every other non-empty value is unsafe.
@@ -169,6 +261,10 @@ class RuntimeConfig {
   bool ca_bundle_valid_ = true;
   DiscordRpcConfig discord_rpc_;
   bool discord_rpc_valid_ = true;
+  DisplayConfig display_;
+  AccountConfig account_;
+  EngineConfig engine_;
+  LauncherConfig launcher_;
   std::vector<std::string> unsafe_detached_thread_overrides_;
 };
 

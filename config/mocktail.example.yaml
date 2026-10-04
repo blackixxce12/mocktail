@@ -122,6 +122,34 @@ window:
   # of the logical desktop resolution. Enable only for sharper high-DPI output.
   high_dpi: false
 
+display:
+  # String (default: auto): display server for the game window: auto, wayland,
+  # or x11. auto prefers Wayland but uses X11 (XWayland) for NVIDIA with direct
+  # Vulkan. SDL_VIDEODRIVER, when set, still takes precedence.
+  server: auto
+  # String (default: remember): window state at start: remember (the mode the
+  # last session ended in), windowed, maximized, or fullscreen.
+  start_mode: remember
+
+account:
+  # String (default: native): sign in on Roblox's own welcome screen (native)
+  # or in Mocktail's browser sign-in window (browser).
+  sign_in: native
+
+engine:
+  # String (default: default): Roblox graphics quality while Mocktail's
+  # rendering preset is active (physics_worker_mode throughput, or auto with
+  # multithreaded_rendering). default forces level 3 (level 1 with direct
+  # Vulkan on Intel-only graphics), manual leaves Roblox's in-game graphics
+  # slider in control, and an integer from 1 to 21 forces that level.
+  graphics_quality: default
+
+launcher:
+  # Boolean (default: true): show the Mocktail settings window before Roblox
+  # starts. Website joins never show it; `mocktail --launcher` shows it and
+  # `mocktail --play` skips it regardless of this setting.
+  show_on_start: true
+
 network:
   # Boolean (default: false): follow the host HTTP/SOCKS5 proxy and
   # automatically use its current port. Do not combine with a fixed proxy.

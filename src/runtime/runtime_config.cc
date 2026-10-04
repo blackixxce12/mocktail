@@ -161,6 +161,100 @@ std::optional<NetworkProxyConfig> ParseNetworkProxyConfig(
                             parsed_port};
 }
 
+std::optional<DisplayServer> ParseDisplayServer(std::string_view value) {
+  if (value == "auto") return DisplayServer::kAuto;
+  if (value == "wayland") return DisplayServer::kWayland;
+  if (value == "x11") return DisplayServer::kX11;
+  return std::nullopt;
+}
+
+std::string_view DisplayServerName(DisplayServer server) {
+  switch (server) {
+    case DisplayServer::kWayland:
+      return "wayland";
+    case DisplayServer::kX11:
+      return "x11";
+    case DisplayServer::kAuto:
+      break;
+  }
+  return "auto";
+}
+
+std::optional<WindowStartMode> ParseWindowStartMode(std::string_view value) {
+  if (value == "remember") return WindowStartMode::kRemember;
+  if (value == "windowed") return WindowStartMode::kWindowed;
+  if (value == "maximized") return WindowStartMode::kMaximized;
+  if (value == "fullscreen") return WindowStartMode::kFullscreen;
+  return std::nullopt;
+}
+
+std::string_view WindowStartModeName(WindowStartMode mode) {
+  switch (mode) {
+    case WindowStartMode::kWindowed:
+      return "windowed";
+    case WindowStartMode::kMaximized:
+      return "maximized";
+    case WindowStartMode::kFullscreen:
+      return "fullscreen";
+    case WindowStartMode::kRemember:
+      break;
+  }
+  return "remember";
+}
+
+std::optional<SignInMethod> ParseSignInMethod(std::string_view value) {
+  if (value == "native") return SignInMethod::kNative;
+  if (value == "browser") return SignInMethod::kBrowser;
+  return std::nullopt;
+}
+
+std::string_view SignInMethodName(SignInMethod method) {
+  return method == SignInMethod::kBrowser ? "browser" : "native";
+}
+
+std::optional<GraphicsQuality> ParseGraphicsQuality(std::string_view value) {
+  if (value == "default") return GraphicsQuality{};
+  if (value == "manual") {
+    return GraphicsQuality{GraphicsQualityMode::kManual, 0};
+  }
+  int level = 0;
+  const auto parsed =
+      std::from_chars(value.data(), value.data() + value.size(), level);
+  if (value.empty() || parsed.ec != std::errc() ||
+      parsed.ptr != value.data() + value.size() ||
+      level < kMinimumGraphicsQualityLevel ||
+      level > kMaximumGraphicsQualityLevel) {
+    return std::nullopt;
+  }
+  return GraphicsQuality{GraphicsQualityMode::kLevel, level};
+}
+
+std::optional<GraphicsQuality> ParseGraphicsQualityVariable(
+    std::string_view value) {
+  if (value == "auto" || value == "0") {
+    return GraphicsQuality{GraphicsQualityMode::kManual, 0};
+  }
+  return ParseGraphicsQuality(value);
+}
+
+std::string GraphicsQualityName(const GraphicsQuality& quality) {
+  switch (quality.mode) {
+    case GraphicsQualityMode::kManual:
+      return "manual";
+    case GraphicsQualityMode::kLevel:
+      return std::to_string(quality.level);
+    case GraphicsQualityMode::kDefault:
+      break;
+  }
+  return "default";
+}
+
+std::optional<bool> ParseEnvironmentSwitch(std::string_view value) {
+  if (value == "1" || value == "true" || value == "on") return true;
+  if (value == "0" || value == "false" || value == "off") return false;
+  return std::nullopt;
+}
+
 std::string BuildNetworkProxyUrl(const NetworkProxyConfig& proxy) {
   const bool ipv6 = proxy.host.find(':') != std::string::npos;
   return proxy.scheme + "://" + std::string(ipv6 ? "[" : "") + proxy.host +
@@ -364,6 +458,37 @@ RuntimeConfig RuntimeConfig::FromEnvironment(const Environment& environment) {
       IsDiscordText(config.discord_rpc_.text.playing, 128) &&
       IsDiscordText(config.discord_rpc_.text.state, 128) &&
       IsDiscordText(config.discord_rpc_.text.unknown_place, 128);
+  // An empty variable hides the YAML value and means the default, as GetOr
+  // does for every other setting.
+  if (const std::optional<DisplayServer> server = ParseDisplayServer(
+          environment.GetOr("MOCKTAIL_DISPLAY_SERVER", "auto"))) {
+    config.display_.server = *server;
+  } else {
+    config.display_.server_valid = false;
+  }
+  if (const std::optional<WindowStartMode> start_mode = ParseWindowStartMode(
+          environment.GetOr("MOCKTAIL_WINDOW_START_MODE", "remember"))) {
+    config.display_.start_mode = *start_mode;
+  } else {
+    config.display_.start_mode_valid = false;
+  }
+  // The sign-in readers have always treated anything but "0" as native.
+  config.account_.sign_in = environment.Get("MOCKTAIL_NATIVE_LOGIN") == "0"
+                                ? SignInMethod::kBrowser
+                                : SignInMethod::kNative;
+  if (const std::optional<GraphicsQuality> quality =
+          ParseGraphicsQualityVariable(
+              environment.GetOr("MOCKTAIL_GRAPHICS_QUALITY", "default"))) {
+    config.engine_.graphics_quality = *quality;
+  } else {
+    config.engine_.graphics_quality_valid = false;
+  }
+  if (const std::optional<bool> show_on_start = ParseEnvironmentSwitch(
+          environment.GetOr("MOCKTAIL_LAUNCHER_SHOW_ON_START", "1"))) {
+    config.launcher_.show_on_start = *show_on_start;
+  } else {
+    config.launcher_.show_on_start_valid = false;
+  }
   for (const std::string_view name : kUnsafeDetachedThreadOverrides) {
     if (LegacyEnabled(environment, name)) {
       config.unsafe_detached_thread_overrides_.emplace_back(name);
