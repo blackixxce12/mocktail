@@ -402,6 +402,7 @@ mocktail_apply_compile_options(mocktail_webview_helper_policy)
 
 add_executable(mocktail_webview_helper
   src/webview/mocktail_webview_helper.cc
+  src/webview/webview_x11_parent.cc
 )
 target_link_libraries(mocktail_webview_helper PRIVATE
   Mocktail::WebViewLauncher
@@ -410,6 +411,15 @@ target_link_libraries(mocktail_webview_helper PRIVATE
   PkgConfig::GTK4
   PkgConfig::WEBKITGTK6
 )
+# WM_TRANSIENT_FOR for a game window on X11 needs Xlib; without it the helper
+# can still follow a Wayland game window through xdg-foreign.
+pkg_check_modules(MOCKTAIL_WEBVIEW_X11 IMPORTED_TARGET x11)
+if(MOCKTAIL_WEBVIEW_X11_FOUND)
+  target_link_libraries(mocktail_webview_helper PRIVATE
+    PkgConfig::MOCKTAIL_WEBVIEW_X11)
+  target_compile_definitions(mocktail_webview_helper PRIVATE
+    MOCKTAIL_WEBVIEW_X11_PARENT=1)
+endif()
 mocktail_apply_compile_options(mocktail_webview_helper)
 
 add_library(mocktail_auth_runtime_composition STATIC

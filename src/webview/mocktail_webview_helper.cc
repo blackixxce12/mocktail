@@ -24,16 +24,21 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "runtime/host_launch_environment.h"
 #include "runtime/runtime_config.h"
 #include "runtime/webview_helper_launcher.h"
 #include "webview/webview_helper_policy.h"
+#include "webview/webview_x11_parent.h"
 
 namespace {
 
 constexpr std::size_t kMaximumRequestBytes =
-    mocktail::runtime::kMaximumWebViewUrlBytes + 64;
+    mocktail::runtime::kMaximumWebViewUrlBytes +
+    mocktail::runtime::kMaximumWebViewParentWindowBytes + 96;
+constexpr std::string_view kWaylandParentPrefix = "wayland:";
+constexpr std::string_view kX11ParentPrefix = "x11:";
 constexpr std::size_t kMaximumQueuedHybridEvents = 64;
 constexpr std::size_t kMaximumQueuedHybridBytes = 1024 * 1024;
 constexpr gint64 kWebPurchaseLaunchDebounceUs = 3 * G_USEC_PER_SEC;
@@ -73,6 +78,15 @@ struct AppState {
   GtkApplication* application = nullptr;
   WebKitNetworkSession* network_session = nullptr;
   std::string initial_url;
+  // The game window this helper's windows belong to (see
+  // WebViewHelperLaunchOptions); empty when the game has none to offer.
+  std::string parent_window;
+  bool modal_to_parent = false;
+  bool x11_backend_for_parent = false;
+  // GDK_BACKEND as the helper inherited it, when following an X11 game window
+  // set it aside; applications opened for the user get it back.
+  bool gdk_backend_set_aside = false;
+  std::string inherited_gdk_backend;
   std::string pending_navigation_url;
   std::string pending_roblox_cookie;
   std::string last_reported_roblox_cookie;
@@ -144,6 +158,7 @@ struct CallbackConfirmation {
 };
 
 void BeginTermination(AppState* state, const char* reason);
+void PresentPrimaryWindow(AppState* app, GtkWindow* window);
 void ApplyPendingRobloxCookie(AppState* state);
 bool QueueHelperEvent(AppState* state,
                       mocktail::runtime::WebViewHelperEventType type,
@@ -1109,10 +1124,14 @@ void FinishSystemBrowserLaunch(GObject*, GAsyncResult* result,
 // The same launch GtkUriLauncher performs outside a sandbox: the display's
 // launch context carries the startup/activation token. GtkUriLauncher cannot
 // drop variables, though, and the browser must not inherit Mocktail's own.
-void OpenWebPurchaseInSystemBrowser(WebKitWebView* web_view) {
+void OpenWebPurchaseInSystemBrowser(AppState* app, WebKitWebView* web_view) {
   GdkAppLaunchContext* context = gdk_display_get_app_launch_context(
       gtk_widget_get_display(GTK_WIDGET(web_view)));
   mocktail::runtime::RemoveMocktailEnvironment(G_APP_LAUNCH_CONTEXT(context));
+  if (app->gdk_backend_set_aside) {
+    g_app_launch_context_setenv(G_APP_LAUNCH_CONTEXT(context), "GDK_BACKEND",
+                                app->inherited_gdk_backend.c_str());
+  }
   g_app_info_launch_default_for_uri_async(
       mocktail::webview::kWebRobuxPurchaseUrl, G_APP_LAUNCH_CONTEXT(context),
       nullptr, FinishSystemBrowserLaunch,
@@ -1171,7 +1190,7 @@ gboolean OnDecidePolicy(WebKitWebView* web_view, WebKitPolicyDecision* decision,
     app->last_web_purchase_launch_us = now;
     std::cerr << "[webview] store purchase navigation handed to the system "
                  "browser\n";
-    OpenWebPurchaseInSystemBrowser(web_view);
+    OpenWebPurchaseInSystemBrowser(app, web_view);
     return TRUE;
   }
   webkit_policy_decision_use(decision);
@@ -1255,7 +1274,7 @@ bool ApplyControlCommand(
         std::cerr
             << "[webview] rejected visibility control without a surface\n";
       } else if (command->visible) {
-        gtk_window_present(window);
+        PresentPrimaryWindow(state, window);
       } else {
         gtk_widget_set_visible(GTK_WIDGET(window), FALSE);
       }
@@ -1468,6 +1487,104 @@ gboolean OnReloadKeyPressed(GtkEventControllerKey*, guint keyval, guint,
   return FALSE;
 }
 
+bool HasPrefix(std::string_view value, std::string_view prefix) {
+  return value.compare(0, prefix.size(), prefix) == 0;
+}
+
+// Before GTK opens a display: a game window on X11 (XWayland, which Mocktail
+// picks for some drivers) can only be a parent for an X11 window, so under a
+// Wayland session the helper follows the game onto XWayland, and falls back to
+// GTK's usual order if X11 cannot be opened. Wayland sessions often export
+// GDK_BACKEND=wayland for every application; that would keep the helper off
+// X11, so it is set aside here and handed back to what the helper opens for
+// the user. MOCKTAIL_WEBVIEW_PARENT=0 sends no parent and keeps the inherited
+// backend. In an X11 session GTK picks X11 by itself.
+void ChooseDisplayBackendForParent(AppState* state) {
+  if (!HasPrefix(state->parent_window, kX11ParentPrefix)) {
+    return;
+  }
+  const char* display = std::getenv("DISPLAY");
+  const char* wayland_display = std::getenv("WAYLAND_DISPLAY");
+  if (display == nullptr || display[0] == '\0' || wayland_display == nullptr ||
+      wayland_display[0] == '\0') {
+    return;
+  }
+  const char* backend = std::getenv("GDK_BACKEND");
+  if (backend != nullptr) {
+    std::string inherited(backend);
+    if (unsetenv("GDK_BACKEND") != 0) {
+      return;
+    }
+    state->inherited_gdk_backend = std::move(inherited);
+    state->gdk_backend_set_aside = true;
+  }
+  gdk_set_allowed_backends("x11,*");
+  state->x11_backend_for_parent = true;
+}
+
+bool SetX11TransientFor(GdkSurface* surface, std::string_view parent) {
+  const std::string digits(parent.substr(kX11ParentPrefix.size()));
+  char* end = nullptr;
+  errno = 0;
+  const unsigned long long parent_window =
+      std::strtoull(digits.c_str(), &end, 10);
+  if (errno != 0 || end == digits.c_str() || *end != '\0' ||
+      parent_window == 0 || parent_window > 0xffffffffULL) {
+    return false;
+  }
+  return mocktail::webview::SetX11TransientForForeignWindow(
+      surface, static_cast<unsigned long>(parent_window));
+}
+
+// Makes a helper window a child of the game window before it is first shown.
+// Tiling compositors float a child window over its parent instead of tiling it
+// beside the game: Hyprland would take a fullscreen game out of fullscreen for
+// that, niri would scroll the new window out of view. Without a usable parent
+// the window stays an independent toplevel, as before; so it does when the
+// compositor refuses a stale Wayland handle, which GTK learns only later.
+void AttachToGameWindow(AppState* app, GtkWindow* window) {
+  if (app->parent_window.empty()) {
+    return;
+  }
+  gtk_widget_realize(GTK_WIDGET(window));
+  GdkSurface* surface = gtk_native_get_surface(GTK_NATIVE(window));
+  const std::string_view parent = app->parent_window;
+  const char* kind = "unsupported";
+  bool attached = false;
+#ifdef GDK_WINDOWING_WAYLAND
+  if (surface != nullptr && HasPrefix(parent, kWaylandParentPrefix)) {
+    kind = "wayland";
+    if (GDK_IS_WAYLAND_TOPLEVEL(surface)) {
+      const std::string handle(parent.substr(kWaylandParentPrefix.size()));
+      attached = gdk_wayland_toplevel_set_transient_for_exported(
+                     GDK_TOPLEVEL(surface), handle.c_str()) != FALSE;
+    }
+  }
+#endif
+  if (surface != nullptr && HasPrefix(parent, kX11ParentPrefix)) {
+    kind = "x11";
+    attached = SetX11TransientFor(surface, parent);
+  }
+  if (!attached) {
+    gtk_window_set_modal(window, FALSE);
+    std::cerr << "[webview] game window parent unavailable kind=" << kind
+              << "; window stays independent\n";
+    return;
+  }
+  gtk_window_set_modal(window, app->modal_to_parent ? TRUE : FALSE);
+  std::cerr << "[webview] game window parent requested kind=" << kind
+            << " modal=" << (app->modal_to_parent ? 1 : 0) << '\n';
+}
+
+// GTK forgets an imported (xdg-foreign) parent when it hides a window, so the
+// parent is attached again every time the hidden primary window is shown.
+void PresentPrimaryWindow(AppState* app, GtkWindow* window) {
+  if (!gtk_widget_get_visible(GTK_WIDGET(window))) {
+    AttachToGameWindow(app, window);
+  }
+  gtk_window_present(window);
+}
+
 WebKitWebView* CreateSurface(AppState* app, WebKitWebView* related_view) {
   WebKitUserContentManager* content_manager = webkit_user_content_manager_new();
   WebKitWebView* web_view = nullptr;
@@ -1618,9 +1735,12 @@ void Activate(GtkApplication* application, gpointer user_data) {
   // remain blank on wlroots/Mesa. Use software compositing for these small
   // helper windows, including popups, without changing the game's renderer.
   // Inspect GTK's actual display: an XWayland helper may inherit WAYLAND_DISPLAY.
+  // A helper moved onto XWayland to follow an X11 game keeps the software
+  // compositing it would have had as a Wayland client.
   state->disable_hardware_acceleration =
       mocktail::webview::ShouldDisableWebViewHardwareAcceleration(
-          wayland_display, std::getenv("WEBKIT_DISABLE_COMPOSITING_MODE"));
+          wayland_display || state->x11_backend_for_parent,
+          std::getenv("WEBKIT_DISABLE_COMPOSITING_MODE"));
   std::cerr << "[webview] display=" << (wayland_display ? "wayland" : "other")
             << " compositing="
             << (state->disable_hardware_acceleration ? "software" : "default")
@@ -1645,7 +1765,7 @@ void Activate(GtkApplication* application, gpointer user_data) {
   auto* window_object = static_cast<GObject*>(g_weak_ref_get(&surface->window));
   if (window_object != nullptr) {
     g_weak_ref_set(&state->primary_window, window_object);
-    gtk_window_present(GTK_WINDOW(window_object));
+    PresentPrimaryWindow(state, GTK_WINDOW(window_object));
     g_object_unref(window_object);
   }
   if (!QueueHelperEvent(
@@ -1670,13 +1790,17 @@ int main(int argc, char *argv[]) {
     std::cerr << "invalid webview request: cannot read bounded stdin request\n";
     return EXIT_FAILURE;
   }
-  if (!mocktail::runtime::DecodeWebViewRequest(request, &state.initial_url,
+  mocktail::runtime::WebViewRequest decoded_request;
+  if (!mocktail::runtime::DecodeWebViewRequest(request, &decoded_request,
                                                &error)) {
     ClearSensitiveString(&request);
     std::cerr << "invalid webview request: " << error << '\n';
     return EXIT_FAILURE;
   }
   ClearSensitiveString(&request);
+  state.initial_url.swap(decoded_request.url);
+  state.parent_window = std::move(decoded_request.parent_window);
+  state.modal_to_parent = decoded_request.modal;
   if (!PrepareControlChannel()) {
     ClearSensitiveString(&state.initial_url);
     std::cerr << "invalid webview control channel\n";
@@ -1690,6 +1814,7 @@ int main(int argc, char *argv[]) {
   }
   g_weak_ref_init(&state.primary_web_view, nullptr);
   g_weak_ref_init(&state.primary_window, nullptr);
+  ChooseDisplayBackendForParent(&state);
 
   GtkApplication *application = gtk_application_new(
       "org.mocktail.WebViewHelper", G_APPLICATION_NON_UNIQUE);
