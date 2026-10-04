@@ -180,7 +180,18 @@ bool BuildProcessRelaunchArguments(const CommandLineOptions& options, int argc,
         (index + 1 == launch_index && IsLaunchOption(argv[index]))) {
       continue;
     }
+    if (options.launcher == LauncherRequest::kShow &&
+        std::string_view(argv[index]) == "--launcher") {
+      continue;
+    }
     arguments->emplace_back(argv[index]);
+  }
+  // The user already went past the settings window, or never saw it; the
+  // restart only finishes their sign-in. --force-run-latest stays on its
+  // own, and it never shows the window anyway.
+  if (!options.force_run_latest &&
+      options.launcher != LauncherRequest::kSkip) {
+    arguments->emplace_back("--play");
   }
   if (error != nullptr) error->clear();
   return true;

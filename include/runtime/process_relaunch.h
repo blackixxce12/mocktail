@@ -20,6 +20,8 @@ void ResetProcessRelaunchRequestForTesting();
 // argv[0..] for the relaunched process, built before argv is scrubbed. A
 // website launch request is left out: that join belonged to this run, and a
 // raw website URI may carry a gameinfo ticket that must not be reused.
+// --launcher is left out and --play added, so the restart goes straight
+// back to Roblox instead of showing the settings window again.
 bool BuildProcessRelaunchArguments(const CommandLineOptions& options, int argc,
                                    const char* const argv[],
                                    std::vector<std::string>* arguments,

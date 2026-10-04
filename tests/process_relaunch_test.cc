@@ -19,6 +19,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -53,14 +54,57 @@ TEST(ProcessRelaunchTest, KeepsOptionsAndDropsTheWebsiteLaunch) {
   EXPECT_EQ(RelaunchArguments({"mocktail", "--windowed", "--graphics",
                                "vulkan"}),
             (std::vector<std::string>{"mocktail", "--windowed", "--graphics",
-                                      "vulkan"}));
+                                      "vulkan", "--play"}));
   EXPECT_EQ(RelaunchArguments({"mocktail", "--windowed", "--launch-uri",
                                kLaunchUri}),
-            (std::vector<std::string>{"mocktail", "--windowed"}));
+            (std::vector<std::string>{"mocktail", "--windowed", "--play"}));
   EXPECT_EQ(RelaunchArguments({"mocktail", kLaunchUri, "--windowed"}),
-            (std::vector<std::string>{"mocktail", "--windowed"}));
+            (std::vector<std::string>{"mocktail", "--windowed", "--play"}));
   EXPECT_EQ(RelaunchArguments({"/usr/bin/mocktail"}),
-            (std::vector<std::string>{"/usr/bin/mocktail"}));
+            (std::vector<std::string>{"/usr/bin/mocktail", "--play"}));
+}
+
+TEST(ProcessRelaunchTest, RestartSkipsTheSettingsWindow) {
+  const auto relaunch_request = [](const std::vector<const char*>& argv) {
+    const std::vector<std::string> arguments = RelaunchArguments(argv);
+    std::vector<const char*> relaunch_argv;
+    for (const std::string& argument : arguments) {
+      relaunch_argv.push_back(argument.c_str());
+    }
+    const CommandLineParseResult parsed = ParseCommandLine(
+        static_cast<int>(relaunch_argv.size()), relaunch_argv.data());
+    EXPECT_TRUE(parsed) << parsed.error;
+    return std::make_pair(arguments, parsed.options.launcher);
+  };
+
+  // --launcher asked for the window on the run that is restarting.
+  auto [arguments, launcher] =
+      relaunch_request({"mocktail", "--launcher", "--windowed"});
+  EXPECT_EQ(arguments,
+            (std::vector<std::string>{"mocktail", "--windowed", "--play"}));
+  EXPECT_EQ(launcher, LauncherRequest::kSkip);
+
+  std::tie(arguments, launcher) = relaunch_request({"mocktail"});
+  EXPECT_EQ(launcher, LauncherRequest::kSkip);
+
+  // Already skipped: nothing is added.
+  std::tie(arguments, launcher) =
+      relaunch_request({"mocktail", "--no-launcher"});
+  EXPECT_EQ(arguments,
+            (std::vector<std::string>{"mocktail", "--no-launcher"}));
+  EXPECT_EQ(launcher, LauncherRequest::kSkip);
+
+  // A website join never had the window; its restart is a plain start.
+  std::tie(arguments, launcher) = relaunch_request({"mocktail", kLaunchUri});
+  EXPECT_EQ(arguments, (std::vector<std::string>{"mocktail", "--play"}));
+  EXPECT_EQ(launcher, LauncherRequest::kSkip);
+
+  // --force-run-latest refuses any other option, --play included.
+  std::tie(arguments, launcher) =
+      relaunch_request({"mocktail", "--force-run-latest"});
+  EXPECT_EQ(arguments,
+            (std::vector<std::string>{"mocktail", "--force-run-latest"}));
+  EXPECT_EQ(launcher, LauncherRequest::kDefault);
 }
 
 TEST(ProcessRelaunchTest, RequestIsProcessWide) {
