@@ -75,9 +75,10 @@ performance:
   # available to Roblox worker pools; `latency` preserves Roblox-managed pool
   # sizes and coalesces midphase work. Supported: auto, latency, throughput.
   physics_worker_mode: throughput
-  # Integer MiB (default: 0): hard RAM cap for the Mocktail process tree.
-  # 0 disables the cap. cgroup v2 also disables swap; other Linux systems use
-  # an RSS+swap watchdog. 6144 is a conservative starting point for 32 GiB RAM.
+  # Integer MiB (default: 0): hard RAM cap for the Mocktail game process.
+  # 0 disables the cap. A watchdog stops Mocktail (exit status 137) once the
+  # process's resident memory plus swap reaches the cap; swap stays enabled.
+  # 6144 is a conservative starting point for 32 GiB RAM.
   memory_limit_mb: 0
   # String (default: auto): request Feral GameMode when its host daemon and
   # client library are available. Supported values: auto, on, off.

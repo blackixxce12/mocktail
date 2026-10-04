@@ -144,8 +144,11 @@ TEST(RuntimeConfigBootstrapTest,
            "serial.\n  multithreaded_rendering: false",
            "# sizes and coalesces midphase work. Supported: auto, latency, "
            "throughput.\n  physics_worker_mode: throughput",
-           "# Integer MiB (default: 0): hard RAM cap for the Mocktail process "
-           "tree.\n  # 0 disables the cap.",
+           "# Integer MiB (default: 0): hard RAM cap for the Mocktail game "
+           "process.\n  # 0 disables the cap. A watchdog stops Mocktail (exit "
+           "status 137) once the\n  # process's resident memory plus swap "
+           "reaches the cap; swap stays enabled.\n  # 6144 is a conservative "
+           "starting point for 32 GiB RAM.\n  memory_limit_mb: 0",
            "# String (default: auto): request Feral GameMode when its host "
            "daemon and\n  # client library are available. Supported values: "
            "auto, on, off.\n  gamemode: auto",
@@ -196,6 +199,8 @@ TEST(RuntimeConfigBootstrapTest,
         << documented_setting;
   }
   EXPECT_EQ(defaults.find("testing_latest_only"), std::string::npos);
+  // The cgroup scope that once disabled swap is gone; only the watchdog runs.
+  EXPECT_EQ(defaults.find("cgroup"), std::string::npos);
 }
 
 TEST(RuntimeConfigBootstrapTest, PreservesExistingRegularFile) {
