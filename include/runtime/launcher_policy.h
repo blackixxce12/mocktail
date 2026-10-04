@@ -19,6 +19,10 @@ struct LauncherInputs {
   bool isolated_canary = false;
   // MOCKTAIL_UNSAFE_LATEST=1: the game run that --force-run-latest starts.
   bool unsafe_latest = false;
+  // MOCKTAIL_LAUNCHER_DONE=1: an earlier stage of this start already made
+  // the decision (main sets it once it has), so a process that re-executes
+  // itself, such as a memory-limit re-exec, does not open the window twice.
+  bool already_decided = false;
   // --headless, or MOCKTAIL_HEADLESS enabled.
   bool headless = false;
   // DISPLAY or WAYLAND_DISPLAY is set.
@@ -39,7 +43,8 @@ enum class LauncherDecision {
 };
 
 // The window never opens for website joins, canaries, the unsafe-latest
-// run, headless runs, without a display, or without its helper. Otherwise
+// run, a re-executed start, headless runs, without a display, or without
+// its helper. Otherwise
 // --play skips it, --launcher shows it, and launcher.show_on_start decides.
 LauncherDecision DecideLauncher(const LauncherInputs& inputs);
 
@@ -47,8 +52,12 @@ LauncherDecision DecideLauncher(const LauncherInputs& inputs);
 // "--play", "launcher.show_on_start", ...).
 std::string_view DescribeLauncherDecision(const LauncherInputs& inputs);
 
+// The variable main sets once the launcher decision for this start is made.
+inline constexpr std::string_view kLauncherDecidedVariable =
+    "MOCKTAIL_LAUNCHER_DONE";
+
 // Fills the inputs that come from the environment: isolated_canary,
-// unsafe_latest, headless and display_available. The command line has
+// unsafe_latest, already_decided, headless and display_available. The command line has
 // already been applied to the environment by then, so --headless shows up
 // as MOCKTAIL_HEADLESS=1.
 void ReadLauncherEnvironment(const Environment& environment,

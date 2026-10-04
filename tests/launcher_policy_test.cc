@@ -114,6 +114,8 @@ TEST(LauncherPolicyTest, NeverShowsWhereTheWindowCannotOrMustNotAppear) {
                 [](LauncherInputs* inputs) { inputs->isolated_canary = true; }},
            Case{"unsafe latest run",
                 [](LauncherInputs* inputs) { inputs->unsafe_latest = true; }},
+           Case{"re-executed start",
+                [](LauncherInputs* inputs) { inputs->already_decided = true; }},
            Case{"headless run",
                 [](LauncherInputs* inputs) { inputs->headless = true; }},
            Case{"no display",
@@ -147,28 +149,33 @@ TEST(LauncherPolicyTest, ReadsEnvironmentInputs) {
   EXPECT_FALSE(inputs.headless);
   EXPECT_FALSE(inputs.isolated_canary);
   EXPECT_FALSE(inputs.unsafe_latest);
+  EXPECT_FALSE(inputs.already_decided);
 
   ReadLauncherEnvironment(MapEnvironment({{"DISPLAY", ":0"},
                                           {"MOCKTAIL_HEADLESS", "1"},
                                           {"MOCKTAIL_ISOLATED_CANARY", "1"},
-                                          {"MOCKTAIL_UNSAFE_LATEST", "1"}}),
+                                          {"MOCKTAIL_UNSAFE_LATEST", "1"},
+                                          {"MOCKTAIL_LAUNCHER_DONE", "1"}}),
                           &inputs);
   EXPECT_TRUE(inputs.display_available);
   EXPECT_TRUE(inputs.headless);
   EXPECT_TRUE(inputs.isolated_canary);
   EXPECT_TRUE(inputs.unsafe_latest);
+  EXPECT_TRUE(inputs.already_decided);
 
   ReadLauncherEnvironment(MapEnvironment({{"DISPLAY", ""},
                                           {"WAYLAND_DISPLAY", ""},
                                           {"MOCKTAIL_HEADLESS", ""},
                                           {"MOCKTAIL_ISOLATED_CANARY", "0"},
-                                          {"MOCKTAIL_UNSAFE_LATEST", "yes"}}),
+                                          {"MOCKTAIL_UNSAFE_LATEST", "yes"},
+                                          {"MOCKTAIL_LAUNCHER_DONE", "true"}}),
                           &inputs);
   EXPECT_FALSE(inputs.display_available);
   EXPECT_FALSE(inputs.headless);
   EXPECT_FALSE(inputs.isolated_canary);
   // Like the instance lock, these only count the exact marker value.
   EXPECT_FALSE(inputs.unsafe_latest);
+  EXPECT_FALSE(inputs.already_decided);
 
   ReadLauncherEnvironment(MapEnvironment(), nullptr);
 }

@@ -40,6 +40,9 @@ std::pair<LauncherDecision, std::string_view> Decide(
   if (inputs.unsafe_latest) {
     return {LauncherDecision::kSkip, "unsafe latest run"};
   }
+  if (inputs.already_decided) {
+    return {LauncherDecision::kSkip, "re-executed start"};
+  }
   if (inputs.headless) {
     return {LauncherDecision::kSkip, "headless run"};
   }
@@ -78,6 +81,7 @@ void ReadLauncherEnvironment(const Environment& environment,
   inputs->isolated_canary =
       environment.Get("MOCKTAIL_ISOLATED_CANARY") == "1";
   inputs->unsafe_latest = environment.Get("MOCKTAIL_UNSAFE_LATEST") == "1";
+  inputs->already_decided = environment.Get(kLauncherDecidedVariable) == "1";
   // RuntimeConfig reads MOCKTAIL_HEADLESS the same way.
   inputs->headless = Enabled(environment, "MOCKTAIL_HEADLESS");
   inputs->display_available = environment.HasNonEmpty("DISPLAY") ||
