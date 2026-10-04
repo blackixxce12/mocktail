@@ -33,6 +33,7 @@
 #include "runtime/fleasion.h"
 #include "runtime/game_mode.h"
 #include "runtime/graphics_launch_policy.h"
+#include "runtime/managed_environment.h"
 #include "runtime/memory_limit.h"
 #include "runtime/payload_update_preflight.h"
 #include "runtime/performance_policy.h"
@@ -306,6 +307,12 @@ int main(int argc, char* argv[]) {
   // website sign-in computes again.
   const mocktail::runtime::ProcessStartState process_start =
       mocktail::runtime::CaptureProcessStartState();
+  // From the same snapshot, so before anything below exports its own
+  // values: the variables the user's shell or shortcut set to override
+  // launcher-managed settings.
+  const std::vector<std::string> user_managed_environment =
+      mocktail::runtime::CaptureUserManagedEnvironment(
+          process_start.environment);
   ConfigureHostDriverEnvironment();
   const auto process_started_at = std::chrono::system_clock::now();
   mocktail::runtime::CommandLineParseResult command_line =
