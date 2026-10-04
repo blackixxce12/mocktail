@@ -219,6 +219,32 @@ TEST(WebViewHelperLauncherTest, WaitsForExplicitSurfaceReadiness) {
   EXPECT_TRUE(result.process->RequestClose());
 }
 
+TEST(WebViewHelperLauncherTest, ShortWaitsStillSeeAQueuedReadiness) {
+  TemporaryDirectory temporary;
+  ASSERT_FALSE(temporary.path().empty());
+  const std::filesystem::path helper = temporary.path() / "fake-helper";
+  ASSERT_TRUE(WriteExecutable(
+      helper,
+      "#!/bin/sh\n"
+      "python3 -c 'import socket,time; s=socket.socket(fileno=198); "
+      "s.send(b\"MWVE\"+bytes([1,3,0,0])+bytes(4), socket.MSG_EOR); "
+      "time.sleep(1)'\n"));
+
+  const WebViewHelperLaunchResult result =
+      LaunchWebViewHelper(helper, "https://www.roblox.com/login");
+  ASSERT_TRUE(result) << result.error;
+  // BrowserSignInSession polls with 1 ms from a GLib timeout; the packet is
+  // queued by the time it looks.
+  bool ready = false;
+  for (int attempt = 0; attempt < 200 && !ready; ++attempt) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    ready = result.process->WaitUntilReady(std::chrono::milliseconds(
+        attempt % 2 == 0 ? 0 : 1));
+  }
+  EXPECT_TRUE(ready);
+  EXPECT_TRUE(result.process->RequestClose());
+}
+
 TEST(WebViewHelperLauncherTest, RejectsMalformedOrOversizedHybridEvents) {
   std::string packet;
   EXPECT_FALSE(EncodeWebViewHelperEventPacket(

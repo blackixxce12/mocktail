@@ -1030,12 +1030,9 @@ bool WebViewHelperProcess::WaitUntilReady(
   std::lock_guard<std::mutex> lock(state_->control_mutex);
   while (!state_->ready && state_->control_descriptor >= 0 &&
          state_->child.load(std::memory_order_acquire) > 0) {
-    const auto remaining =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            deadline - std::chrono::steady_clock::now());
-    if (remaining.count() <= 0) {
-      break;
-    }
+    // Packets already queued are read before the deadline is looked at: a
+    // zero (or sub-millisecond) timeout only checks, and a poller that calls
+    // this with 1 ms must still see a readiness the helper sent meanwhile.
     std::string packet;
     bool closed = false;
     while (!state_->ready) {
@@ -1058,6 +1055,12 @@ bool WebViewHelperProcess::WaitUntilReady(
       }
     }
     if (closed || state_->ready) {
+      break;
+    }
+    const auto remaining =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            deadline - std::chrono::steady_clock::now());
+    if (remaining.count() <= 0) {
       break;
     }
     pollfd descriptor = {state_->control_descriptor, POLLIN, 0};
