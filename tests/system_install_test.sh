@@ -26,6 +26,8 @@ readonly icon="${install_root}/usr/share/icons/hicolor/scalable/apps/space.bigra
 [[ -x "${runtime}/mocktail_updater" ]]
 [[ -x "${runtime}/mocktail_failure_dialog" ]]
 [[ -x "${runtime}/mocktail_webview_helper" ]]
+[[ -x "${runtime}/mocktail_launcher_ui" ]]
+[[ -f "${install_root}/usr/share/locale/ru/LC_MESSAGES/mocktail.mo" ]]
 [[ -x "${runtime}/mocktail_freebsd_socket_helper" ]]
 LC_ALL=C readelf -h "${runtime}/mocktail_freebsd_socket_helper" |
   grep -Fq 'UNIX - FreeBSD'
@@ -33,7 +35,9 @@ readelf -h "${binary}" | grep -Fq 'ELF64'
 readelf -h "${runtime}/mocktail_updater" | grep -Fq 'ELF64'
 readelf -d "${binary}" | grep -Eq '\$ORIGIN/\.\./(lib|lib64)/mocktail'
 readelf -d "${runtime}/mocktail_failure_dialog" | grep -Fq 'libadwaita-1.so.0'
+readelf -d "${runtime}/mocktail_launcher_ui" | grep -Fq 'libadwaita-1.so.0'
 ! readelf -d "${binary}" | grep -Fq 'libadwaita-1.so.0'
+! readelf -d "${binary}" | grep -Fq 'libgtk-4.so.1'
 
 [[ -f "${runtime}/libOpenSLES.so" ]]
 [[ -f "${data}/metadata/roblox_compatibility.json" ]]

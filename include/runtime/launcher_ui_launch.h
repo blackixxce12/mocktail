@@ -23,7 +23,8 @@
 namespace mocktail {
 namespace runtime {
 
-inline constexpr std::string_view kLauncherUiHelperName = "mocktail_launcher_ui";
+inline constexpr std::string_view kLauncherUiHelperName =
+    "mocktail_launcher_ui";
 inline constexpr std::string_view kLauncherUiHelperVariable =
     "MOCKTAIL_LAUNCHER_UI_HELPER";
 inline constexpr std::string_view kLauncherUiResultFdVariable =

@@ -1,0 +1,536 @@
+# Russian translation of the Mocktail settings window.
+# Copyright 2026 Mocktail Project Authors
+# This file is distributed under the same license as Mocktail.
+msgid ""
+msgstr ""
+"Project-Id-Version: mocktail\n"
+"Report-Msgid-Bugs-To: https://github.com/komaruworld/mocktail/issues\n"
+"PO-Revision-Date: 2026-10-05 00:30+0400\n"
+"Last-Translator: Mocktail Project Authors\n"
+"Language-Team: Russian\n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+
+msgid "Versions, this computer, and help when something goes wrong"
+msgstr "Версии, сведения об этом компьютере и помощь, если что-то пошло не так"
+
+msgid "Coming soon"
+msgstr "Скоро"
+
+msgid "These settings arrive in a later step. Until then they can be changed in config.yaml."
+msgstr "Эти настройки появятся позже. Пока их можно изменить в config.yaml."
+
+msgid "The Roblox accounts saved on this computer and how you sign in"
+msgstr "Аккаунты Roblox, сохранённые на этом компьютере, и способ входа"
+
+msgid "Account for this launch"
+msgstr "Аккаунт для этого запуска"
+
+msgid "Not signed in"
+msgstr "Вход не выполнен"
+
+msgid "Sign in"
+msgstr "Войти"
+
+msgid "_Manage Accounts…"
+msgstr "_Управление аккаунтами…"
+
+msgid "The device Roblox sees, Fast Flags, this window and Mocktail's files"
+msgstr "Каким устройством Roblox видит компьютер, Fast Flags, это окно и файлы Mocktail"
+
+msgid "Where game sound plays and which microphone voice chat uses"
+msgstr "Куда выводится звук игры и какой микрофон использует голосовой чат"
+
+#, c-format
+msgid "Reset %s to default"
+msgstr "Сбросить «%s» к значению по умолчанию"
+
+msgid "Recommended for this computer"
+msgstr "Рекомендуется для этого компьютера"
+
+#, c-format
+msgid "Recommended for this computer: %s"
+msgstr "Для этого компьютера рекомендуется: %s"
+
+#, c-format
+msgid "This launch uses %s=%s instead"
+msgstr "В этом запуске вместо этого действует %s=%s"
+
+#, c-format
+msgid "Set by %s=%s: this launch uses that value instead of config.yaml"
+msgstr "Задано через %s=%s: этот запуск использует это значение вместо config.yaml"
+
+#, c-format
+msgid "Reset to default (%s)"
+msgstr "Сбросить к значению по умолчанию (%s)"
+
+#, c-format
+msgid "“%s” reset to default"
+msgstr "«%s»: восстановлено значение по умолчанию"
+
+msgid "Undo"
+msgstr "Отменить"
+
+msgid "Learn more"
+msgstr "Подробнее"
+
+#, c-format
+msgid "Learn more about %s"
+msgstr "Подробнее о настройке «%s»"
+
+#, c-format
+msgid "For this computer: %s."
+msgstr "Для этого компьютера: %s."
+
+#, c-format
+msgid "%s=%s is set in the shortcut or terminal that started Mocktail, so this launch uses it instead of the setting. Use Details in the banner to move it into settings."
+msgstr "%s=%s задана в ярлыке или терминале, из которого запущен Mocktail, поэтому этот запуск использует её вместо настройки. Кнопка «Подробности» на панели вверху окна позволяет перенести её в настройки."
+
+#, c-format
+msgid "config.yaml: %s · default: %s"
+msgstr "config.yaml: %s · по умолчанию: %s"
+
+#, c-format
+msgid "Environment: %s"
+msgstr "Переменные окружения: %s"
+
+msgid "On"
+msgstr "Вкл."
+
+msgid "Off"
+msgstr "Выкл."
+
+msgid "Set in config.yaml; not one of the choices listed here"
+msgstr "Задано в config.yaml и не входит в предложенные варианты"
+
+#, c-format
+msgid "%s (from config.yaml)"
+msgstr "%s (из config.yaml)"
+
+msgid "Recommended"
+msgstr "Рекомендуется"
+
+msgid "Overridden by an environment variable"
+msgstr "Переопределено переменной окружения"
+
+msgid "Warning"
+msgstr "Предупреждение"
+
+msgid "The game window: its size and start mode, sharpness on scaled screens, the display server and the Roblox theme"
+msgstr "Окно игры: размер и режим запуска, чёткость на масштабированных экранах, графический сервер и тема Roblox"
+
+msgid "Graphics backend"
+msgstr "Графический движок"
+
+msgid "Chooses how Roblox draws the game. The change applies the next time Roblox starts."
+msgstr "Определяет, как Roblox рисует игру. Изменение вступит в силу при следующем запуске Roblox."
+
+msgid "• Vulkan: Roblox's own Vulkan renderer talks to your graphics driver directly. It is the default, and the only backend where Vertical sync chooses how frames are presented. When the driver lacks the ETC2 texture format Android games use (common on desktop NVIDIA and AMD cards), Mocktail decodes those textures itself."
+msgstr "• Vulkan: собственный Vulkan-рендерер Roblox работает с драйвером видеокарты напрямую. Это вариант по умолчанию и единственный, при котором настройка «Вертикальная синхронизация» влияет на вывод кадров. Если драйвер не поддерживает формат текстур ETC2, который используют Android-игры (так часто бывает с настольными видеокартами NVIDIA и AMD), Mocktail распаковывает эти текстуры сам."
+
+msgid "• OpenGL ES: Roblox's OpenGL ES 3.0 renderer on your system's EGL driver. Use it when Vulkan is missing or crashes. Vertical sync has no effect here: frames follow the driver's default, which normally waits for the display."
+msgstr "• OpenGL ES: рендерер Roblox для OpenGL ES 3.0 через системный драйвер EGL. Выбирайте его, если Vulkan отсутствует или падает. Вертикальная синхронизация здесь не действует: кадры выводятся так, как по умолчанию решает драйвер, — обычно с ожиданием обновления экрана."
+
+msgid "• ANGLE on Vulkan: the OpenGL ES renderer, translated to Vulkan by the ANGLE libraries of a Chromium or Electron installed on this computer. It adds a translation layer, is experimental on NVIDIA (upstream issue #149), and can break when that browser updates. Try it only when Vulkan shows glitches and OpenGL ES does not work."
+msgstr "• ANGLE поверх Vulkan: тот же рендерер OpenGL ES, который библиотеки ANGLE из установленного на компьютере Chromium или Electron переводят в Vulkan. Это лишний слой трансляции; на NVIDIA он экспериментальный (issue #149 в основном репозитории) и может сломаться после обновления этого браузера. Пробуйте его, только если в Vulkan видны артефакты, а OpenGL ES не работает."
+
+msgid "Automatic Roblox updates test a new Roblox version with the backend chosen here before switching to it, so a version that fails with it is not installed."
+msgstr "Автоматическое обновление сначала проверяет новую версию Roblox с выбранным здесь движком и только потом переключается на неё, поэтому версия, которая с ним не работает, не устанавливается."
+
+#, c-format
+msgid "Vulkan driver on this computer: %s"
+msgstr "Драйвер Vulkan на этом компьютере: %s"
+
+msgid "No Vulkan driver for your graphics card was found in the usual places (/usr/share/vulkan/icd.d)."
+msgstr "Драйвер Vulkan для вашей видеокарты не найден в обычных местах (/usr/share/vulkan/icd.d)."
+
+#, c-format
+msgid "ANGLE for “ANGLE on Vulkan”: Mocktail's own copy in %s."
+msgstr "ANGLE для варианта «ANGLE поверх Vulkan»: собственная копия Mocktail в %s."
+
+#, c-format
+msgid "ANGLE for “ANGLE on Vulkan”: %s in %s."
+msgstr "ANGLE для варианта «ANGLE поверх Vulkan»: %s в %s."
+
+msgid "No ANGLE libraries were found, so “ANGLE on Vulkan” is not available."
+msgstr "Библиотеки ANGLE не найдены, поэтому вариант «ANGLE поверх Vulkan» недоступен."
+
+msgid "With Vulkan on NVIDIA, the automatic display server runs the game through XWayland, because NVIDIA's native Wayland path can hang or lose the display. Display › Display server can change that."
+msgstr "С Vulkan на NVIDIA автоматический выбор графического сервера запускает игру через XWayland: в нативном Wayland драйвер NVIDIA может зависать или терять связь с экраном. Изменить это можно в разделе «Экран и окно» › «Графический сервер»."
+
+msgid "A Vulkan driver is installed, and Vulkan is Mocktail's default and most direct path."
+msgstr "Драйвер Vulkan установлен, а Vulkan — основной и самый прямой путь в Mocktail."
+
+#, c-format
+msgid "A Vulkan driver for your %s graphics is installed, and Vulkan is Mocktail's default and most direct path."
+msgstr "Для вашей видеокарты %s установлен драйвер Vulkan, а Vulkan — основной и самый прямой путь в Mocktail."
+
+msgid "No Vulkan driver was found, and OpenGL ES works with any driver that supports OpenGL ES 3.0."
+msgstr "Драйвер Vulkan не найден, а OpenGL ES работает с любым драйвером, который поддерживает OpenGL ES 3.0."
+
+msgid "This spelling starts an OpenGL window instead of the Vulkan one. Choose Vulkan to fix it."
+msgstr "С таким написанием открывается окно OpenGL, а не Vulkan. Выберите Vulkan, чтобы это исправить."
+
+msgid "No Vulkan driver was found for your graphics card, so Roblox may fail to start. Install one or choose OpenGL ES."
+msgstr "Драйвер Vulkan для вашей видеокарты не найден, поэтому Roblox может не запуститься. Установите драйвер или выберите OpenGL ES."
+
+msgid "No ANGLE libraries were found, so Roblox cannot start with this backend."
+msgstr "Библиотеки ANGLE не найдены, поэтому с этим движком Roblox не запустится."
+
+msgid "Experimental on NVIDIA: ANGLE on Vulkan has failed there before (upstream issue #149)."
+msgstr "На NVIDIA это экспериментальный режим: ANGLE поверх Vulkan там уже отказывал (issue #149 в основном репозитории)."
+
+#, c-format
+msgid "The libraries in %s do not look like ANGLE. Roblox checks them at start and stops if they are not."
+msgstr "Библиотеки в %s не похожи на ANGLE. Roblox проверяет их при запуске и останавливается, если это не ANGLE."
+
+msgid "Software rendering on the processor: very slow, only for diagnosing problems."
+msgstr "Программная отрисовка на процессоре: очень медленно, только для диагностики проблем."
+
+msgid "Vertical sync is set, but it has no effect with OpenGL ES."
+msgstr "Вертикальная синхронизация задана, но с OpenGL ES она не действует."
+
+msgid "Vulkan"
+msgstr "Vulkan"
+
+msgid "Roblox's Vulkan renderer, straight to your graphics driver"
+msgstr "Vulkan-рендерер Roblox напрямую через драйвер видеокарты"
+
+msgid "OpenGL ES"
+msgstr "OpenGL ES"
+
+msgid "For a missing or broken Vulkan driver; Vertical sync has no effect"
+msgstr "Если драйвера Vulkan нет или он не работает; вертикальная синхронизация не действует"
+
+msgid "ANGLE on Vulkan"
+msgstr "ANGLE поверх Vulkan"
+
+#, c-format
+msgid "OpenGL ES translated to Vulkan by the ANGLE of %s; experimental"
+msgstr "OpenGL ES в Vulkan через ANGLE из %s; экспериментально"
+
+msgid "OpenGL ES translated to Vulkan by ANGLE; experimental"
+msgstr "OpenGL ES в Vulkan через ANGLE; экспериментально"
+
+msgid "No Chromium or Electron ANGLE libraries were found on this computer"
+msgstr "На этом компьютере нет библиотек ANGLE из Chromium или Electron"
+
+msgid "OpenGL ES with ANGLE retry"
+msgstr "OpenGL ES с повтором через ANGLE"
+
+msgid "OpenGL ES; if the window cannot start, one retry with ANGLE on Vulkan"
+msgstr "OpenGL ES; если окно не открывается, одна повторная попытка через ANGLE поверх Vulkan"
+
+msgid "ANGLE SwiftShader (software)"
+msgstr "ANGLE SwiftShader (программно)"
+
+msgid "Draws on the processor instead of the graphics card; very slow"
+msgstr "Рисует на процессоре вместо видеокарты; очень медленно"
+
+msgid "How Roblox draws the game: the graphics backend, frame rate and quality"
+msgstr "Как Roblox рисует игру: графический движок, частота кадров и качество"
+
+msgid "Renderer"
+msgstr "Отрисовка"
+
+msgid "Which graphics path Roblox uses on this computer"
+msgstr "Каким способом Roblox выводит графику на этом компьютере"
+
+msgid "Your status in Discord and Fleasion asset replacement"
+msgstr "Статус в Discord и замена ресурсов через Fleasion"
+
+msgid "config.yaml was changed outside the settings window"
+msgstr "config.yaml изменён вне окна настроек"
+
+msgid "Reload"
+msgstr "Перечитать"
+
+#, c-format
+msgid "Cannot change %s: %s"
+msgstr "Не удалось изменить %s: %s"
+
+msgid "Fix config.yaml to play"
+msgstr "Чтобы играть, исправьте config.yaml"
+
+msgid "Fix config.yaml before saving"
+msgstr "Сначала исправьте config.yaml"
+
+#, c-format
+msgid "Settings were not saved: %s"
+msgstr "Настройки не сохранены: %s"
+
+#, c-format
+msgid "The window size was saved, but the remembered size could not be updated: %s"
+msgstr "Размер окна сохранён, но запомненный размер обновить не удалось: %s"
+
+msgid "Settings saved"
+msgstr "Настройки сохранены"
+
+msgid "Reload config.yaml?"
+msgstr "Перечитать config.yaml?"
+
+msgid "Your unsaved changes will be lost."
+msgstr "Несохранённые изменения будут потеряны."
+
+msgid "_Cancel"
+msgstr "_Отмена"
+
+msgid "_Reload"
+msgstr "_Перечитать"
+
+msgid "Roblox could not be started"
+msgstr "Не удалось запустить Roblox"
+
+msgid "Save changes?"
+msgstr "Сохранить изменения?"
+
+msgid "Unsaved settings will be lost."
+msgstr "Несохранённые настройки будут потеряны."
+
+msgid "_Discard"
+msgstr "_Не сохранять"
+
+msgid "_Save"
+msgstr "_Сохранить"
+
+msgid "Fix config.yaml before moving variables into settings"
+msgstr "Перед переносом переменных в настройки исправьте config.yaml"
+
+#, c-format
+msgid "%d value moved into settings; the variables are ignored for this launch"
+msgid_plural "%d values moved into settings; the variables are ignored for this launch"
+msgstr[0] "%d значение перенесено в настройки; в этом запуске переменные не учитываются"
+msgstr[1] "%d значения перенесены в настройки; в этом запуске переменные не учитываются"
+msgstr[2] "%d значений перенесено в настройки; в этом запуске переменные не учитываются"
+
+#, c-format
+msgid "config.yaml has an error on line %d: %s"
+msgstr "Ошибка в config.yaml, строка %d: %s"
+
+#, c-format
+msgid "config.yaml cannot be loaded: %s"
+msgstr "Не удаётся загрузить config.yaml: %s"
+
+msgid "Fix…"
+msgstr "Исправить…"
+
+#, c-format
+msgid "Shortcut or terminal variables override %d setting"
+msgid_plural "Shortcut or terminal variables override %d settings"
+msgstr[0] "Переменные из ярлыка или терминала переопределяют %d настройку"
+msgstr[1] "Переменные из ярлыка или терминала переопределяют %d настройки"
+msgstr[2] "Переменные из ярлыка или терминала переопределяют %d настроек"
+
+msgid "Details"
+msgstr "Подробности"
+
+msgid "config.yaml cannot be loaded"
+msgstr "Не удаётся загрузить config.yaml"
+
+msgid "Roblox cannot start until the file loads. Fix it in a text editor, or restore the copy the settings window kept before it first saved the file."
+msgstr "Пока файл не загружается, Roblox не запустится. Исправьте его в текстовом редакторе или восстановите копию, которую окно настроек сохранило перед первой записью файла."
+
+msgid "Roblox cannot start until the file loads. Fix it in a text editor, then reload it here."
+msgstr "Пока файл не загружается, Roblox не запустится. Исправьте его в текстовом редакторе и перечитайте здесь."
+
+msgid "_Close"
+msgstr "_Закрыть"
+
+msgid "_Open config.yaml"
+msgstr "_Открыть config.yaml"
+
+msgid "_Restore Backup"
+msgstr "_Восстановить копию"
+
+msgid "Re_load"
+msgstr "Пе_речитать"
+
+#, c-format
+msgid "The backup could not be restored: %s"
+msgstr "Не удалось восстановить копию: %s"
+
+msgid "it is empty or unreadable"
+msgstr "она пуста или не читается"
+
+msgid "config.yaml restored from the backup"
+msgstr "config.yaml восстановлен из копии"
+
+msgid "Variables that override settings"
+msgstr "Переменные, переопределяющие настройки"
+
+msgid "These environment variables win over config.yaml, so the rows marked ENV do not show what this launch uses. Moving them into settings saves their values in config.yaml and leaves the variables out of this launch."
+msgstr "Эти переменные окружения важнее config.yaml, поэтому строки с пометкой ENV не показывают, что будет в этом запуске. При переносе в настройки их значения сохранятся в config.yaml, а сами переменные в этом запуске учитываться не будут."
+
+#, c-format
+msgid "Overrides “%s”"
+msgstr "Переопределяет «%s»"
+
+#, c-format
+msgid "Set by your desktop shortcut %s"
+msgstr "Задана в вашем ярлыке %s"
+
+msgid "Set by the terminal or session that started Mocktail"
+msgstr "Задана в терминале или сеансе, из которого запущен Mocktail"
+
+msgid "Has no effect: another variable for the same setting wins"
+msgstr "Не действует: для этой настройки важнее другая переменная"
+
+msgid "This value has no matching setting; it is only left out of the launch"
+msgstr "Для этого значения нет подходящей настройки; в запуске оно просто не будет учитываться"
+
+msgid "_Move into Settings"
+msgstr "_Перенести в настройки"
+
+msgid "Clean _Up Shortcut…"
+msgstr "_Очистить ярлык…"
+
+msgid "Clean up the desktop shortcut?"
+msgstr "Очистить ярлык?"
+
+#, c-format
+msgid "Your copy of the Mocktail shortcut (%s) only adds these variables. It will be removed so the installed shortcut is used again. A backup is kept next to it."
+msgstr "Ваша копия ярлыка Mocktail (%s) только добавляет эти переменные. Она будет удалена, и снова начнёт использоваться установленный ярлык. Рядом сохранится резервная копия."
+
+#, c-format
+msgid "The variables that override settings are removed from the command of %s. Everything else in it stays, and a backup is kept next to it."
+msgstr "Переменные, переопределяющие настройки, будут убраны из команды запуска в %s. Всё остальное останется как есть, а рядом сохранится резервная копия."
+
+msgid "Clean _Up"
+msgstr "_Очистить"
+
+#, c-format
+msgid "The shortcut was not changed: %s"
+msgstr "Ярлык не изменён: %s"
+
+msgid "Shortcut cleaned up; it applies from the next start"
+msgstr "Ярлык очищен; изменение подействует со следующего запуска"
+
+msgid "config.yaml needs fixing before Roblox can start"
+msgstr "Чтобы Roblox запустился, нужно исправить config.yaml"
+
+#, c-format
+msgid "%d unsaved change"
+msgid_plural "%d unsaved changes"
+msgstr[0] "%d несохранённое изменение"
+msgstr[1] "%d несохранённых изменения"
+msgstr[2] "%d несохранённых изменений"
+
+msgid "Ready to play"
+msgstr "Всё готово к игре"
+
+#, c-format
+msgid "Could not open %s: %s"
+msgstr "Не удалось открыть %s: %s"
+
+msgid "How Roblox is kept up to date and which proxy Mocktail uses"
+msgstr "Как обновляется Roblox и через какой прокси работает Mocktail"
+
+msgid "Graphics"
+msgstr "Графика"
+
+msgid "Display"
+msgstr "Экран и окно"
+
+msgid "Performance"
+msgstr "Производительность"
+
+msgid "Audio"
+msgstr "Звук"
+
+msgid "Accounts"
+msgstr "Аккаунты"
+
+msgid "Integrations"
+msgstr "Интеграции"
+
+msgid "Network & Updates"
+msgstr "Сеть и обновления"
+
+msgid "Advanced"
+msgstr "Дополнительно"
+
+msgid "About"
+msgstr "О программе"
+
+msgid "How Roblox uses your processor and memory, and whether Feral GameMode is requested"
+msgstr "Как Roblox использует процессор и память и запрашивается ли Feral GameMode"
+
+msgid "Search Settings (Ctrl+F)"
+msgstr "Поиск настроек (Ctrl+F)"
+
+msgid "Search settings"
+msgstr "Поиск настроек"
+
+msgid "Open config.yaml"
+msgstr "Открыть config.yaml"
+
+msgid "Open Logs Folder"
+msgstr "Открыть папку журналов"
+
+msgid "Keyboard Shortcuts"
+msgstr "Комбинации клавиш"
+
+msgid "About Mocktail"
+msgstr "О Mocktail"
+
+msgid "Reset All Settings…"
+msgstr "Сбросить все настройки…"
+
+msgid "Main Menu"
+msgstr "Главное меню"
+
+msgid "Main menu"
+msgstr "Главное меню"
+
+msgid "No matching settings"
+msgstr "Ничего не найдено"
+
+msgid "Try another word, a config.yaml key or a variable name such as SDL_VIDEODRIVER"
+msgstr "Попробуйте другое слово, ключ из config.yaml или имя переменной, например SDL_VIDEODRIVER"
+
+msgid "Search Results"
+msgstr "Результаты поиска"
+
+msgid "Save changes (Ctrl+S)"
+msgstr "Сохранить изменения (Ctrl+S)"
+
+msgid "_Play"
+msgstr "_Играть"
+
+msgid "Save and start Roblox (Ctrl+Enter)"
+msgstr "Сохранить и запустить Roblox (Ctrl+Enter)"
+
+msgid "Start Roblox (Ctrl+Enter)"
+msgstr "Запустить Roblox (Ctrl+Enter)"
+
+msgid "Play"
+msgstr "Играть"
+
+msgid "Save"
+msgstr "Сохранить"
+
+msgid "Close without playing"
+msgstr "Закрыть без запуска игры"
+
+msgid "Keyboard shortcuts"
+msgstr "Комбинации клавиш"
+
+msgid "Fix config.yaml before resetting settings"
+msgstr "Перед сбросом настроек исправьте config.yaml"
+
+msgid "Reset all settings?"
+msgstr "Сбросить все настройки?"
+
+msgid "config.yaml is replaced by Mocktail's defaults, including your comments in it, when you save. A copy of the file as it was before the settings window first saved it is kept as config.yaml.launcher-backup."
+msgstr "При сохранении config.yaml будет заменён настройками Mocktail по умолчанию — вместе с вашими комментариями. Копия файла в том виде, каким он был до первой записи из окна настроек, хранится как config.yaml.launcher-backup."
+
+msgid "_Reset"
+msgstr "_Сбросить"
+
+msgid "All settings reset; save to keep them"
+msgstr "Все настройки сброшены; сохраните, чтобы применить"

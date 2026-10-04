@@ -611,6 +611,86 @@ target_link_libraries(mocktail_launcher_ui_model
     PkgConfig::GIO
 )
 
+# The settings window: a GTK helper mocktail runs before Roblox
+# (include/runtime/launcher_ui_launch.h). It needs libadwaita 1.9 (AdwSidebar);
+# without it, configure with -DMOCKTAIL_BUILD_LAUNCHER_UI=OFF and mocktail
+# starts Roblox directly, as it does whenever the helper is missing.
+option(MOCKTAIL_BUILD_LAUNCHER_UI
+  "Build the settings window shown before Roblox starts" ON)
+if(MOCKTAIL_BUILD_LAUNCHER_UI)
+  pkg_check_modules(MOCKTAIL_LAUNCHER_ADWAITA REQUIRED IMPORTED_TARGET
+    "libadwaita-1>=1.9")
+  find_program(MOCKTAIL_MSGFMT msgfmt REQUIRED)
+
+  # Translations (gettext domain "mocktail"), checked by msgfmt -c and
+  # usable from the build tree: the helper looks in <its directory>/locale.
+  file(STRINGS "${CMAKE_SOURCE_DIR}/po/LINGUAS" MOCKTAIL_LINGUAS
+    REGEX "^[^#]")
+  set(MOCKTAIL_TRANSLATION_FILES)
+  foreach(language IN LISTS MOCKTAIL_LINGUAS)
+    string(STRIP "${language}" language)
+    set(catalogue
+      "${CMAKE_BINARY_DIR}/locale/${language}/LC_MESSAGES/mocktail.mo")
+    add_custom_command(
+      OUTPUT "${catalogue}"
+      COMMAND "${CMAKE_COMMAND}" -E make_directory
+        "${CMAKE_BINARY_DIR}/locale/${language}/LC_MESSAGES"
+      COMMAND "${MOCKTAIL_MSGFMT}" --check --output-file "${catalogue}"
+        "${CMAKE_SOURCE_DIR}/po/${language}.po"
+      DEPENDS "${CMAKE_SOURCE_DIR}/po/${language}.po"
+      COMMENT "Compiling the ${language} translation"
+      VERBATIM
+    )
+    list(APPEND MOCKTAIL_TRANSLATION_FILES "${catalogue}")
+    install(FILES "${catalogue}"
+      DESTINATION "${CMAKE_INSTALL_LOCALEDIR}/${language}/LC_MESSAGES"
+    )
+  endforeach()
+  string(REPLACE ";" " " MOCKTAIL_LINGUAS_STRING "${MOCKTAIL_LINGUAS}")
+  add_custom_target(mocktail_translations ALL
+    DEPENDS ${MOCKTAIL_TRANSLATION_FILES}
+  )
+
+  add_executable(mocktail_launcher_ui
+    src/launcher_ui/about_page.cc
+    src/launcher_ui/accounts_page.cc
+    src/launcher_ui/advanced_page.cc
+    src/launcher_ui/audio_page.cc
+    src/launcher_ui/bindings.cc
+    src/launcher_ui/display_page.cc
+    src/launcher_ui/graphics_page.cc
+    src/launcher_ui/i18n.cc
+    src/launcher_ui/integrations_page.cc
+    src/launcher_ui/launcher_context.cc
+    src/launcher_ui/main.cc
+    src/launcher_ui/network_updates_page.cc
+    src/launcher_ui/pages.cc
+    src/launcher_ui/performance_page.cc
+    src/launcher_ui/style.cc
+    src/launcher_ui/window.cc
+  )
+  target_include_directories(mocktail_launcher_ui PRIVATE include src)
+  target_compile_definitions(mocktail_launcher_ui PRIVATE
+    "GETTEXT_PACKAGE=\"mocktail\""
+    "MOCKTAIL_LAUNCHER_LOCALEDIR=\"${CMAKE_INSTALL_FULL_LOCALEDIR}\""
+    "MOCKTAIL_LAUNCHER_BUILD_LOCALEDIR=\"${CMAKE_BINARY_DIR}/locale\""
+    "MOCKTAIL_LAUNCHER_LINGUAS=\"${MOCKTAIL_LINGUAS_STRING}\""
+    "MOCKTAIL_PROJECT_VERSION=\"${PROJECT_VERSION}\""
+    "MOCKTAIL_BUILD_GIT_COMMIT=\"${MOCKTAIL_BUILD_GIT_COMMIT}\""
+  )
+  target_link_libraries(mocktail_launcher_ui PRIVATE
+    mocktail_launcher_ui_model
+    Mocktail::AccountStore
+    Mocktail::ConfigEditor
+    Mocktail::LauncherUiLaunch
+    Mocktail::Runtime
+    PkgConfig::MOCKTAIL_LAUNCHER_ADWAITA
+    nlohmann_json::nlohmann_json
+  )
+  mocktail_apply_compile_options(mocktail_launcher_ui)
+  add_dependencies(mocktail_launcher_ui mocktail_translations)
+endif()
+
 add_library(mocktail_roblox_output_device_runtime STATIC
   src/audio/roblox_output_device_bridge.cc
 )
@@ -860,6 +940,11 @@ install(TARGETS
   RUNTIME DESTINATION "${MOCKTAIL_INSTALL_RUNTIME_DIR}"
   LIBRARY DESTINATION "${MOCKTAIL_INSTALL_RUNTIME_DIR}"
 )
+if(MOCKTAIL_BUILD_LAUNCHER_UI)
+  install(TARGETS mocktail_launcher_ui
+    RUNTIME DESTINATION "${MOCKTAIL_INSTALL_RUNTIME_DIR}"
+  )
+endif()
 if(MOCKTAIL_BUILD_FREEBSD_SOCKET_HELPER)
 install(PROGRAMS "${MOCKTAIL_FREEBSD_SOCKET_HELPER}"
   DESTINATION "${MOCKTAIL_INSTALL_RUNTIME_DIR}"
@@ -970,6 +1055,9 @@ include(CPack)
 add_dependencies(mocktail all_stubs)
 add_dependencies(mocktail mocktail_failure_dialog)
 add_dependencies(mocktail mocktail_webview_helper)
+if(MOCKTAIL_BUILD_LAUNCHER_UI)
+  add_dependencies(mocktail mocktail_launcher_ui)
+endif()
 
 if(BUILD_TESTING)
   add_subdirectory(tests)
