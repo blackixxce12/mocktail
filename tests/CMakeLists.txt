@@ -1256,6 +1256,17 @@ add_test(
           ${CMAKE_SOURCE_DIR}
 )
 
+find_program(MOCKTAIL_TEST_XGETTEXT xgettext)
+find_program(MOCKTAIL_TEST_MSGCMP msgcmp)
+if(MOCKTAIL_BUILD_LAUNCHER_UI AND MOCKTAIL_TEST_XGETTEXT AND
+   MOCKTAIL_TEST_MSGCMP)
+add_test(
+  NAME LauncherUiTranslationsTest.EveryStringIsTranslated
+  COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/launcher_ui_translations_test.sh
+          ${CMAKE_SOURCE_DIR}
+)
+endif()
+
 if(MOCKTAIL_BUILD_FREEBSD_SOCKET_HELPER)
 add_test(
   NAME SystemInstallTest.DynamicRuntimeLayout
