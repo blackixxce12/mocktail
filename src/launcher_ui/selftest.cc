@@ -14,6 +14,7 @@
 #include "launcher/window_state_file.h"
 #include "launcher_ui/bindings.h"
 #include "launcher_ui/i18n.h"
+#include "launcher_ui/page_dialogs.h"
 #include "runtime/launcher_ui_launch.h"
 #include "runtime/runtime_config_bootstrap.h"
 
@@ -49,6 +50,13 @@ constexpr const char* kIcons[] = {
     "edit-undo-symbolic",
     "go-next-symbolic",
     "view-refresh-symbolic",
+    "document-open-symbolic",
+    "folder-open-symbolic",
+    "edit-copy-symbolic",
+    "document-edit-symbolic",
+    "user-trash-symbolic",
+    "list-add-symbolic",
+    "view-more-symbolic",
 };
 
 std::string Quote(const std::string& text) {
@@ -189,6 +197,69 @@ void Selftest::Start() {
   steps_.push_back([this] { return OpenEnvironmentDialog(); });
   steps_.push_back([this] { return RenderEnvironmentDialog(); });
   steps_.push_back([this] { return MoveEnvironment(); });
+  // The proxy choice spans three keys: a manual proxy without a host must
+  // block Save and Play, and "No proxy" must remove the host and port.
+  steps_.push_back([this] {
+    GtkWidget* proxy = nullptr;
+    for (const RowRecord& record : context_->rows()) {
+      if (record.title == _("Proxy") && ADW_IS_COMBO_ROW(record.row)) {
+        proxy = record.row;
+      }
+    }
+    if (proxy == nullptr) {
+      Error("the proxy row is missing");
+      return guint{50};
+    }
+    adw_combo_row_set_selected(ADW_COMBO_ROW(proxy), 2);  // Manual
+    if (context_->problem_count() != 1 || context_->can_play()) {
+      Error("a manual proxy without a host did not block Play");
+    }
+    context_->SetValue("network.proxy_host", "127.0.0.1",
+                       launcher::ScalarKind::kString);
+    std::string error;
+    if (context_->problem_count() != 0 || !context_->draft().Validate(&error)) {
+      Error("a complete manual proxy is not accepted: " + error);
+    }
+    adw_combo_row_set_selected(ADW_COMBO_ROW(proxy), 0);  // No proxy
+    if (context_->Value("network.proxy_host").has_value() ||
+        context_->Value("network.proxy_port").has_value()) {
+      Error("\"No proxy\" left the manual proxy in config.yaml");
+    }
+    Note("proxy_rows_checked", "true");
+    context_->Discard();
+    return kSettleMilliseconds;
+  });
+  // The dialogs pages open from a row, rendered with the whole window like
+  // the environment dialog (<out-dir>/dialog-<name>.png).
+  const std::pair<const char*, void (*)(LauncherContext*)> kDialogs[] = {
+      {"discord-texts", OpenDiscordTextsDialog},
+      {"fast-flags", OpenFastFlagsEditor},
+      {"about", OpenAboutDialog},
+  };
+  for (const auto& [name, open] : kDialogs) {
+    steps_.push_back([this, open = open] {
+      open(context_);
+      return kSettleMilliseconds * 2;
+    });
+    steps_.push_back([this, name = std::string(name)] {
+      AdwDialog* dialog = adw_application_window_get_visible_dialog(
+          ADW_APPLICATION_WINDOW(window_->widget()));
+      if (dialog == nullptr) {
+        Error("the " + name + " dialog did not open");
+        return guint{50};
+      }
+      const std::filesystem::path path = out_dir_ / ("dialog-" + name + ".png");
+      std::string detail;
+      GtkWidget* root = gtk_window_get_child(GTK_WINDOW(window_->widget()));
+      if (root == nullptr || !Render(root, path, &detail)) {
+        Error("cannot render " + path.string());
+      } else {
+        rendered_.push_back(path.filename().string() + " " + detail);
+      }
+      adw_dialog_force_close(dialog);
+      return kSettleMilliseconds;
+    });
+  }
   steps_.push_back([this] { return Resize(480, 720); });
   steps_.push_back([this] { return RecordResize(480); });
   for (const SectionInfo& info : Sections()) {
