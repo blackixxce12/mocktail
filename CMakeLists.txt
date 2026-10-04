@@ -712,6 +712,18 @@ if(MOCKTAIL_BUILD_LAUNCHER_UI)
   )
   mocktail_apply_compile_options(mocktail_launcher_ui)
   add_dependencies(mocktail_launcher_ui mocktail_translations)
+  # Helpers of the Integrations, Network & Updates, Advanced and About pages.
+  target_sources(mocktail_launcher_ui PRIVATE
+    src/launcher_ui/page_widgets.cc
+  )
+  target_link_libraries(mocktail_launcher_ui PRIVATE
+    mocktail_launcher_ui_page_rules
+  )
+  # The Discord application the runtime falls back to (its default for
+  # integrations.discord_rpc.application_id), shown on the Integrations page.
+  target_compile_definitions(mocktail_launcher_ui PRIVATE
+    "MOCKTAIL_DISCORD_APPLICATION_ID=\"${MOCKTAIL_DISCORD_APPLICATION_ID}\""
+  )
 endif()
 
 add_library(mocktail_roblox_output_device_runtime STATIC

@@ -1867,3 +1867,356 @@ msgstr "Запуск без входа"
 
 msgid "_Add Account…"
 msgstr "_Добавить аккаунт…"
+
+# Integrations page (integrations_page.cc) and the helpers of the
+# Integrations, Network & Updates, Advanced and About pages (page_widgets.cc).
+msgid "Enter a text, or use the reset button for the default"
+msgstr "Введите текст или верните стандартный кнопкой сброса"
+
+msgid "Too long: %zu of %zu bytes (letters outside the Latin alphabet take two or more)"
+msgstr "Слишком длинно: %zu из %zu байт (буквы не из латиницы занимают по два байта и больше)"
+
+msgid "Line breaks and other control characters are not allowed"
+msgstr "Переносы строк и другие управляющие символы не допускаются"
+
+msgid "Discord Rich Presence"
+msgstr "Статус в Discord"
+
+msgid "Off: Discord shows nothing; the options below apply once you turn it on"
+msgstr "Выключено: Discord ничего не показывает; настройки ниже заработают, когда вы его включите"
+
+msgid "Shows what you play in the Discord app on this computer"
+msgstr "Показывает, во что вы играете, через приложение Discord на этом компьютере"
+
+msgid "Shows your Roblox activity on your Discord profile: whether you are browsing, joining or playing, the experience's name and icon, and for how long."
+msgstr "Показывает в профиле Discord, чем вы заняты в Roblox: выбираете игру, подключаетесь или играете, — а также название и значок игры и сколько вы в ней."
+
+msgid "Mocktail talks only to the Discord app running on this computer, through its local connection; the Flatpak and Snap versions of Discord are found too. It never signs in to Discord and never reads a Discord token."
+msgstr "Mocktail обращается только к приложению Discord, запущенному на этом компьютере, через его локальное подключение; версии Discord из Flatpak и Snap тоже находятся. Mocktail никогда не входит в Discord и не читает токен Discord."
+
+msgid "To show an experience's name and icon, Mocktail looks them up on Roblox's public web API without signing in, through the proxy set under Network & Updates."
+msgstr "Чтобы показать название и значок игры, Mocktail запрашивает их у открытого веб-API Roblox без входа в аккаунт — через прокси, заданный в разделе «Сеть и обновления»."
+
+msgid "It runs on its own background thread and retries every few seconds while Discord is closed, so it does not slow the game down. Leave it off if you do not want friends to see what you play."
+msgstr "Статус работает в отдельном фоновом потоке и, пока Discord закрыт, повторяет попытку каждые несколько секунд, поэтому игру не замедляет. Не включайте его, если не хотите, чтобы друзья видели, во что вы играете."
+
+msgid "This build of Mocktail has no Discord application ID. Set one under “Customize texts”, or Discord shows nothing."
+msgstr "В этой сборке Mocktail нет ID приложения Discord. Укажите его в «Настроить тексты», иначе Discord ничего не покажет."
+
+msgid "Show experience name"
+msgstr "Показывать название игры"
+
+msgid "Your status names the experience you play"
+msgstr "В статусе видно название игры"
+
+msgid "Off: the first line reads “%s” instead"
+msgstr "Выключено: вместо названия в первой строке «%s»"
+
+msgid "When on, the first line of your status while you play is the experience's name (the “While playing” text, which is just the name unless you change it)."
+msgstr "Когда включено, первая строка статуса во время игры — название игры (текст «Во время игры», по умолчанию это просто название)."
+
+msgid "When off, that line shows the second-line text (“Playing Roblox” by default) instead. The experience's icon is still shown, and Discord shows its name when someone points at the icon."
+msgstr "Когда выключено, в этой строке стоит текст второй строки (по умолчанию «Playing Roblox»). Значок игры всё равно виден, а при наведении на него Discord покажет название."
+
+msgid "Browsing and joining look the same either way."
+msgstr "Выбор игры и подключение выглядят одинаково в обоих случаях."
+
+msgid "Show play time"
+msgstr "Показывать время в игре"
+
+msgid "Discord counts how long you have been in the current experience"
+msgstr "Discord считает, сколько вы уже в текущей игре"
+
+msgid "Off: no timer in your status"
+msgstr "Выключено: без таймера в статусе"
+
+msgid "Adds Discord's elapsed-time counter to your status. It starts when you enter an experience and starts again in the next one; nothing is shown while you browse."
+msgstr "Добавляет в статус счётчик времени Discord. Он запускается, когда вы входите в игру, и начинается заново в следующей; пока вы выбираете игру, его нет."
+
+msgid "Let friends join"
+msgstr "Разрешить друзьям присоединяться"
+
+msgid "Off: no join button"
+msgstr "Выключено: кнопки «Присоединиться» нет"
+
+msgid "Adds a “%s” button to your status while you play"
+msgstr "Добавляет в статус кнопку «%s», пока вы играете"
+
+msgid "Adds a button to your status while you play. A friend who clicks it opens a page on komaruworld.github.io that starts Roblox in the same experience, on your server when Roblox reported which one you are on."
+msgstr "Пока вы играете, в статусе есть кнопка. Друг, нажавший её, откроет страницу на komaruworld.github.io, которая запустит Roblox в той же игре — и на вашем сервере, если Roblox сообщил, на каком вы."
+
+msgid "The button never contains private server access codes. “Public servers only” decides whether it also appears on private and reserved servers."
+msgstr "Кода доступа к приватному серверу в кнопке никогда нет. Появится ли она на приватных и зарезервированных серверах, решает «Только публичные серверы»."
+
+msgid "Public servers only"
+msgstr "Только публичные серверы"
+
+msgid "Turn on “Let friends join” to use this"
+msgstr "Сначала включите «Разрешить друзьям присоединяться»"
+
+msgid "No join button on private or reserved servers"
+msgstr "На приватных и зарезервированных серверах кнопки нет"
+
+msgid "The join button also appears on private and reserved servers"
+msgstr "Кнопка есть и на приватных и зарезервированных серверах"
+
+msgid "When on, the join button is left out while you are on a private server, a reserved server (some experiences use them for matches) or a server you joined through a link."
+msgstr "Когда включено, кнопки нет, пока вы на приватном сервере, на зарезервированном (некоторые игры используют их для матчей) или на сервере, куда вы вошли по ссылке."
+
+msgid "When off, friends see the button there too. It carries the experience and the server, never an access code, so it mostly tells them where you are."
+msgstr "Когда выключено, друзья видят кнопку и там. В ней только игра и сервер, без кода доступа, так что она в основном показывает, где вы."
+
+msgid "Recommended: on."
+msgstr "Рекомендуется: включено."
+
+msgid "Customize texts"
+msgstr "Настроить тексты"
+
+msgid "Mocktail's English texts and Discord application"
+msgstr "Английские тексты и приложение Discord от Mocktail"
+
+msgid "%d text changed"
+msgid_plural "%d texts changed"
+msgstr[0] "Изменён %d текст"
+msgstr[1] "Изменено %d текста"
+msgstr[2] "Изменено %d текстов"
+
+msgid "Rewords your Discord status and the join button, for example in your language. Each text holds up to 128 bytes and the button label 32; letters outside the Latin alphabet take two or more bytes each."
+msgstr "Меняет формулировки статуса в Discord и кнопки «Присоединиться», например на ваш язык. В каждый текст помещается до 128 байт, в надпись на кнопке — 32; буквы не из латиницы занимают по два байта и больше."
+
+msgid "It also sets the Discord application whose name Discord shows as the game you are playing."
+msgstr "Здесь же задаётся приложение Discord, чьё название Discord показывает как игру, в которую вы играете."
+
+msgid "Shows as “%s”"
+msgstr "Выглядит так: «%s»"
+
+msgid "Default: “%s”"
+msgstr "По умолчанию: «%s»"
+
+msgid "Discord application ID"
+msgstr "ID приложения Discord"
+
+msgid "Your own Discord application"
+msgstr "Ваше собственное приложение Discord"
+
+msgid "Empty: this build has no application of its own"
+msgstr "Пусто: в этой сборке нет своего приложения"
+
+msgid "Empty: Mocktail's application, %s"
+msgstr "Пусто: приложение Mocktail, %s"
+
+msgid "Discord shows the name and artwork of this Discord application as the game you are playing. Leave it empty to use the application bundled with Mocktail."
+msgstr "Discord показывает название и картинку этого приложения Discord как игру, в которую вы играете. Оставьте поле пустым, чтобы использовать приложение, встроенное в Mocktail."
+
+msgid "Only enter the ID of an application you created in Discord's developer portal: 17 to 20 digits. With a wrong ID Discord shows nothing."
+msgstr "Указывайте только ID приложения, которое вы сами создали на портале разработчиков Discord: от 17 до 20 цифр. С неверным ID Discord ничего не покажет."
+
+msgid "A Discord application ID is 17 to 20 digits"
+msgstr "ID приложения Discord — это от 17 до 20 цифр"
+
+msgid "Use Fleasion"
+msgstr "Использовать Fleasion"
+
+msgid "Fleasion was not found (%s does not exist); run Fleasion once first"
+msgstr "Fleasion не найден (папки %s нет); сначала запустите Fleasion хотя бы раз"
+
+msgid "Change the proxy under Network & Updates first"
+msgstr "Сначала измените прокси в разделе «Сеть и обновления»"
+
+msgid "Roblox trusts Fleasion's certificate; start Fleasion before you play"
+msgstr "Roblox доверяет сертификату Fleasion; запускайте Fleasion до игры"
+
+msgid "Trusts Fleasion's certificate so the assets it replaces load; set up the rows below first"
+msgstr "Доверять сертификату Fleasion, чтобы загружались подменённые им ассеты; сначала настройте строки ниже"
+
+msgid "%s, so Mocktail will not start. Turn one of them off."
+msgstr "%s, поэтому Mocktail не запустится. Выключите что-то одно."
+
+msgid "Fleasion's certificate %s was not found, so Mocktail will not start. Start Fleasion once, or choose its ca.crt below."
+msgstr "Сертификат Fleasion %s не найден, поэтому Mocktail не запустится. Запустите Fleasion хотя бы раз или выберите его ca.crt ниже."
+
+msgid "Fleasion is a separate tool that swaps Roblox assets (sounds, textures and more) through a local HTTPS proxy with its own certificate authority. With this on, Mocktail adds Fleasion's certificate to the ones Roblox trusts, so the replaced assets load, without changing any Roblox files."
+msgstr "Fleasion — отдельная программа, которая подменяет ассеты Roblox (звуки, текстуры и не только) через локальный HTTPS-прокси со своим центром сертификации. Когда это включено, Mocktail добавляет сертификат Fleasion к тем, которым доверяет Roblox, и подменённые ассеты загружаются — без изменения файлов Roblox."
+
+msgid "At each start Mocktail combines your system's certificates with Fleasion's into a file in its cache folder and uses it for every connection. Start Fleasion before you press Play."
+msgstr "При каждом запуске Mocktail объединяет системные сертификаты с сертификатом Fleasion в файл в своей папке кеша и использует его для всех подключений. Запускайте Fleasion до того, как нажмёте «Играть»."
+
+msgid "Only turn this on if you use Fleasion and trust your copy of it: whatever holds its certificate can read and change Roblox's encrypted traffic. Turn it off when you stop using Fleasion."
+msgstr "Включайте, только если пользуетесь Fleasion и доверяете своей копии: владелец его сертификата может читать и менять зашифрованный трафик Roblox. Выключите, когда перестанете пользоваться Fleasion."
+
+msgid "It cannot be combined with the system proxy, nor with a manual proxy other than Fleasion's own. Without a readable certificate Mocktail stops at start and says why."
+msgstr "Нельзя сочетать с системным прокси и с прокси, заданным вручную, если это не прокси самого Fleasion. Если сертификат не читается, Mocktail остановится при запуске и объяснит причину."
+
+msgid "Fleasion's folder on this computer: %s"
+msgstr "Папка Fleasion на этом компьютере: %s"
+
+msgid "Fleasion's folder %s does not exist on this computer."
+msgstr "Папки Fleasion %s на этом компьютере нет."
+
+msgid "Certificate found: %s"
+msgstr "Сертификат найден: %s"
+
+msgid "No certificate at %s yet."
+msgstr "Сертификата %s пока нет."
+
+msgid "Routing"
+msgstr "Маршрутизация"
+
+msgid "Match the routing mode chosen in Fleasion."
+msgstr "Выберите тот же режим маршрутизации, что и в Fleasion."
+
+msgid "• Fleasion's proxy: Mocktail itself sends Roblox's web traffic to Fleasion's proxy on this computer."
+msgstr "• Прокси Fleasion: Mocktail сам направляет веб-трафик Roblox в прокси Fleasion на этом компьютере."
+
+msgid "• Hosts file: Fleasion points Roblox's servers at itself through the system's hosts file, and Mocktail only adds its certificate. A manual proxy cannot be used with this mode."
+msgstr "• Файл hosts: Fleasion перенаправляет серверы Roblox на себя через системный файл hosts, а Mocktail только добавляет его сертификат. Прокси, заданный вручную, в этом режиме использовать нельзя."
+
+msgid "Fleasion's proxy"
+msgstr "Прокси Fleasion"
+
+msgid "Roblox connects through 127.0.0.1:%s, Fleasion's local proxy"
+msgstr "Roblox подключается через 127.0.0.1:%s — локальный прокси Fleasion"
+
+msgid "Hosts file"
+msgstr "Файл hosts"
+
+msgid "Fleasion redirects Roblox in the hosts file; Mocktail only trusts its certificate"
+msgstr "Fleasion перенаправляет Roblox через файл hosts; Mocktail только доверяет его сертификату"
+
+msgid "Fleasion proxy port"
+msgstr "Порт прокси Fleasion"
+
+msgid "Only used with Fleasion's proxy routing"
+msgstr "Нужен только при маршрутизации через прокси Fleasion"
+
+msgid "Roblox connects to 127.0.0.1:%s"
+msgstr "Roblox подключается к 127.0.0.1:%s"
+
+msgid "The port Fleasion's proxy listens on; use the number Fleasion shows. The default is 58443."
+msgstr "Порт, который слушает прокси Fleasion; укажите число, которое показывает Fleasion. По умолчанию 58443."
+
+msgid "Fleasion certificate"
+msgstr "Сертификат Fleasion"
+
+msgid "Fleasion's public certificate"
+msgstr "Открытый сертификат Fleasion"
+
+msgid "Empty: %s"
+msgstr "Пусто: %s"
+
+msgid "This file does not exist"
+msgstr "Такого файла нет"
+
+msgid "Fleasion's public certificate, ca.crt. Leave it empty to use the place where Fleasion keeps it."
+msgstr "Открытый сертификат Fleasion, ca.crt. Оставьте поле пустым, чтобы взять его оттуда, где его хранит Fleasion."
+
+msgid "Never choose ca.key: that is Fleasion's private key, which must stay secret."
+msgstr "Никогда не выбирайте ca.key: это закрытый ключ Fleasion, он должен оставаться в тайне."
+
+msgid "Fleasion's usual place: %s"
+msgstr "Обычное место у Fleasion: %s"
+
+msgid "Use an absolute path, starting with /"
+msgstr "Укажите абсолютный путь, начинающийся с /"
+
+msgid "That is a private key; choose Fleasion's ca.crt instead"
+msgstr "Это закрытый ключ; выберите ca.crt от Fleasion"
+
+msgid "Choose Fleasion's Certificate"
+msgstr "Выбор сертификата Fleasion"
+
+msgid "Discord Texts"
+msgstr "Тексты для Discord"
+
+msgid "Reset a text to go back to Mocktail's English default. Changes are saved with the other settings."
+msgstr "Сбросьте текст, чтобы вернуть стандартный английский вариант Mocktail. Изменения сохраняются вместе с остальными настройками."
+
+msgid "Status"
+msgstr "Статус"
+
+msgid "The lines of your Discord status, up to 128 bytes each"
+msgstr "Строки статуса в Discord, до 128 байт каждая"
+
+msgid "While browsing"
+msgstr "При выборе игры"
+
+msgid "The first line of your status while you are in Roblox's menus, not in an experience."
+msgstr "Первая строка статуса, пока вы в меню Roblox, а не в игре."
+
+msgid "While joining"
+msgstr "При подключении"
+
+msgid "The first line while an experience is loading and its name is not known yet."
+msgstr "Первая строка, пока игра загружается и её название ещё неизвестно."
+
+msgid "While playing"
+msgstr "Во время игры"
+
+msgid "The first line while you play. {place_name} is replaced with the experience's name; the default is just the name. With “Show experience name” off, the second line takes its place."
+msgstr "Первая строка, пока вы играете. {place_name} заменяется названием игры; по умолчанию здесь только название. Если «Показывать название игры» выключено, её место занимает вторая строка."
+
+msgid "Second line"
+msgstr "Вторая строка"
+
+msgid "The second line of your status at every stage. With “Show experience name” off it moves up and replaces the experience's name."
+msgstr "Вторая строка статуса на любом этапе. Если «Показывать название игры» выключено, она поднимается и заменяет название игры."
+
+msgid "Unknown experience name"
+msgstr "Название неизвестной игры"
+
+msgid "Used as the experience's name while you play when Roblox's web API did not return one, for example without internet access."
+msgstr "Подставляется вместо названия игры, если веб-API Roblox его не вернул — например, без доступа к интернету."
+
+msgid "Join button"
+msgstr "Кнопка «Присоединиться»"
+
+msgid "The button friends click to join you"
+msgstr "Кнопка, по которой друзья присоединяются к вам"
+
+msgid "Button label"
+msgstr "Надпись на кнопке"
+
+msgid "The text on the join button, at most 32 bytes."
+msgstr "Текст на кнопке «Присоединиться», не больше 32 байт."
+
+msgid "Discord application"
+msgstr "Приложение Discord"
+
+msgid "Change only if you made your own application in Discord's portal"
+msgstr "Меняйте, только если создали своё приложение на портале Discord"
+
+msgid "Discord"
+msgstr "Discord"
+
+msgid "What your Discord profile shows while you play"
+msgstr "Что показывает ваш профиль Discord, пока вы играете"
+
+msgid "Fleasion"
+msgstr "Fleasion"
+
+msgid "Only for Fleasion users: let Roblox load the assets it replaces"
+msgstr "Только для тех, кто пользуется Fleasion: чтобы Roblox загружал подменённые им ассеты"
+
+msgid "The file chooser could not open: %s"
+msgstr "Не удалось открыть окно выбора файла: %s"
+
+msgid "Choose a file on this computer"
+msgstr "Выберите файл на этом компьютере"
+
+msgid "Choose File…"
+msgstr "Выбрать файл…"
+
+msgid "Certificates (PEM)"
+msgstr "Сертификаты (PEM)"
+
+msgid "All files"
+msgstr "Все файлы"
+
+msgid "Fleasion cannot be combined with the system proxy"
+msgstr "Fleasion нельзя сочетать с системным прокси"
+
+msgid "Fleasion's proxy mode cannot be combined with a different manual proxy"
+msgstr "Режим прокси Fleasion нельзя сочетать с другим прокси, заданным вручную"
+
+msgid "Fleasion's hosts mode cannot be combined with a manual proxy"
+msgstr "Режим hosts у Fleasion нельзя сочетать с прокси, заданным вручную"
