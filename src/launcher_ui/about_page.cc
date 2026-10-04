@@ -101,10 +101,14 @@ std::string SessionLabel(SessionType session) {
 
 std::string MonitorText(const MonitorInfo& monitor) {
   if (!monitor.valid) return {};
+  const int percent = static_cast<int>(monitor.scale * 100.0 + 0.5);
+  // At 100 % desktop units are pixels; say the size once.
   std::string text =
-      Format(_("%d × %d at %d %% (%d × %d pixels)"), monitor.width,
-             monitor.height, static_cast<int>(monitor.scale * 100.0 + 0.5),
-             monitor.PixelWidth(), monitor.PixelHeight());
+      percent == 100
+          ? Format("%d × %d", monitor.width, monitor.height)
+          : Format(_("%d × %d at %d %% (%d × %d pixels)"), monitor.width,
+                   monitor.height, percent, monitor.PixelWidth(),
+                   monitor.PixelHeight());
   if (monitor.RefreshHz() > 0) {
     text += " · " + Format(_("%d Hz"), monitor.RefreshHz());
   }
