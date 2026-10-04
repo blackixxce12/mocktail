@@ -143,6 +143,10 @@ struct WindowState {
 };
 
 static WindowState g_state;
+// Window properties are created with the window; SDL's property calls are
+// thread-safe, so other threads read the export handle through this id. A
+// stale id after the window is destroyed simply fails to lock.
+static std::atomic<SDL_PropertiesID> g_window_properties{0};
 static std::atomic<int> g_real_swap_count{0};
 static std::atomic<uint64_t> g_first_present_ticks_ns{0};
 static InputPumpPacer g_input_pump_pacer;
@@ -821,6 +825,8 @@ float QueryWindowDpiScale() {
 }
 
 void ResolveNativeWindowHandle() {
+  g_window_properties.store(SDL_GetWindowProperties(g_state.sdl_window),
+                            std::memory_order_release);
   g_state.native_window = QueryNativeWindowHandle();
   if (g_state.native_window == nullptr) {
     fprintf(stderr, "  [window] WARNING: no X11 XID or Wayland window found\n");
@@ -1482,6 +1488,32 @@ void* GetEGLContext() { return g_state.egl_context; }
 void* GetEGLConfig() { return g_state.egl_config; }
 void* GetNativeWindow() { return g_state.native_window; }
 void* GetBackendWindow() { return g_state.sdl_window; }
+std::string GetParentWindowHandleForHelpers() {
+  const SDL_PropertiesID properties =
+      g_window_properties.load(std::memory_order_acquire);
+  if (properties == 0 || !SDL_LockProperties(properties)) {
+    return {};
+  }
+  std::string handle;
+  // SDL exports every shown Wayland toplevel through zxdg_exporter_v2 and
+  // publishes the handle once the compositor answers; it is gone while the
+  // window is hidden.
+  const char* exported = SDL_GetStringProperty(
+      properties, SDL_PROP_WINDOW_WAYLAND_XDG_TOPLEVEL_EXPORT_HANDLE_STRING,
+      nullptr);
+  if (exported != nullptr && exported[0] != '\0') {
+    handle = "wayland:";
+    handle += exported;
+  } else {
+    const Sint64 x11_window = SDL_GetNumberProperty(
+        properties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
+    if (x11_window > 0) {
+      handle = "x11:" + std::to_string(x11_window);
+    }
+  }
+  SDL_UnlockProperties(properties);
+  return handle;
+}
 bool UsesDirectVulkan() { return g_state.direct_vulkan; }
 bool PollWindowSurfaceEvent(WindowSurfaceEvent* event) {
   return g_window_surface_lifecycle.Poll(event);
@@ -2458,6 +2490,7 @@ void Shutdown() {
     g_state.egl_context = nullptr;
   }
   if (g_state.sdl_window) {
+    g_window_properties.store(0, std::memory_order_release);
     SDL_DestroyWindow(g_state.sdl_window);
     g_state.sdl_window = nullptr;
   }

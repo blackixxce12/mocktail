@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <string>
 
 #include "mocktail/platform/display_refresh_capabilities.h"
 #include "mocktail/status.h"
@@ -107,6 +108,11 @@ void* GetNativeWindow();
 
 // Host-only SDL_Window handle for Vulkan WSI.
 void* GetBackendWindow();
+
+// The game window as a parent for windows of other processes (the WebView
+// helper): "wayland:<xdg-foreign handle>" or "x11:<window id>", or empty while
+// the window is hidden or the compositor exports no handle. Any thread.
+std::string GetParentWindowHandleForHelpers();
 
 bool UsesDirectVulkan();
 

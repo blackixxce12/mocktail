@@ -229,6 +229,29 @@ Status PublishSystemTheme(JNIEnv* env,
   return status;
 }
 
+// Web surfaces belong to the game window, as the Android WebView covers the
+// activity it was opened from: compositors keep a child window above the game
+// and tiling ones float it instead of tiling it beside the game (Hyprland would
+// also take the game out of fullscreen, niri would scroll the surface away).
+// MOCKTAIL_WEBVIEW_PARENT=0 opens independent windows; =transient keeps the
+// parent but leaves the game usable beside the surface.
+WebViewHelperLaunchOptions ResolveWebSurfaceParent(const char* transport) {
+  std::string reason;
+  WebViewHelperLaunchOptions options =
+      ChooseWebViewParent(std::getenv("MOCKTAIL_WEBVIEW_PARENT"),
+                          window::GetParentWindowHandleForHelpers(), &reason);
+  if (options.parent_window.empty()) {
+    std::fprintf(stderr, "  [%s] web surface opens as its own window (%s)\n",
+                 transport, reason.c_str());
+  } else {
+    std::fprintf(stderr, "  [%s] web surface parent=%s modal=%d\n", transport,
+                 options.parent_window.compare(0, 4, "x11:") == 0 ? "x11"
+                                                                   : "wayland",
+                 options.modal ? 1 : 0);
+  }
+  return options;
+}
+
 Status LaunchRobloxWebSurface(
     const std::string& url, const char* transport,
     WebViewHelperExitObserver exit_observer = {},
@@ -249,7 +272,8 @@ Status LaunchRobloxWebSurface(
   std::fprintf(stderr, "  [%s] opening validated Roblox web surface\n",
                transport);
   const WebViewHelperLaunchResult launched =
-      LaunchWebViewHelper(helper, url, std::move(exit_observer));
+      LaunchWebViewHelper(helper, url, std::move(exit_observer),
+                          ResolveWebSurfaceParent(transport));
   if (!launched) {
     return Unavailable("could not display Roblox web surface: " +
                        launched.error);
