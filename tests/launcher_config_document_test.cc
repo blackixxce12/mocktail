@@ -804,6 +804,48 @@ TEST(LauncherConfigDocumentTest, AppendsAMissingSectionAtItsTemplatePosition) {
   EXPECT_TRUE(LoadWithRealLoader(document.bytes()));
 }
 
+TEST(LauncherConfigDocumentTest, KeepsTemplateOrderForSeveralNewSections) {
+  std::string template_yaml(runtime::DefaultRuntimeConfigYaml());
+  const std::size_t network = template_yaml.find("\nnetwork:\n");
+  template_yaml.insert(network + 1,
+                       "# Launcher-managed sections.\n"
+                       "display:\n"
+                       "  # auto, wayland or x11.\n"
+                       "  server: auto\n"
+                       "\n"
+                       "account:\n"
+                       "  # native or browser.\n"
+                       "  sign_in: native\n"
+                       "\n");
+  const std::string original = Fixture();
+  ConfigDocument document = ConfigDocument::FromBytes(original);
+  document.SetTemplate(template_yaml);
+  std::string error;
+  // The later section first: the earlier one must still go above it.
+  ASSERT_TRUE(document.Set("account.sign_in", "browser", ScalarKind::kEnum,
+                           &error))
+      << error;
+  ASSERT_TRUE(document.Set("display.server", "wayland", ScalarKind::kEnum,
+                           &error))
+      << error;
+  EXPECT_NE(document.bytes().find("  high_dpi: true\n"
+                                  "\n"
+                                  "# Launcher-managed sections.\n"
+                                  "display:\n"
+                                  "  # auto, wayland or x11.\n"
+                                  "  server: wayland\n"
+                                  "\n"
+                                  "account:\n"
+                                  "  # native or browser.\n"
+                                  "  sign_in: browser\n"
+                                  "\n"
+                                  "network:\n"),
+            std::string::npos)
+      << document.bytes();
+  EXPECT_TRUE(Diff(original, document.bytes()).removed.empty());
+  ASSERT_TRUE(document.Validate(&error)) << error;
+}
+
 TEST(LauncherConfigDocumentTest, AppendsATrailingTemplateSectionAtTheEnd) {
   const std::string original = Fixture();
   ConfigDocument document = ConfigDocument::FromBytes(original);
