@@ -843,9 +843,57 @@ TEST(ActiveAccountTest, AnUnusableSelectionStartsSignedOut) {
     EXPECT_EQ(resolution.kind, ActiveAccountKind::kInvalidSelection)
         << test_case.name;
     EXPECT_TRUE(resolution.uses_account_store()) << test_case.name;
-    EXPECT_EQ(resolution.auth_root, store.accounts() / "guest")
+    EXPECT_EQ(resolution.auth_root, store.accounts() / ".signed-out")
         << test_case.name;
   }
+}
+
+// The guest slot can hold a session Reconcile has not filed yet: a sign-in
+// inside Roblox during a guest start, while Roblox could not be reached to
+// check it. That session belongs to some account, so a selection that
+// cannot be used must not start with it.
+TEST(ActiveAccountTest, AnUnusableSelectionNeverStartsWithTheGuestSession) {
+  AccountStoreFixture store;
+  store.WritePointer("42\n");
+  store.MakePrivateDirectory(store.accounts() / "guest");
+  const std::filesystem::path guest_session =
+      store.accounts() / "guest/roblox.cookie";
+  std::ofstream(guest_session) << ".ROBLOSECURITY=_|pending-guest-session\n";
+  ASSERT_EQ(chmod(guest_session.c_str(), 0600), 0);
+
+  ActiveAccountResolution resolution = store.Resolve();
+  ASSERT_TRUE(resolution) << resolution.error;
+  ASSERT_EQ(resolution.kind, ActiveAccountKind::kInvalidSelection);
+  EXPECT_NE(resolution.auth_root, store.accounts() / "guest");
+  std::string error;
+  ASSERT_TRUE(PrepareSignedOutStart(resolution, &error)) << error;
+  EXPECT_FALSE(std::filesystem::exists(resolution.auth_root / "roblox.cookie"));
+  // Reconcile still finds it.
+  EXPECT_TRUE(std::filesystem::exists(guest_session));
+
+  // Whoever signed in during the last such start is signed out again; the
+  // writer's lock file may stay.
+  store.MakePrivateDirectory(store.accounts() / ".signed-out");
+  const std::filesystem::path saved =
+      store.accounts() / ".signed-out/roblox.cookie";
+  std::ofstream(saved) << ".ROBLOSECURITY=_|earlier-signed-out-start\n";
+  ASSERT_EQ(chmod(saved.c_str(), 0600), 0);
+  std::ofstream(store.accounts() / ".signed-out/.roblox.cookie.lock");
+  resolution = store.Resolve();
+  ASSERT_TRUE(resolution) << resolution.error;
+  EXPECT_EQ(resolution.auth_root, store.accounts() / ".signed-out");
+  ASSERT_TRUE(PrepareSignedOutStart(resolution, &error)) << error;
+  EXPECT_FALSE(std::filesystem::exists(saved));
+  EXPECT_TRUE(std::filesystem::exists(guest_session));
+
+  // Any other selection is left alone.
+  std::ofstream(saved) << ".ROBLOSECURITY=_|earlier-signed-out-start\n";
+  store.WritePointer("guest\n");
+  resolution = store.Resolve();
+  ASSERT_EQ(resolution.kind, ActiveAccountKind::kGuest);
+  ASSERT_TRUE(PrepareSignedOutStart(resolution, &error)) << error;
+  EXPECT_TRUE(std::filesystem::exists(guest_session));
+  EXPECT_TRUE(std::filesystem::exists(saved));
 }
 
 TEST(ActiveAccountTest, RecognisesStoreSlotsAfterAReexec) {
@@ -864,6 +912,8 @@ TEST(ActiveAccountTest, RecognisesStoreSlotsAfterAReexec) {
   EXPECT_TRUE(slot({{"MOCKTAIL_AUTH_ROOT", std::string(kAccounts) + "/42"}}));
   EXPECT_TRUE(
       slot({{"MOCKTAIL_AUTH_ROOT", std::string(kAccounts) + "/guest"}}));
+  EXPECT_TRUE(
+      slot({{"MOCKTAIL_AUTH_ROOT", std::string(kAccounts) + "/.signed-out"}}));
   EXPECT_TRUE(
       slot({{"MOCKTAIL_AUTH_ROOT", std::string(kAccounts) + "/./42"}}));
   EXPECT_TRUE(slot({{"MOCKTAIL_DATA_ROOT", "/data"},
@@ -888,7 +938,7 @@ TEST(ActiveAccountTest, ASymlinkedPointerIsNotFollowed) {
   const ActiveAccountResolution resolution = store.Resolve();
   ASSERT_TRUE(resolution);
   EXPECT_EQ(resolution.kind, ActiveAccountKind::kInvalidSelection);
-  EXPECT_EQ(resolution.auth_root, store.accounts() / "guest");
+  EXPECT_EQ(resolution.auth_root, store.accounts() / ".signed-out");
 }
 
 TEST(ActiveAccountTest, RefusesAnUnsafeStore) {
@@ -918,10 +968,25 @@ TEST(ActiveAccountTest, RefusesAnUnsafeStore) {
   }
   {
     AccountStoreFixture store;
-    store.WritePointer("42\n");
+    store.WritePointer("guest\n");
     store.MakePrivateDirectory(store.accounts() / "real-guest");
     std::filesystem::create_directory_symlink(store.accounts() / "real-guest",
                                               store.accounts() / "guest");
+    EXPECT_FALSE(store.Resolve());
+  }
+  // The same holds for the signed-out slot an unusable selection starts in.
+  {
+    AccountStoreFixture store;
+    store.WritePointer("42\n");
+    store.MakePrivateDirectory(store.accounts() / ".signed-out", 0755);
+    EXPECT_FALSE(store.Resolve());
+  }
+  {
+    AccountStoreFixture store;
+    store.WritePointer("42\n");
+    store.MakePrivateDirectory(store.accounts() / "real-signed-out");
+    std::filesystem::create_directory_symlink(
+        store.accounts() / "real-signed-out", store.accounts() / ".signed-out");
     EXPECT_FALSE(store.Resolve());
   }
 }

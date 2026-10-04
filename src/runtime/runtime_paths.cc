@@ -819,7 +819,8 @@ bool IsAccountStoreSlot(const RuntimePaths& paths) {
     return false;
   }
   const std::string slot = root.filename().string();
-  return slot == kGuestAccountSlotName || ParseAccountUserId(slot, nullptr);
+  return slot == kGuestAccountSlotName || slot == kSignedOutAccountSlotName ||
+         ParseAccountUserId(slot, nullptr);
 }
 
 ActiveAccountResolution ResolveActiveAccountAuthRoot(
@@ -877,23 +878,74 @@ ActiveAccountResolution ResolveActiveAccountAuthRoot(
     }
   }
 
-  const std::string guest(kGuestAccountSlotName);
-  struct stat guest_status = {};
-  if (fstatat(accounts_directory.get(), guest.c_str(), &guest_status,
+  // An unusable selection gets a slot of its own: the guest slot can hold a
+  // sign-in inside Roblox that Reconcile has not filed yet, and that session
+  // belongs to some account.
+  const bool guest = pointer.has_value() && pointer->guest;
+  const std::string slot(guest ? kGuestAccountSlotName
+                               : kSignedOutAccountSlotName);
+  const std::string slot_label = guest ? "guest" : "signed-out";
+  struct stat slot_status = {};
+  if (fstatat(accounts_directory.get(), slot.c_str(), &slot_status,
               AT_SYMLINK_NOFOLLOW) == 0) {
-    if (!IsPrivateOwnedDirectory(guest_status)) {
-      result.error = "saved account guest folder is not a private directory";
+    if (!IsPrivateOwnedDirectory(slot_status)) {
+      result.error =
+          "saved account " + slot_label + " folder is not a private directory";
       return result;
     }
   } else if (errno != ENOENT) {
-    result.error = "saved account guest folder cannot be inspected";
+    result.error =
+        "saved account " + slot_label + " folder cannot be inspected";
     return result;
   }
-  result.kind = pointer.has_value() && pointer->guest
-                    ? ActiveAccountKind::kGuest
-                    : ActiveAccountKind::kInvalidSelection;
-  result.auth_root = accounts / guest;
+  result.kind =
+      guest ? ActiveAccountKind::kGuest : ActiveAccountKind::kInvalidSelection;
+  result.auth_root = accounts / slot;
   return result;
+}
+
+bool PrepareSignedOutStart(const ActiveAccountResolution& resolution,
+                           std::string* error) {
+  if (resolution.kind != ActiveAccountKind::kInvalidSelection) {
+    return true;
+  }
+  const std::filesystem::path& slot = resolution.auth_root;
+  const int accounts_descriptor =
+      open(slot.parent_path().c_str(),
+           O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+  if (accounts_descriptor < 0) {
+    *error = "saved account folder cannot be opened";
+    return false;
+  }
+  const ScopedDescriptor accounts(accounts_descriptor);
+  struct stat status = {};
+  if (fstat(accounts.get(), &status) != 0 ||
+      !IsPrivateOwnedDirectory(status)) {
+    *error = "saved account folder is not a private directory";
+    return false;
+  }
+  const int slot_descriptor =
+      openat(accounts.get(), slot.filename().c_str(),
+             O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+  if (slot_descriptor < 0) {
+    if (errno == ENOENT) {
+      return true;
+    }
+    *error = "saved account signed-out folder cannot be opened";
+    return false;
+  }
+  const ScopedDescriptor signed_out(slot_descriptor);
+  if (fstat(signed_out.get(), &status) != 0 ||
+      !IsPrivateOwnedDirectory(status)) {
+    *error = "saved account signed-out folder is not a private directory";
+    return false;
+  }
+  // RuntimePaths::cookie_file() under this auth root.
+  if (unlinkat(signed_out.get(), "roblox.cookie", 0) != 0 && errno != ENOENT) {
+    *error = "the session of an earlier signed-out start cannot be removed";
+    return false;
+  }
+  return true;
 }
 
 }  // namespace runtime

@@ -396,6 +396,16 @@ int main(int argc, char* argv[]) {
     }
     return EXIT_FAILURE;
   }
+  if (!mocktail::runtime::PrepareSignedOutStart(active_account,
+                                                &command_line_error)) {
+    std::cerr << "[FATAL] Cannot start signed out: " << command_line_error
+              << '\n';
+    if (command_line.options.mode == mocktail::runtime::CommandMode::kRun) {
+      (void)mocktail::runtime::ShowFailureDialog(
+          environment, "Mocktail could not start signed out.");
+    }
+    return EXIT_FAILURE;
+  }
   if (active_account.uses_account_store()) {
     // Exported so a re-executed child and the helpers use the same account.
     if (setenv("MOCKTAIL_AUTH_ROOT", active_account.auth_root.c_str(), 1) !=

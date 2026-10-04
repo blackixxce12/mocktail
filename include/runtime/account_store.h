@@ -24,6 +24,9 @@
 //       roblox.cookie          0600  ".ROBLOSECURITY=<value>\n"
 //       account.json           0600  public names, state, timestamps
 //     guest/                   0700  auth root of signed-out starts
+//     .signed-out/             0700  the runtime's auth root while "active"
+//                                    is unusable; emptied by each such
+//                                    start, never filed into the store
 //   <cache root>/avatars/<user id>.png   0700 directory, 0600 files
 //
 // Nothing here holds a session outside roblox.cookie. Directory names come

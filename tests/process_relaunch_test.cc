@@ -509,7 +509,8 @@ MapEnvironment ReadEnvironmentDump(const std::filesystem::path& path) {
 }
 
 // The session file main() starts from: the selected slot's when the store
-// chooses, else the one under the auth root the environment gives.
+// chooses, else the one under the auth root the environment gives. Like
+// main(), it first empties the signed-out slot of an unusable selection.
 std::filesystem::path StartingCookieFile(
     const Environment& environment,
     const std::filesystem::path& working_directory) {
@@ -518,6 +519,8 @@ std::filesystem::path StartingCookieFile(
   const ActiveAccountResolution resolution =
       ResolveActiveAccountAuthRoot(paths, environment);
   EXPECT_TRUE(resolution) << resolution.error;
+  std::string error;
+  EXPECT_TRUE(PrepareSignedOutStart(resolution, &error)) << error;
   return resolution.uses_account_store()
              ? resolution.auth_root / "roblox.cookie"
              : paths.cookie_file();
@@ -582,6 +585,27 @@ TEST(ProcessRelaunchTest, RestartReadsTheSessionTheRunSaved) {
             7);
   EXPECT_EQ(StartingCookieFile(ReadEnvironmentDump(dump), root),
             accounts / "42/roblox.cookie");
+
+  // An unusable selection starts in the signed-out slot, which every such
+  // start empties; the restart keeps the session signed in there.
+  std::ofstream(accounts / "active", std::ios::trunc) << "99\n";
+  const ActiveAccountResolution unusable = ResolveActiveAccountAuthRoot(
+      RuntimePaths::FromEnvironment(run, root), run);
+  ASSERT_EQ(unusable.kind, ActiveAccountKind::kInvalidSelection);
+  std::string prepare_error;
+  ASSERT_TRUE(PrepareSignedOutStart(unusable, &prepare_error))
+      << prepare_error;
+  const std::filesystem::path saved = unusable.auth_root / "roblox.cookie";
+  ASSERT_TRUE(RuntimePaths::EnsureDirectory(unusable.auth_root));
+  ASSERT_EQ(chmod(unusable.auth_root.c_str(), 0700), 0);
+  std::ofstream(saved) << ".ROBLOSECURITY=placeholder\n";
+  ASSERT_EQ(chmod(saved.c_str(), 0600), 0);
+  ASSERT_EQ(RunRelaunched(ShellStart({"PATH=/usr/bin:/bin", "HOME=" + home}),
+                          "env > '" + dump.string() + "' && exit 7; exit 3",
+                          [] {}, unusable.auth_root),
+            7);
+  EXPECT_EQ(StartingCookieFile(ReadEnvironmentDump(dump), root), saved);
+  EXPECT_TRUE(std::filesystem::exists(saved));
   std::error_code error;
   std::filesystem::remove_all(root, error);
 }

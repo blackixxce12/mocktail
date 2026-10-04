@@ -129,9 +129,11 @@ std::filesystem::path ResolveAdjacentRobloxAssetPath(
 // Roblox user id plus "guest". The "active" file there is the contract between
 // the launcher and the runtime: "guest" or a user id, with one optional
 // trailing newline, naming the directory the runtime uses as its auth root.
+// ".signed-out" is the auth root of a start whose selection is unusable.
 inline constexpr std::string_view kAccountStoreDirectoryName = "accounts";
 inline constexpr std::string_view kActiveAccountFileName = "active";
 inline constexpr std::string_view kGuestAccountSlotName = "guest";
+inline constexpr std::string_view kSignedOutAccountSlotName = ".signed-out";
 inline constexpr std::size_t kMaximumActiveAccountFileBytes = 32;
 
 // True when MOCKTAIL_AUTH_ROOT, MOCKTAIL_COOKIE_FILE or
@@ -169,8 +171,9 @@ enum class ActiveAccountKind {
   kGuest,
   kAccount,
   // The pointer or the account directory it names is unusable. The runtime
-  // starts signed out in the guest slot and never falls back to another
-  // account's session.
+  // starts signed out in the signed-out slot, never in the guest slot, which
+  // can hold a session Reconcile has not filed yet, and never falls back to
+  // another account's session.
   kInvalidSelection,
 };
 
@@ -178,8 +181,9 @@ struct ActiveAccountResolution {
   ActiveAccountKind kind = ActiveAccountKind::kLegacy;
   std::filesystem::path auth_root;
   std::int64_t user_id = 0;
-  // Set when the store itself (accounts/ or accounts/guest) is not a private
-  // directory of this user. Nothing was selected then.
+  // Set when the store itself (accounts/ or the guest or signed-out slot
+  // chosen) is not a private directory of this user. Nothing was selected
+  // then.
   std::string error;
 
   explicit operator bool() const { return error.empty(); }
@@ -197,9 +201,19 @@ bool IsAccountStoreSlot(const RuntimePaths& paths);
 
 // Resolves the auth root of the selected saved account. base_paths must be
 // built without an account-store MOCKTAIL_AUTH_ROOT. Reads only; the caller
-// exports MOCKTAIL_AUTH_ROOT and rebuilds its paths when uses_account_store().
+// runs PrepareSignedOutStart(), then exports MOCKTAIL_AUTH_ROOT and rebuilds
+// its paths when uses_account_store().
 ActiveAccountResolution ResolveActiveAccountAuthRoot(
     const RuntimePaths& base_paths, const Environment& environment);
+
+// For kInvalidSelection, deletes the session an earlier start with an
+// unusable selection saved in the signed-out slot (a sign-in during that
+// start), so this one starts signed out too. A missing slot is fine: the
+// credential writers create it. Does nothing for any other kind. Call it
+// under the instance lock, before the auth root is first used; a restart
+// or re-exec that inherits the slot as MOCKTAIL_AUTH_ROOT keeps its session.
+bool PrepareSignedOutStart(const ActiveAccountResolution& resolution,
+                           std::string* error);
 
 }  // namespace runtime
 }  // namespace mocktail
