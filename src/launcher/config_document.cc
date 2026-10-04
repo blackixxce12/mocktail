@@ -16,6 +16,7 @@
 #include "runtime/runtime_config_bootstrap.h"
 #include "runtime/runtime_config_file.h"
 #include "update/update_config.h"
+#include "utf8.h"
 #include "yaml_layout.h"
 
 namespace mocktail::launcher {
@@ -145,56 +146,6 @@ std::string JoinParts(const std::vector<std::string>& parts,
   return joined;
 }
 
-// Decodes one UTF-8 sequence, rejecting overlong forms, surrogates and
-// values above U+10FFFF.
-bool DecodeUtf8(std::string_view text, std::size_t* index,
-                char32_t* code_point) {
-  const auto byte = [&text](std::size_t position) {
-    return static_cast<unsigned char>(text[position]);
-  };
-  const unsigned char lead = byte(*index);
-  std::size_t length = 0;
-  char32_t value = 0;
-  char32_t minimum = 0;
-  if (lead < 0x80U) {
-    *code_point = lead;
-    ++*index;
-    return true;
-  }
-  if ((lead & 0xE0U) == 0xC0U) {
-    length = 2;
-    value = lead & 0x1FU;
-    minimum = 0x80;
-  } else if ((lead & 0xF0U) == 0xE0U) {
-    length = 3;
-    value = lead & 0x0FU;
-    minimum = 0x800;
-  } else if ((lead & 0xF8U) == 0xF0U) {
-    length = 4;
-    value = lead & 0x07U;
-    minimum = 0x10000;
-  } else {
-    return false;
-  }
-  if (*index + length > text.size()) {
-    return false;
-  }
-  for (std::size_t offset = 1; offset < length; ++offset) {
-    const unsigned char continuation = byte(*index + offset);
-    if ((continuation & 0xC0U) != 0x80U) {
-      return false;
-    }
-    value = (value << 6U) | (continuation & 0x3FU);
-  }
-  if (value < minimum || value > 0x10FFFF ||
-      (value >= 0xD800 && value <= 0xDFFF)) {
-    return false;
-  }
-  *code_point = value;
-  *index += length;
-  return true;
-}
-
 std::string Hex(char32_t value, int digits) {
   static constexpr char kDigits[] = "0123456789ABCDEF";
   std::string text(static_cast<std::size_t>(digits), '0');
@@ -214,7 +165,7 @@ bool QuoteString(std::string_view value, std::string* quoted,
   while (index < value.size()) {
     const std::size_t begin = index;
     char32_t code_point = 0;
-    if (!DecodeUtf8(value, &index, &code_point)) {
+    if (!internal::DecodeUtf8(value, &index, &code_point)) {
       *error = "the value is not valid UTF-8";
       return false;
     }

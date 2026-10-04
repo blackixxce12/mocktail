@@ -66,6 +66,16 @@ target_link_libraries(launcher_window_state_file_test PRIVATE
 )
 mocktail_apply_compile_options(launcher_window_state_file_test)
 
+add_executable(launcher_fast_flags_document_test
+  launcher_fast_flags_document_test.cc
+)
+target_link_libraries(launcher_fast_flags_document_test PRIVATE
+  Mocktail::ConfigEditor
+  Mocktail::Services
+  GTest::gtest_main
+)
+mocktail_apply_compile_options(launcher_fast_flags_document_test)
+
 add_executable(discord_rpc_test discord_rpc_test.cc)
 target_link_libraries(discord_rpc_test PRIVATE
   Mocktail::Runtime
@@ -988,6 +998,7 @@ gtest_discover_tests(runtime_config_test)
 gtest_discover_tests(runtime_config_file_test)
 gtest_discover_tests(launcher_config_document_test)
 gtest_discover_tests(launcher_window_state_file_test)
+gtest_discover_tests(launcher_fast_flags_document_test)
 gtest_discover_tests(payload_update_preflight_test)
 gtest_discover_tests(apk_provider_test)
 gtest_discover_tests(native_update_test)
