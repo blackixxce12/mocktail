@@ -144,7 +144,9 @@ desktop_source="$(ResolveRegularFile "${desktop_source}" "desktop template")"
    "$(grep -Fxc 'MimeType=x-scheme-handler/roblox;x-scheme-handler/roblox-player;' \
        "${desktop_source}")" == 1 &&
    "$(grep -Fxc 'X-Mocktail-Managed=true' "${desktop_source}")" == 1 &&
-   "$(grep -c '^Exec=' "${desktop_source}")" == 1 ]] ||
+   -z "$(grep '^Exec=' "${desktop_source}" |
+         grep -Fxv -e 'Exec=mocktail %u' -e 'Exec=mocktail --play' \
+           -e 'Exec=mocktail --launcher')" ]] ||
   Die "desktop template does not match the Mocktail URL-handler contract"
 
 [[ -n "${HOME:-}" && "${HOME}" == /* ]] ||
@@ -171,8 +173,15 @@ fi
 
 temporary="$(mktemp "${applications_dir}/.${DESKTOP_ID}.XXXXXX.desktop")"
 trap 'rm -f -- "${temporary}"' EXIT
+group=""
 while IFS= read -r line || [[ -n "${line}" ]]; do
-  if [[ "${line}" == Exec=* ]]; then
+  if [[ "${line}" == '['*']' ]]; then
+    group="${line}"
+  fi
+  if [[ "${line}" == Exec=* && "${group}" != '[Desktop Entry]' ]]; then
+    # Desktop actions (Play now, Mocktail Settings) keep their options.
+    printf 'Exec=%s%s\n' "${mocktail_executable}" "${line#Exec=mocktail}"
+  elif [[ "${line}" == Exec=* ]]; then
     printf 'Exec=%s %%u\n' "${mocktail_executable}"
     if [[ -n "${launch_working_directory}" ]]; then
       printf 'Path=%s\n' "${launch_working_directory}"

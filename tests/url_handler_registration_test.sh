@@ -60,6 +60,9 @@ export PATH="${test_root}/bin:${PATH}"
 readonly installed_desktop="${XDG_DATA_HOME}/applications/space.bigrat.mocktail.desktop"
 [[ -f "${installed_desktop}" && ! -L "${installed_desktop}" ]]
 grep -Fxq "Exec=${mocktail_binary} %u" "${installed_desktop}"
+grep -Fxq "Exec=${mocktail_binary} --play" "${installed_desktop}"
+grep -Fxq "Exec=${mocktail_binary} --launcher" "${installed_desktop}"
+[[ "$(grep -c '^Exec=' "${installed_desktop}")" == 3 ]]
 grep -Fxq \
   'MimeType=x-scheme-handler/roblox;x-scheme-handler/roblox-player;' \
   "${installed_desktop}"

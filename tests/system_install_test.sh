@@ -49,6 +49,10 @@ fi
 [[ -f "${desktop}" ]]
 grep -Fq 'Name=Mocktail' "${desktop}"
 grep -Fxq 'Exec=mocktail %u' "${desktop}"
+grep -Fxq 'Actions=play;settings;' "${desktop}"
+grep -Fxq 'Exec=mocktail --play' "${desktop}"
+grep -Fxq 'Exec=mocktail --launcher' "${desktop}"
+grep -Fxq 'Name[ru]=Настройки Mocktail' "${desktop}"
 grep -Fq 'Icon=space.bigrat.mocktail' "${desktop}"
 [[ -f "${metainfo}" ]]
 grep -Fq '<id>space.bigrat.mocktail</id>' "${metainfo}"

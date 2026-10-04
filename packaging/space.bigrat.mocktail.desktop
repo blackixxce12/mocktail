@@ -10,3 +10,14 @@ Categories=Game;
 Terminal=false
 MimeType=x-scheme-handler/roblox;x-scheme-handler/roblox-player;
 X-Mocktail-Managed=true
+Actions=play;settings;
+
+[Desktop Action play]
+Name=Play now
+Name[ru]=Играть сразу
+Exec=mocktail --play
+
+[Desktop Action settings]
+Name=Mocktail Settings
+Name[ru]=Настройки Mocktail
+Exec=mocktail --launcher
