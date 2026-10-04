@@ -35,12 +35,20 @@ struct RobloxAccountProtocolAnswer {
 
 // Mocktail has no Google Play Integrity provider, and it never makes up a
 // token or a verdict. It reports that honestly:
-// - deviceIntegrityAvailable answers {"support":false}.
+// - deviceIntegrityAvailable answers {"support":false}. The APK (2.736)
+//   always answers true here and lets getIntegrityToken report the problem.
 // - getIntegrityToken answers an empty token with TOKEN_PROVIDER_UNINITIALIZED,
 //   which is what the APK itself answers when its provider never initialized.
 // The request (requestHash, timeoutMillis) is not read, logged or echoed.
-// LuaApp then completes the deviceintegrity challenge without a redemption
-// token, and Roblox's server decides what happens next.
+//
+// What LuaApp's DeviceIntegrityTokenChallenge does with the answer:
+// - With FFlagEnableNewDeviceIntegrityFailureHandling on (the server value;
+//   the bundle default is off), it logs ChallengeInvalidated and completes the
+//   challenge with an empty redemptionToken at once. An Android device without
+//   an integrity provider sends the same empty token.
+// - With the flag off, it calls onChallengeFailed.
+// Either way Roblox's server decides whether the login may continue. It may
+// refuse it: an empty token is not a passed integrity check.
 RobloxAccountProtocolAnswer AnswerRobloxAccountProtocolRequest(
     RobloxAccountProtocolMethod method);
 
