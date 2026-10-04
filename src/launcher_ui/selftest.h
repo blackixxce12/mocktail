@@ -46,8 +46,10 @@ class Selftest {
   guint RecordWindow();
   guint RenderSection(Section section, const std::string& suffix);
   guint BuildBindingPage();
-  guint OpenHint();
-  guint RenderHint();
+  // Opens the "Learn more" popover of the first row bound to `key` (or
+  // titled `key`) and renders it to hint-<key>.png.
+  guint OpenHint(const std::string& key);
+  guint RenderHint(const std::string& key);
   guint ChangeRows();
   guint RenderBindingPage();
   guint SearchStep();

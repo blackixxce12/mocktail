@@ -1,5 +1,6 @@
 #include "launcher_ui/selftest.h"
 
+#include <algorithm>
 #include <clocale>
 #include <cstdio>
 #include <cstdlib>
@@ -158,8 +159,27 @@ void Selftest::Start() {
     window_->ShowSection(Section::kGraphics);
     return kSettleMilliseconds;
   });
-  steps_.push_back([this] { return OpenHint(); });
-  steps_.push_back([this] { return RenderHint(); });
+  // The worked example, plus any rows named in
+  // MOCKTAIL_LAUNCHER_SELFTEST_HINTS (comma-separated keys or titles), a
+  // developer aid for checking hint text by eye.
+  std::vector<std::string> hints = {"graphics.backend"};
+  if (const char* extra = std::getenv("MOCKTAIL_LAUNCHER_SELFTEST_HINTS")) {
+    std::string list = extra;
+    std::size_t start = 0;
+    while (start <= list.size()) {
+      const std::size_t comma = std::min(list.find(',', start), list.size());
+      if (comma > start) hints.push_back(list.substr(start, comma - start));
+      start = comma + 1;
+    }
+  }
+  for (const std::string& hint : hints) {
+    steps_.push_back([this, hint] { return OpenHint(hint); });
+    steps_.push_back([this, hint] { return RenderHint(hint); });
+  }
+  steps_.push_back([this] {
+    window_->ShowSection(Section::kGraphics);
+    return kSettleMilliseconds;
+  });
   steps_.push_back([this] { return BuildBindingPage(); });
   steps_.push_back([this] { return ChangeRows(); });
   steps_.push_back([this] { return RenderBindingPage(); });
@@ -357,23 +377,28 @@ GtkWidget* FindInfoButton(GtkWidget* widget) {
 
 }  // namespace
 
-// Opens the worked example's "Learn more" popover and renders it, so the
-// hint text can be checked by eye.
-guint Selftest::OpenHint() {
-  GtkWidget* backend = nullptr;
+// Opens a row's "Learn more" popover and renders it, so the hint text can
+// be checked by eye.
+guint Selftest::OpenHint(const std::string& key) {
+  GtkWidget* row = nullptr;
   for (const RowRecord& record : context_->rows()) {
-    if (record.key == "graphics.backend") backend = record.row;
+    if (row == nullptr && record.row != nullptr &&
+        (record.key == key || record.title == key)) {
+      row = record.row;
+    }
   }
-  hint_button_ = backend != nullptr ? FindInfoButton(backend) : nullptr;
+  hint_button_ = row != nullptr ? FindInfoButton(row) : nullptr;
   if (hint_button_ == nullptr) {
-    Error("the graphics backend row has no info button");
+    Error("no row with an info button for " + key);
     return 50;
   }
+  // Opens its page (and any expander around it) first.
+  window_->Reveal(row);
   gtk_menu_button_popup(GTK_MENU_BUTTON(hint_button_));
   return kSettleMilliseconds * 2;
 }
 
-guint Selftest::RenderHint() {
+guint Selftest::RenderHint(const std::string& key) {
   if (hint_button_ == nullptr) return 50;
   GtkPopover* popover =
       gtk_menu_button_get_popover(GTK_MENU_BUTTON(hint_button_));
@@ -386,7 +411,11 @@ guint Selftest::RenderHint() {
   if (child != nullptr && GTK_IS_VIEWPORT(child)) {
     child = gtk_viewport_get_child(GTK_VIEWPORT(child));
   }
-  const std::filesystem::path path = out_dir_ / "hint-graphics-backend.png";
+  std::string name = key;
+  for (char& c : name) {
+    if (!g_ascii_isalnum(c)) c = '-';
+  }
+  const std::filesystem::path path = out_dir_ / ("hint-" + name + ".png");
   std::string detail;
   if (child == nullptr || !gtk_widget_get_mapped(GTK_WIDGET(popover))) {
     Error("the hint popover did not open");
