@@ -13,6 +13,7 @@
 #include <cstring>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -24,6 +25,7 @@
 #include "mocktail/platform/sdl_application_metadata.h"
 #include "mocktail/platform/sdl_event_converter.h"
 #include "mocktail/platform/sdl_window_icon.h"
+#include "runtime/runtime_config.h"
 #include "window/input_pump_pacer.h"
 #include "window/main_thread_command_gate.h"
 #include "window/roblox_fullscreen_menu_request_gate.h"
@@ -253,6 +255,38 @@ bool WindowStatePersistenceSuppressed() {
          IsEnabledEnv("MOCKTAIL_FULLSCREEN_READINESS") ||
          IsEnabledEnv("MOCKTAIL_INPUT_READINESS") ||
          IsEnabledEnv("MOCKTAIL_AUTO_EXIT_AFTER_PRESENT_MS");
+}
+
+// display.start_mode, exported as MOCKTAIL_WINDOW_START_MODE. It replaces
+// only the restored fullscreen/maximized flags, so the windowed geometry is
+// kept and the game still records whatever mode the session ends in. It
+// rides on the restore plan, which readiness harnesses switch off together
+// with persistence.
+void ApplyConfiguredWindowStartMode() {
+  const char* configured = GetEnvNonEmpty("MOCKTAIL_WINDOW_START_MODE");
+  if (configured == nullptr) {
+    return;
+  }
+  const std::optional<runtime::WindowStartMode> mode =
+      runtime::ParseWindowStartMode(configured);
+  if (!mode.has_value()) {
+    std::fprintf(stderr, "  [window-state] unknown start mode ignored\n");
+    return;
+  }
+  if (*mode == runtime::WindowStartMode::kRemember) {
+    return;
+  }
+  runtime::ApplyWindowStartMode(*mode, &g_state.persisted_window.fullscreen,
+                                &g_state.persisted_window.maximized);
+  // Tell Roblox's own fullscreen setting about the mode after the first
+  // frame, as a restored mode does.
+  g_state.restored_fullscreen_sync_pending = true;
+  std::fprintf(stderr,
+               "  [window-state] start mode=%.*s fullscreen=%d maximized=%d\n",
+               static_cast<int>(runtime::WindowStartModeName(*mode).size()),
+               runtime::WindowStartModeName(*mode).data(),
+               g_state.persisted_window.fullscreen ? 1 : 0,
+               g_state.persisted_window.maximized ? 1 : 0);
 }
 
 bool IsWaylandVideoDriver() {
@@ -1090,6 +1124,7 @@ bool Init(int width, int height, const char* title) {
                    restored.state.maximized ? 1 : 0,
                    restored.state.has_position ? "saved" : "compositor");
     }
+    ApplyConfiguredWindowStartMode();
   }
   g_state.width = width;
   g_state.height = height;

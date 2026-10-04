@@ -153,6 +153,12 @@ std::string GraphicsQualityName(const GraphicsQuality& quality);
 // Switch-style variables: 1, true or on; 0, false or off.
 std::optional<bool> ParseEnvironmentSwitch(std::string_view value);
 
+// Replaces the restored presentation flags as display.start_mode asks.
+// Remember keeps both; fullscreen leaves the maximized flag underneath so
+// leaving fullscreen returns to the recorded window state.
+void ApplyWindowStartMode(WindowStartMode mode, bool* fullscreen,
+                          bool* maximized);
+
 std::optional<NetworkProxyConfig> ParseNetworkProxyConfig(
     std::string_view host, std::string_view port,
     std::string_view scheme = "http");

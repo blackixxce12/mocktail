@@ -255,6 +255,28 @@ std::optional<bool> ParseEnvironmentSwitch(std::string_view value) {
   return std::nullopt;
 }
 
+void ApplyWindowStartMode(WindowStartMode mode, bool* fullscreen,
+                          bool* maximized) {
+  if (fullscreen == nullptr || maximized == nullptr) {
+    return;
+  }
+  switch (mode) {
+    case WindowStartMode::kWindowed:
+      *fullscreen = false;
+      *maximized = false;
+      return;
+    case WindowStartMode::kMaximized:
+      *fullscreen = false;
+      *maximized = true;
+      return;
+    case WindowStartMode::kFullscreen:
+      *fullscreen = true;
+      return;
+    case WindowStartMode::kRemember:
+      return;
+  }
+}
+
 std::string BuildNetworkProxyUrl(const NetworkProxyConfig& proxy) {
   const bool ipv6 = proxy.host.find(':') != std::string::npos;
   return proxy.scheme + "://" + std::string(ipv6 ? "[" : "") + proxy.host +

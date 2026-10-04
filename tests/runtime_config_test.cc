@@ -587,6 +587,40 @@ TEST(RuntimeConfigTest, ReadsLauncherManagedSettingsFromEnvironment) {
   EXPECT_TRUE(invalid.launcher().show_on_start);
 }
 
+TEST(RuntimeConfigTest, WindowStartModeReplacesOnlyRestoredPresentation) {
+  struct State {
+    bool fullscreen;
+    bool maximized;
+  };
+  struct Case {
+    WindowStartMode mode;
+    State restored;
+    State expected;
+  };
+  for (const Case& entry : {
+           // Remember keeps whatever window-state.json recorded.
+           Case{WindowStartMode::kRemember, {true, false}, {true, false}},
+           Case{WindowStartMode::kRemember, {false, true}, {false, true}},
+           Case{WindowStartMode::kRemember, {false, false}, {false, false}},
+           Case{WindowStartMode::kWindowed, {true, true}, {false, false}},
+           Case{WindowStartMode::kWindowed, {false, true}, {false, false}},
+           Case{WindowStartMode::kMaximized, {true, false}, {false, true}},
+           Case{WindowStartMode::kMaximized, {false, false}, {false, true}},
+           // Leaving fullscreen returns to the recorded maximized state.
+           Case{WindowStartMode::kFullscreen, {false, true}, {true, true}},
+           Case{WindowStartMode::kFullscreen, {false, false}, {true, false}},
+       }) {
+    bool fullscreen = entry.restored.fullscreen;
+    bool maximized = entry.restored.maximized;
+    ApplyWindowStartMode(entry.mode, &fullscreen, &maximized);
+    EXPECT_EQ(fullscreen, entry.expected.fullscreen)
+        << WindowStartModeName(entry.mode);
+    EXPECT_EQ(maximized, entry.expected.maximized)
+        << WindowStartModeName(entry.mode);
+  }
+  ApplyWindowStartMode(WindowStartMode::kWindowed, nullptr, nullptr);
+}
+
 }  // namespace
 }  // namespace runtime
 }  // namespace mocktail
