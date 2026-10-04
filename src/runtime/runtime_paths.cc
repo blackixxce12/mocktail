@@ -2,12 +2,16 @@
 #include "runtime/runtime_paths.h"
 
 #define JSON_NOEXCEPTION 1
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <array>
 #include <atomic>
 #include <cctype>
+#include <cerrno>
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
+#include <limits>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
@@ -284,6 +288,73 @@ bool PublishManagedPayloadBinding(const ManagedPayloadBinding& binding,
     return false;
   }
   return true;
+}
+
+class ScopedDescriptor final {
+ public:
+  explicit ScopedDescriptor(int descriptor) : descriptor_(descriptor) {}
+  ~ScopedDescriptor() {
+    if (descriptor_ >= 0) {
+      close(descriptor_);
+    }
+  }
+
+  ScopedDescriptor(const ScopedDescriptor&) = delete;
+  ScopedDescriptor& operator=(const ScopedDescriptor&) = delete;
+
+  int get() const { return descriptor_; }
+
+ private:
+  int descriptor_ = -1;
+};
+
+bool IsPrivateOwnedDirectory(const struct stat& status) {
+  return S_ISDIR(status.st_mode) && status.st_uid == geteuid() &&
+         (status.st_mode & (S_IRWXG | S_IRWXO)) == 0;
+}
+
+// Reads the pointer without following a symlink. Anything but a small private
+// regular file of this user is an invalid selection.
+std::optional<ActiveAccountPointer> ReadActiveAccountPointerAt(
+    int accounts_descriptor, bool* missing) {
+  *missing = false;
+  const std::string name(kActiveAccountFileName);
+  const int descriptor =
+      openat(accounts_descriptor, name.c_str(),
+             O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC);
+  if (descriptor < 0) {
+    *missing = errno == ENOENT;
+    return std::nullopt;
+  }
+  const ScopedDescriptor file(descriptor);
+  struct stat status = {};
+  if (fstat(file.get(), &status) != 0 || !S_ISREG(status.st_mode) ||
+      status.st_uid != geteuid() ||
+      (status.st_mode & (S_IRWXG | S_IRWXO)) != 0 || status.st_size < 0 ||
+      static_cast<std::size_t>(status.st_size) >
+          kMaximumActiveAccountFileBytes) {
+    return std::nullopt;
+  }
+  std::array<char, kMaximumActiveAccountFileBytes + 1> buffer = {};
+  std::size_t length = 0;
+  while (length < buffer.size()) {
+    const ssize_t count =
+        read(file.get(), buffer.data() + length, buffer.size() - length);
+    if (count < 0 && errno == EINTR) {
+      continue;
+    }
+    if (count < 0) {
+      return std::nullopt;
+    }
+    if (count == 0) {
+      break;
+    }
+    length += static_cast<std::size_t>(count);
+  }
+  if (length > kMaximumActiveAccountFileBytes) {
+    return std::nullopt;
+  }
+  return ParseActiveAccountPointer(std::string_view(buffer.data(), length));
 }
 
 }  // namespace
@@ -683,6 +754,134 @@ std::filesystem::path ResolveAdjacentRobloxAssetPath(
     return {};
   }
   return (resolved_library.parent_path() / "assets/content").lexically_normal();
+}
+
+bool AccountStoreOverriddenByEnvironment(const Environment& environment) {
+  return environment.HasNonEmpty("MOCKTAIL_AUTH_ROOT") ||
+         environment.HasNonEmpty("MOCKTAIL_COOKIE_FILE") ||
+         environment.HasNonEmpty("MOCKTAIL_ROBLOX_COOKIES");
+}
+
+bool ParseAccountUserId(std::string_view text, std::int64_t* user_id) {
+  constexpr std::size_t kMaximumDigits = 19;
+  if (text.empty() || text.size() > kMaximumDigits || text.front() == '0') {
+    return false;
+  }
+  std::uint64_t value = 0;
+  for (const char character : text) {
+    if (character < '0' || character > '9') {
+      return false;
+    }
+    value = value * 10 + static_cast<std::uint64_t>(character - '0');
+  }
+  if (value > static_cast<std::uint64_t>(
+                  std::numeric_limits<std::int64_t>::max())) {
+    return false;
+  }
+  if (user_id != nullptr) {
+    *user_id = static_cast<std::int64_t>(value);
+  }
+  return true;
+}
+
+std::optional<ActiveAccountPointer> ParseActiveAccountPointer(
+    std::string_view contents) {
+  if (contents.size() > kMaximumActiveAccountFileBytes) {
+    return std::nullopt;
+  }
+  if (!contents.empty() && contents.back() == '\n') {
+    contents.remove_suffix(1);
+  }
+  ActiveAccountPointer pointer;
+  if (contents == kGuestAccountSlotName) {
+    return pointer;
+  }
+  if (!ParseAccountUserId(contents, &pointer.user_id)) {
+    return std::nullopt;
+  }
+  pointer.guest = false;
+  return pointer;
+}
+
+std::string FormatActiveAccountPointer(const ActiveAccountPointer& pointer) {
+  if (pointer.guest || pointer.user_id <= 0) {
+    return std::string(kGuestAccountSlotName) + "\n";
+  }
+  return std::to_string(pointer.user_id) + "\n";
+}
+
+ActiveAccountResolution ResolveActiveAccountAuthRoot(
+    const RuntimePaths& base_paths, const Environment& environment) {
+  ActiveAccountResolution result;
+  result.auth_root = base_paths.auth_root();
+  if (AccountStoreOverriddenByEnvironment(environment)) {
+    result.kind = ActiveAccountKind::kEnvironmentOverride;
+    return result;
+  }
+  const std::filesystem::path accounts =
+      base_paths.auth_root() / std::string(kAccountStoreDirectoryName);
+  // The launcher writes the pointer last, so without it there is no store
+  // (or an interrupted migration) and the legacy root stays authoritative.
+  struct stat pointer_status = {};
+  if (lstat((accounts / std::string(kActiveAccountFileName)).c_str(),
+            &pointer_status) != 0 &&
+      (errno == ENOENT || errno == ENOTDIR)) {
+    result.kind = ActiveAccountKind::kLegacy;
+    return result;
+  }
+  const int accounts_descriptor =
+      open(accounts.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+  if (accounts_descriptor < 0) {
+    result.error = "saved account folder is not a private directory: " +
+                   accounts.string();
+    return result;
+  }
+  const ScopedDescriptor accounts_directory(accounts_descriptor);
+  struct stat accounts_status = {};
+  if (fstat(accounts_directory.get(), &accounts_status) != 0 ||
+      !IsPrivateOwnedDirectory(accounts_status)) {
+    result.error = "saved account folder is not a private directory: " +
+                   accounts.string();
+    return result;
+  }
+
+  bool pointer_missing = false;
+  const std::optional<ActiveAccountPointer> pointer =
+      ReadActiveAccountPointerAt(accounts_directory.get(), &pointer_missing);
+  if (pointer_missing) {
+    result.kind = ActiveAccountKind::kLegacy;
+    return result;
+  }
+  if (pointer.has_value() && !pointer->guest) {
+    const std::string slot = std::to_string(pointer->user_id);
+    struct stat slot_status = {};
+    if (fstatat(accounts_directory.get(), slot.c_str(), &slot_status,
+                AT_SYMLINK_NOFOLLOW) == 0 &&
+        IsPrivateOwnedDirectory(slot_status)) {
+      result.kind = ActiveAccountKind::kAccount;
+      result.user_id = pointer->user_id;
+      result.auth_root = accounts / slot;
+      return result;
+    }
+  }
+
+  const std::string guest(kGuestAccountSlotName);
+  struct stat guest_status = {};
+  if (fstatat(accounts_directory.get(), guest.c_str(), &guest_status,
+              AT_SYMLINK_NOFOLLOW) == 0) {
+    if (!IsPrivateOwnedDirectory(guest_status)) {
+      result.error = "saved account guest folder is not a private directory";
+      return result;
+    }
+  } else if (errno != ENOENT) {
+    result.error = "saved account guest folder cannot be inspected";
+    return result;
+  }
+  result.kind = pointer.has_value() && pointer->guest
+                    ? ActiveAccountKind::kGuest
+                    : ActiveAccountKind::kInvalidSelection;
+  result.auth_root = accounts / guest;
+  return result;
 }
 
 }  // namespace runtime

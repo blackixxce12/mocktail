@@ -352,7 +352,9 @@ int main(int argc, char* argv[]) {
       "MOCKTAIL_UPDATE_COMPATIBILITY_PATH",
       environment.GetOr("MOCKTAIL_COMPATIBILITY_MANIFEST",
                         MOCKTAIL_DEFAULT_COMPATIBILITY_MANIFEST));
-  const mocktail::runtime::RuntimePaths paths =
+  // Rebuilt in place once the saved account is resolved; the support-bundle
+  // guard keeps a pointer to it.
+  mocktail::runtime::RuntimePaths paths =
       mocktail::runtime::RuntimePaths::FromEnvironment(environment);
   if (command_line.options.force_run_latest) {
     std::cerr << "[runtime] WARNING: latest Roblox will run once without "
@@ -458,6 +460,31 @@ int main(int argc, char* argv[]) {
           environment, "Mocktail could not prepare its configuration.");
     }
     return EXIT_FAILURE;
+  }
+  // Every start, website joins included, signs in from the account selected
+  // in the saved-account store, so the selection has to be read after
+  // anything that may change it and before the auth root is first used.
+  const mocktail::runtime::ActiveAccountResolution active_account =
+      mocktail::runtime::ResolveActiveAccountAuthRoot(paths, environment);
+  if (!active_account) {
+    std::cerr << "[FATAL] Cannot select the saved Roblox account: "
+              << active_account.error << '\n';
+    if (command_line.options.mode == mocktail::runtime::CommandMode::kRun) {
+      (void)mocktail::runtime::ShowFailureDialog(
+          environment,
+          "Mocktail's saved account folder is not private to you.");
+    }
+    return EXIT_FAILURE;
+  }
+  if (active_account.uses_account_store()) {
+    // Exported so a re-executed child and the helpers use the same account.
+    if (setenv("MOCKTAIL_AUTH_ROOT", active_account.auth_root.c_str(), 1) !=
+        0) {
+      std::cerr << "[FATAL] Cannot select the saved Roblox account\n";
+      return EXIT_FAILURE;
+    }
+    paths = mocktail::runtime::RuntimePaths::FromEnvironment(
+        environment, paths.working_directory());
   }
   mocktail::runtime::RuntimeConfigLoadResult runtime_config =
       mocktail::runtime::LoadRuntimeConfig(environment, paths.config_file());
@@ -590,6 +617,21 @@ int main(int argc, char* argv[]) {
   if (config_bootstrap.created()) {
     std::cout << "  [runtime] created first-run configuration: "
               << paths.config_file() << '\n';
+  }
+  switch (active_account.kind) {
+    case mocktail::runtime::ActiveAccountKind::kAccount:
+      std::cout << "  [auth] saved account slot selected\n";
+      break;
+    case mocktail::runtime::ActiveAccountKind::kGuest:
+      std::cout << "  [auth] guest account slot selected\n";
+      break;
+    case mocktail::runtime::ActiveAccountKind::kInvalidSelection:
+      std::cout << "  [auth] account selection is invalid; starting signed "
+                   "out\n";
+      break;
+    case mocktail::runtime::ActiveAccountKind::kEnvironmentOverride:
+    case mocktail::runtime::ActiveAccountKind::kLegacy:
+      break;
   }
   if (command_line.options.mode == mocktail::runtime::CommandMode::kRun &&
       runtime_config.config.use_system_proxy()) {

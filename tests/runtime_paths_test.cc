@@ -3,17 +3,21 @@
 #include "compat/guest_abi.h"
 
 #include <gtest/gtest.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace mocktail {
 namespace runtime {
@@ -640,6 +644,257 @@ TEST(RuntimePathsTest, PreservesExplicitAndroidPathOverrides) {
                "/explicit/cache");
   EXPECT_STREQ(std::getenv("MOCKTAIL_VULKAN_SHADER_CACHE_HOST_PATH"),
                "/explicit/shader-cache");
+}
+
+class AccountStoreFixture {
+ public:
+  AccountStoreFixture()
+      : environment_(
+            {{"HOME", temporary_.path().string()},
+             {"XDG_DATA_HOME", (temporary_.path() / "data").string()}}),
+        paths_(
+            RuntimePaths::FromEnvironment(environment_, temporary_.path())) {}
+
+  const MapEnvironment& environment() const { return environment_; }
+  const RuntimePaths& paths() const { return paths_; }
+  std::filesystem::path accounts() const {
+    return paths_.auth_root() / "accounts";
+  }
+
+  void MakePrivateDirectory(const std::filesystem::path& path,
+                            mode_t mode = 0700) const {
+    ASSERT_TRUE(RuntimePaths::EnsureDirectory(path));
+    ASSERT_EQ(chmod(path.c_str(), mode), 0);
+  }
+
+  void WritePointer(std::string_view contents, mode_t mode = 0600) const {
+    MakePrivateDirectory(paths_.auth_root(), 0700);
+    MakePrivateDirectory(accounts());
+    const std::filesystem::path pointer = accounts() / "active";
+    std::ofstream(pointer, std::ios::binary | std::ios::trunc)
+        << std::string(contents);
+    ASSERT_EQ(chmod(pointer.c_str(), mode), 0);
+  }
+
+  ActiveAccountResolution Resolve() const {
+    return ResolveActiveAccountAuthRoot(paths_, environment_);
+  }
+
+ private:
+  TemporaryDirectory temporary_;
+  MapEnvironment environment_;
+  RuntimePaths paths_;
+};
+
+TEST(ActiveAccountTest, ParsesCanonicalUserIdsOnly) {
+  std::int64_t user_id = 0;
+  EXPECT_TRUE(ParseAccountUserId("1", &user_id));
+  EXPECT_EQ(user_id, 1);
+  EXPECT_TRUE(ParseAccountUserId("9223372036854775807", &user_id));
+  EXPECT_EQ(user_id, INT64_MAX);
+  for (const std::string_view invalid :
+       {"", "0", "01", "-1", "+1", "1 ", " 1", "1a", "../x", "guest",
+        "9223372036854775808", "18446744073709551616",
+        "12345678901234567890"}) {
+    EXPECT_FALSE(ParseAccountUserId(invalid, &user_id)) << invalid;
+  }
+}
+
+TEST(ActiveAccountTest, ParsesAndFormatsThePointer) {
+  std::optional<ActiveAccountPointer> pointer =
+      ParseActiveAccountPointer("guest\n");
+  ASSERT_TRUE(pointer.has_value());
+  EXPECT_TRUE(pointer->guest);
+  pointer = ParseActiveAccountPointer("guest");
+  ASSERT_TRUE(pointer.has_value());
+  EXPECT_TRUE(pointer->guest);
+  pointer = ParseActiveAccountPointer("42\n");
+  ASSERT_TRUE(pointer.has_value());
+  EXPECT_FALSE(pointer->guest);
+  EXPECT_EQ(pointer->user_id, 42);
+  EXPECT_EQ(FormatActiveAccountPointer(*pointer), "42\n");
+  EXPECT_EQ(FormatActiveAccountPointer(ActiveAccountPointer{}), "guest\n");
+  for (const std::string_view invalid :
+       {"", "\n", "guest\n\n", "Guest", "guest\r\n", "42\n\n", "0\n", "01",
+        "../42", "42/", "\n42", "42 \n",
+        "123456789012345678901234567890123"}) {
+    EXPECT_FALSE(ParseActiveAccountPointer(invalid).has_value()) << invalid;
+  }
+}
+
+TEST(ActiveAccountTest, EnvironmentOverridesKeepTheAuthRoot) {
+  for (const char* name : {"MOCKTAIL_AUTH_ROOT", "MOCKTAIL_COOKIE_FILE",
+                           "MOCKTAIL_ROBLOX_COOKIES"}) {
+    TemporaryDirectory temporary;
+    const MapEnvironment base({{"HOME", temporary.path().string()}});
+    const RuntimePaths paths =
+        RuntimePaths::FromEnvironment(base, temporary.path());
+    ASSERT_TRUE(RuntimePaths::EnsureDirectory(paths.auth_root() / "accounts"));
+    std::ofstream(paths.auth_root() / "accounts/active") << "guest\n";
+    const MapEnvironment environment(
+        {{"HOME", temporary.path().string()}, {name, "/elsewhere"}});
+    const ActiveAccountResolution resolution =
+        ResolveActiveAccountAuthRoot(paths, environment);
+    ASSERT_TRUE(resolution) << name;
+    EXPECT_EQ(resolution.kind, ActiveAccountKind::kEnvironmentOverride)
+        << name;
+    EXPECT_FALSE(resolution.uses_account_store());
+    EXPECT_EQ(resolution.auth_root, paths.auth_root());
+  }
+}
+
+TEST(ActiveAccountTest, WithoutAPointerTheLegacyRootStays) {
+  AccountStoreFixture store;
+  ActiveAccountResolution resolution = store.Resolve();
+  ASSERT_TRUE(resolution);
+  EXPECT_EQ(resolution.kind, ActiveAccountKind::kLegacy);
+  EXPECT_EQ(resolution.auth_root, store.paths().auth_root());
+
+  // An interrupted migration leaves accounts/ without the pointer.
+  store.MakePrivateDirectory(store.accounts() / "42");
+  resolution = store.Resolve();
+  ASSERT_TRUE(resolution);
+  EXPECT_EQ(resolution.kind, ActiveAccountKind::kLegacy);
+  EXPECT_FALSE(resolution.uses_account_store());
+  EXPECT_EQ(resolution.auth_root, store.paths().auth_root());
+
+  // Nothing in a folder without the pointer is trusted, whatever its mode.
+  ASSERT_EQ(chmod(store.accounts().c_str(), 0755), 0);
+  resolution = store.Resolve();
+  ASSERT_TRUE(resolution);
+  EXPECT_EQ(resolution.kind, ActiveAccountKind::kLegacy);
+}
+
+TEST(ActiveAccountTest, SelectsTheGuestSlot) {
+  AccountStoreFixture store;
+  store.WritePointer("guest\n");
+  ActiveAccountResolution resolution = store.Resolve();
+  ASSERT_TRUE(resolution) << resolution.error;
+  EXPECT_EQ(resolution.kind, ActiveAccountKind::kGuest);
+  EXPECT_TRUE(resolution.uses_account_store());
+  EXPECT_EQ(resolution.auth_root, store.accounts() / "guest");
+
+  store.MakePrivateDirectory(store.accounts() / "guest");
+  resolution = store.Resolve();
+  ASSERT_TRUE(resolution) << resolution.error;
+  EXPECT_EQ(resolution.kind, ActiveAccountKind::kGuest);
+}
+
+TEST(ActiveAccountTest, SelectsAPrivateAccountDirectory) {
+  AccountStoreFixture store;
+  store.WritePointer("42\n");
+  store.MakePrivateDirectory(store.accounts() / "42");
+  const ActiveAccountResolution resolution = store.Resolve();
+  ASSERT_TRUE(resolution) << resolution.error;
+  EXPECT_EQ(resolution.kind, ActiveAccountKind::kAccount);
+  EXPECT_EQ(resolution.user_id, 42);
+  EXPECT_EQ(resolution.auth_root, store.accounts() / "42");
+
+  const MapEnvironment exported({{"HOME", "/unused"},
+                                 {"MOCKTAIL_AUTH_ROOT",
+                                  resolution.auth_root.string()}});
+  EXPECT_EQ(RuntimePaths::FromEnvironment(exported, "/").cookie_file(),
+            store.accounts() / "42/roblox.cookie");
+}
+
+TEST(ActiveAccountTest, AnUnusableSelectionStartsSignedOut) {
+  struct Case {
+    const char* name;
+    std::string pointer;
+    mode_t pointer_mode;
+    std::function<void(const AccountStoreFixture&)> prepare;
+  };
+  const std::vector<Case> cases = {
+      {"missing account directory", "42\n", 0600, nullptr},
+      {"garbage pointer", "../42\n", 0600,
+       [](const AccountStoreFixture& store) {
+         store.MakePrivateDirectory(store.accounts() / "42");
+       }},
+      {"zero id", "0\n", 0600, nullptr},
+      {"oversized pointer", std::string(40, '1'), 0600, nullptr},
+      {"group-readable pointer", "42\n", 0640,
+       [](const AccountStoreFixture& store) {
+         store.MakePrivateDirectory(store.accounts() / "42");
+       }},
+      {"shared account directory", "42\n", 0600,
+       [](const AccountStoreFixture& store) {
+         store.MakePrivateDirectory(store.accounts() / "42", 0750);
+       }},
+      {"symlinked account directory", "42\n", 0600,
+       [](const AccountStoreFixture& store) {
+         store.MakePrivateDirectory(store.accounts() / "real");
+         std::filesystem::create_directory_symlink(store.accounts() / "real",
+                                                   store.accounts() / "42");
+       }},
+      {"account path is a file", "42\n", 0600,
+       [](const AccountStoreFixture& store) {
+         std::ofstream(store.accounts() / "42") << "not a directory";
+       }},
+  };
+  for (const Case& test_case : cases) {
+    AccountStoreFixture store;
+    store.WritePointer(test_case.pointer, test_case.pointer_mode);
+    if (test_case.prepare) {
+      test_case.prepare(store);
+    }
+    const ActiveAccountResolution resolution = store.Resolve();
+    ASSERT_TRUE(resolution) << test_case.name << ": " << resolution.error;
+    EXPECT_EQ(resolution.kind, ActiveAccountKind::kInvalidSelection)
+        << test_case.name;
+    EXPECT_TRUE(resolution.uses_account_store()) << test_case.name;
+    EXPECT_EQ(resolution.auth_root, store.accounts() / "guest")
+        << test_case.name;
+  }
+}
+
+TEST(ActiveAccountTest, ASymlinkedPointerIsNotFollowed) {
+  AccountStoreFixture store;
+  store.WritePointer("guest\n");
+  store.MakePrivateDirectory(store.accounts() / "42");
+  const std::filesystem::path target = store.accounts() / "elsewhere";
+  std::ofstream(target) << "42\n";
+  ASSERT_EQ(chmod(target.c_str(), 0600), 0);
+  std::filesystem::remove(store.accounts() / "active");
+  std::filesystem::create_symlink(target, store.accounts() / "active");
+  const ActiveAccountResolution resolution = store.Resolve();
+  ASSERT_TRUE(resolution);
+  EXPECT_EQ(resolution.kind, ActiveAccountKind::kInvalidSelection);
+  EXPECT_EQ(resolution.auth_root, store.accounts() / "guest");
+}
+
+TEST(ActiveAccountTest, RefusesAnUnsafeStore) {
+  {
+    AccountStoreFixture store;
+    store.WritePointer("guest\n");
+    ASSERT_EQ(chmod(store.accounts().c_str(), 0755), 0);
+    EXPECT_FALSE(store.Resolve());
+  }
+  {
+    AccountStoreFixture store;
+    store.MakePrivateDirectory(store.paths().auth_root());
+    const std::filesystem::path real = store.paths().auth_root() / "real";
+    store.MakePrivateDirectory(real);
+    std::ofstream(real / "active") << "guest\n";
+    ASSERT_EQ(chmod((real / "active").c_str(), 0600), 0);
+    std::filesystem::create_directory_symlink(real, store.accounts());
+    const ActiveAccountResolution resolution = store.Resolve();
+    EXPECT_FALSE(resolution);
+    EXPECT_FALSE(resolution.error.empty());
+  }
+  {
+    AccountStoreFixture store;
+    store.WritePointer("guest\n");
+    store.MakePrivateDirectory(store.accounts() / "guest", 0755);
+    EXPECT_FALSE(store.Resolve());
+  }
+  {
+    AccountStoreFixture store;
+    store.WritePointer("42\n");
+    store.MakePrivateDirectory(store.accounts() / "real-guest");
+    std::filesystem::create_directory_symlink(store.accounts() / "real-guest",
+                                              store.accounts() / "guest");
+    EXPECT_FALSE(store.Resolve());
+  }
 }
 
 }  // namespace
