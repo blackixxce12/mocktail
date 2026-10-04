@@ -168,7 +168,11 @@ class RowBinding {
         context_->RegisterRow(std::move(record), std::move(keywords), {});
 
     listeners_.push_back(
-        context_->OnSettingChanged([this](std::string_view) { Refresh(); }));
+        context_->OnSettingChanged([this](std::string_view key) {
+          // Discard, reload or an import: drop half-typed input as well.
+          if (key.empty()) ResetInput();
+          Refresh();
+        }));
     listeners_.push_back(context_->OnMachineChanged([this] { Refresh(); }));
     Refresh();
   }
@@ -179,7 +183,13 @@ class RowBinding {
     updating_ = true;
     if (!spec_.key.empty()) SyncControl(value);
     updating_ = false;
-    gtk_widget_set_sensitive(row_, !context_->read_only() || spec_.key.empty());
+    const std::string unavailable =
+        spec_.unavailable ? spec_.unavailable(*context_) : std::string();
+    if (!spec_.key.empty() || spec_.unavailable) {
+      gtk_widget_set_sensitive(
+          row_,
+          unavailable.empty() && (spec_.key.empty() || !context_->read_only()));
+    }
 
     std::string base = spec_.hint.subtitle_for
                            ? spec_.hint.subtitle_for(*context_, value)
@@ -205,6 +215,7 @@ class RowBinding {
                              env->name.c_str(),
                              RedactEnvironmentValue(env->value).c_str()));
     }
+    if (!unavailable.empty()) lines.push_back(unavailable);
     const std::string warning =
         spec_.hint.warning ? spec_.hint.warning(*context_, value) : "";
 
@@ -249,6 +260,8 @@ class RowBinding {
  protected:
   // Shows `value` in the control without writing it back.
   virtual void SyncControl(const std::string& value) = 0;
+  // Forgets input that was never written (an invalid entry).
+  virtual void ResetInput() {}
   // The subtitle when the hint has no subtitle_for.
   virtual std::string BaseSubtitle(const std::string& value) const {
     (void)value;
@@ -785,6 +798,13 @@ class EntryBinding final : public RowBinding {
   void SetSubtitle(const std::string& markup) override {
     gtk_widget_set_tooltip_markup(row_,
                                   markup.empty() ? nullptr : markup.c_str());
+  }
+
+  void ResetInput() override {
+    if (!has_problem_) return;
+    has_problem_ = false;
+    context_->SetProblem(this, {});
+    gtk_widget_remove_css_class(row_, "error");
   }
 
  private:

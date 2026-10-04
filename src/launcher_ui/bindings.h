@@ -85,6 +85,13 @@ struct RowSpec {
   std::string fallback;
   // Show the reset button while the value differs from the default.
   bool resettable = true;
+  // Why the row cannot be changed right now ("Fleasion cannot be combined
+  // with the system proxy"); empty when it can. The row is then
+  // insensitive and the reason is its last subtitle line. Re-evaluated on
+  // every setting or machine change, so it may depend on other rows.
+  // Do not call gtk_widget_set_sensitive() on bound rows yourself: the
+  // binding owns their sensitivity.
+  std::function<std::string(LauncherContext& context)> unavailable;
 };
 
 struct ComboOption {
