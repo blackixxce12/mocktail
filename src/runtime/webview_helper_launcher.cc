@@ -115,8 +115,14 @@ constexpr std::string_view kControlMagic = "MWVC";
 constexpr std::string_view kEventMagic = "MWVE";
 constexpr unsigned char kControlProtocolVersion = 1;
 constexpr std::size_t kControlHeaderBytes = 12;
+constexpr std::string_view kParentWindowField = "\nparent=";
+constexpr std::string_view kModalField = "\nmodal=1";
+constexpr std::string_view kWaylandParentPrefix = "wayland:";
+constexpr std::string_view kX11ParentPrefix = "x11:";
 constexpr std::size_t kMaximumRequestBytes =
-    kProtocolHeader.size() + 20 + 1 + kMaximumWebViewUrlBytes;
+    kProtocolHeader.size() + 20 + 1 + kMaximumWebViewUrlBytes +
+    kParentWindowField.size() + kMaximumWebViewParentWindowBytes +
+    kModalField.size();
 constexpr std::string_view kInternalRoutePrefix = "www:";
 constexpr std::string_view kRobloxWebOrigin = "https://www.roblox.com/";
 
@@ -366,11 +372,20 @@ bool WriteAll(int descriptor, std::string_view bytes) {
   return true;
 }
 
-std::string EncodeRequest(std::string_view url) {
+// A request without a parent is byte-for-byte the original single-URL request.
+std::string EncodeRequest(std::string_view url,
+                          const WebViewHelperLaunchOptions& options) {
   std::string request(kProtocolHeader);
   request += std::to_string(url.size());
   request += '\n';
   request.append(url);
+  if (!options.parent_window.empty()) {
+    request.append(kParentWindowField);
+    request.append(options.parent_window);
+    if (options.modal) {
+      request.append(kModalField);
+    }
+  }
   return request;
 }
 
@@ -599,9 +614,93 @@ bool NormalizeWebViewUrl(std::string_view url, std::string *normalized_url,
   return true;
 }
 
+bool ValidateWebViewParentWindow(std::string_view parent_window,
+                                 std::string* error) {
+  const auto fail = [error](const char* message) {
+    if (error != nullptr) {
+      *error = message;
+    }
+    return false;
+  };
+  if (parent_window.empty() ||
+      parent_window.size() > kMaximumWebViewParentWindowBytes) {
+    return fail("webview parent window is empty or oversized");
+  }
+  if (parent_window.compare(0, kWaylandParentPrefix.size(),
+                            kWaylandParentPrefix) == 0) {
+    // xdg-foreign handles are opaque strings: UUIDs on Hyprland and KWin,
+    // random tokens on wlroots and Smithay. Keep them printable and unspaced.
+    const std::string_view handle =
+        parent_window.substr(kWaylandParentPrefix.size());
+    if (handle.empty() ||
+        !std::all_of(handle.begin(), handle.end(), [](char byte) {
+          const unsigned char value = static_cast<unsigned char>(byte);
+          return value > 0x20 && value < 0x7f;
+        })) {
+      return fail("webview Wayland parent handle is empty or unsafe");
+    }
+    return true;
+  }
+  if (parent_window.compare(0, kX11ParentPrefix.size(), kX11ParentPrefix) ==
+      0) {
+    const std::string_view digits =
+        parent_window.substr(kX11ParentPrefix.size());
+    unsigned long long window = 0;
+    const auto conversion =
+        std::from_chars(digits.data(), digits.data() + digits.size(), window);
+    if (digits.empty() || digits.front() == '0' ||
+        conversion.ec != std::errc() ||
+        conversion.ptr != digits.data() + digits.size() || window == 0 ||
+        window > 0xffffffffULL) {
+      return fail("webview X11 parent window id is invalid");
+    }
+    return true;
+  }
+  return fail("webview parent window has an unsupported kind");
+}
+
+WebViewHelperLaunchOptions ChooseWebViewParent(const char* policy,
+                                               std::string_view game_window,
+                                               std::string* reason) {
+  WebViewHelperLaunchOptions options;
+  const std::string_view mode =
+      policy != nullptr ? std::string_view(policy) : std::string_view();
+  std::string why;
+  if (mode == "0") {
+    why = "MOCKTAIL_WEBVIEW_PARENT=0";
+  } else if (game_window.empty()) {
+    why = "the game window has no handle to offer";
+  } else if (ValidateWebViewParentWindow(game_window, &why)) {
+    options.parent_window.assign(game_window);
+    options.modal = mode != "transient";
+    why.clear();
+  }
+  if (reason != nullptr) {
+    *reason = std::move(why);
+  }
+  return options;
+}
+
 bool DecodeWebViewRequest(std::string_view request, std::string *url,
                           std::string *error) {
   if (url == nullptr) {
+    if (error != nullptr) {
+      *error = "webview request has no output destination";
+    }
+    return false;
+  }
+  WebViewRequest decoded;
+  if (!DecodeWebViewRequest(request, &decoded, error)) {
+    return false;
+  }
+  url->swap(decoded.url);
+  std::fill(decoded.url.begin(), decoded.url.end(), '\0');
+  return true;
+}
+
+bool DecodeWebViewRequest(std::string_view request, WebViewRequest* decoded,
+                          std::string* error) {
+  if (decoded == nullptr) {
     if (error != nullptr) {
       *error = "webview request has no output destination";
     }
@@ -628,18 +727,44 @@ bool DecodeWebViewRequest(std::string_view request, std::string *url,
   const auto conversion =
       std::from_chars(length_text.data(),
                       length_text.data() + length_text.size(), expected_length);
-  const std::string_view decoded = request.substr(length_end + 1);
+  const std::string_view body = request.substr(length_end + 1);
   if (length_text.empty() || conversion.ec != std::errc() ||
       conversion.ptr != length_text.data() + length_text.size() ||
-      expected_length != decoded.size() ||
+      expected_length > body.size() ||
       expected_length > kMaximumWebViewUrlBytes ||
-      !ValidateWebViewUrl(decoded, error)) {
+      !ValidateWebViewUrl(body.substr(0, expected_length), error)) {
     if (error != nullptr && error->empty()) {
       *error = "webview request URL length is invalid";
     }
     return false;
   }
-  url->assign(decoded);
+  // Optional fields follow the URL in a fixed order: the parent window, then
+  // the modal flag, which needs a parent. Anything else is malformed.
+  std::string_view rest = body.substr(expected_length);
+  std::string_view parent_window;
+  bool modal = false;
+  if (!rest.empty()) {
+    if (rest.compare(0, kParentWindowField.size(), kParentWindowField) != 0) {
+      if (error != nullptr) {
+        *error = "webview request has unexpected trailing data";
+      }
+      return false;
+    }
+    rest.remove_prefix(kParentWindowField.size());
+    if (rest.size() >= kModalField.size() &&
+        rest.compare(rest.size() - kModalField.size(), kModalField.size(),
+                     kModalField) == 0) {
+      modal = true;
+      rest.remove_suffix(kModalField.size());
+    }
+    parent_window = rest;
+    if (!ValidateWebViewParentWindow(parent_window, error)) {
+      return false;
+    }
+  }
+  decoded->url.assign(body.substr(0, expected_length));
+  decoded->parent_window.assign(parent_window);
+  decoded->modal = modal;
   return true;
 }
 
@@ -1001,11 +1126,16 @@ bool WebViewHelperProcess::RequestClose() const {
 
 WebViewHelperLaunchResult LaunchWebViewHelper(
     const std::filesystem::path& helper, std::string_view url,
-    WebViewHelperExitObserver exit_observer) {
+    WebViewHelperExitObserver exit_observer,
+    const WebViewHelperLaunchOptions& options) {
   WebViewHelperLaunchResult result;
   std::string normalized_url;
   SensitiveStringGuard normalized_url_guard(&normalized_url);
   if (!NormalizeWebViewUrl(url, &normalized_url, &result.error)) {
+    return result;
+  }
+  if (!options.parent_window.empty() &&
+      !ValidateWebViewParentWindow(options.parent_window, &result.error)) {
     return result;
   }
   if (HostIsFreeBsd()) {
@@ -1056,7 +1186,7 @@ WebViewHelperLaunchResult LaunchWebViewHelper(
     }
   }
 
-  std::string request = EncodeRequest(normalized_url);
+  std::string request = EncodeRequest(normalized_url, options);
   SensitiveStringGuard request_guard(&request);
   const int request_descriptor =
       memfd_create("mocktail-webview-request", MFD_CLOEXEC);

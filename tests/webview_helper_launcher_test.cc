@@ -489,6 +489,183 @@ TEST(WebViewHelperLauncherTest, RejectsMalformedAndOversizedControlPackets) {
   EXPECT_FALSE(DecodeWebViewHelperControlPacket(oversized, &command, &error));
 }
 
+TEST(WebViewHelperLauncherTest, DecodesOptionalParentWindowAndModality) {
+  const std::string base =
+      "MOCKTAIL-WEBVIEW 1\n28\nhttps://www.roblox.com/login";
+  WebViewRequest decoded;
+  std::string error;
+
+  ASSERT_TRUE(DecodeWebViewRequest(base, &decoded, &error)) << error;
+  EXPECT_EQ(decoded.url, "https://www.roblox.com/login");
+  EXPECT_TRUE(decoded.parent_window.empty());
+  EXPECT_FALSE(decoded.modal);
+
+  ASSERT_TRUE(DecodeWebViewRequest(
+      base + "\nparent=wayland:0f8c2c1e-55aa-4d2b-9a0e-3b6a7f1c9d42", &decoded,
+      &error))
+      << error;
+  EXPECT_EQ(decoded.url, "https://www.roblox.com/login");
+  EXPECT_EQ(decoded.parent_window,
+            "wayland:0f8c2c1e-55aa-4d2b-9a0e-3b6a7f1c9d42");
+  EXPECT_FALSE(decoded.modal);
+
+  ASSERT_TRUE(DecodeWebViewRequest(
+      base + "\nparent=wayland:{5b7e1d2c-0000-4c4c-8888-aaaaaaaaaaaa}"
+             "\nmodal=1",
+      &decoded, &error))
+      << error;
+  EXPECT_EQ(decoded.parent_window,
+            "wayland:{5b7e1d2c-0000-4c4c-8888-aaaaaaaaaaaa}");
+  EXPECT_TRUE(decoded.modal);
+
+  ASSERT_TRUE(DecodeWebViewRequest(base + "\nparent=x11:62914563\nmodal=1",
+                                   &decoded, &error))
+      << error;
+  EXPECT_EQ(decoded.parent_window, "x11:62914563");
+  EXPECT_TRUE(decoded.modal);
+
+  // The URL-only overload accepts the same requests.
+  std::string url;
+  EXPECT_TRUE(DecodeWebViewRequest(base + "\nparent=x11:62914563", &url,
+                                   &error))
+      << error;
+  EXPECT_EQ(url, "https://www.roblox.com/login");
+
+  for (const std::string& rejected : {
+           base + "\n",
+           base + "\nmodal=1",
+           base + "\nparent=",
+           base + "\nparent=wayland:",
+           base + "\nparent=wayland:has space",
+           base + "\nparent=wayland:two\nlines",
+           base + "\nparent=x11:0",
+           base + "\nparent=x11:012",
+           base + "\nparent=x11:4294967296",
+           base + "\nparent=x11:12ab",
+           base + "\nparent=win32:12",
+           base + "\nparent=x11:12\nmodal=0",
+           base + "\nparent=x11:12\nmodal=1\nmodal=1",
+           base + "\nparent=wayland:" +
+               std::string(kMaximumWebViewParentWindowBytes, 'a'),
+       }) {
+    error.clear();
+    EXPECT_FALSE(DecodeWebViewRequest(rejected, &decoded, &error)) << rejected;
+    EXPECT_FALSE(error.empty()) << rejected;
+  }
+}
+
+TEST(WebViewHelperLauncherTest, SendsParentWindowInTheBoundedRequest) {
+  TemporaryDirectory temporary;
+  ASSERT_FALSE(temporary.path().empty());
+  const std::filesystem::path helper = temporary.path() / "fake-helper";
+  const std::filesystem::path output = temporary.path() / "request";
+  const std::filesystem::path staging = temporary.path() / "request.partial";
+  ASSERT_TRUE(WriteExecutable(helper, "#!/bin/sh\ncat > '" + staging.string() +
+                                          "' && mv '" + staging.string() +
+                                          "' '" + output.string() + "'\n"));
+
+  WebViewHelperLaunchOptions options;
+  options.parent_window = "wayland:0f8c2c1e-55aa-4d2b-9a0e-3b6a7f1c9d42";
+  options.modal = true;
+  const WebViewHelperLaunchResult result = LaunchWebViewHelper(
+      helper, "https://www.roblox.com/login", {}, options);
+  ASSERT_TRUE(result) << result.error;
+  ASSERT_TRUE(WaitForFile(output, std::chrono::seconds(2)));
+  const std::string request = ReadFile(output);
+  EXPECT_EQ(request,
+            "MOCKTAIL-WEBVIEW 1\n28\nhttps://www.roblox.com/login"
+            "\nparent=wayland:0f8c2c1e-55aa-4d2b-9a0e-3b6a7f1c9d42\nmodal=1");
+  WebViewRequest decoded;
+  std::string error;
+  ASSERT_TRUE(DecodeWebViewRequest(request, &decoded, &error)) << error;
+  EXPECT_EQ(decoded.parent_window, options.parent_window);
+  EXPECT_TRUE(decoded.modal);
+}
+
+TEST(WebViewHelperLauncherTest, ModalityWithoutParentKeepsTheOriginalRequest) {
+  TemporaryDirectory temporary;
+  ASSERT_FALSE(temporary.path().empty());
+  const std::filesystem::path helper = temporary.path() / "fake-helper";
+  const std::filesystem::path output = temporary.path() / "request";
+  const std::filesystem::path staging = temporary.path() / "request.partial";
+  ASSERT_TRUE(WriteExecutable(helper, "#!/bin/sh\ncat > '" + staging.string() +
+                                          "' && mv '" + staging.string() +
+                                          "' '" + output.string() + "'\n"));
+
+  WebViewHelperLaunchOptions options;
+  options.modal = true;
+  const WebViewHelperLaunchResult result = LaunchWebViewHelper(
+      helper, "https://www.roblox.com/login", {}, options);
+  ASSERT_TRUE(result) << result.error;
+  ASSERT_TRUE(WaitForFile(output, std::chrono::seconds(2)));
+  EXPECT_EQ(ReadFile(output),
+            "MOCKTAIL-WEBVIEW 1\n28\nhttps://www.roblox.com/login");
+}
+
+TEST(WebViewHelperLauncherTest, RejectsInvalidParentWindowBeforeSpawn) {
+  WebViewHelperLaunchOptions options;
+  options.parent_window = "wayland:bad handle";
+  const WebViewHelperLaunchResult result = LaunchWebViewHelper(
+      "/definitely/missing/helper", "https://www.roblox.com/login", {},
+      options);
+  EXPECT_FALSE(result);
+  EXPECT_FALSE(result.spawned);
+  EXPECT_NE(result.error.find("parent"), std::string::npos);
+}
+
+TEST(WebViewHelperLauncherTest, ChoosesTheGameWindowAsParent) {
+  const std::string wayland = "wayland:0f8c2c1e-55aa-4d2b-9a0e-3b6a7f1c9d42";
+  std::string reason = "stale";
+
+  WebViewHelperLaunchOptions options =
+      ChooseWebViewParent(nullptr, wayland, &reason);
+  EXPECT_EQ(options.parent_window, wayland);
+  EXPECT_TRUE(options.modal);
+  EXPECT_TRUE(reason.empty());
+
+  options = ChooseWebViewParent("", "x11:62914563", &reason);
+  EXPECT_EQ(options.parent_window, "x11:62914563");
+  EXPECT_TRUE(options.modal);
+
+  options = ChooseWebViewParent("1", wayland, &reason);
+  EXPECT_EQ(options.parent_window, wayland);
+  EXPECT_TRUE(options.modal);
+
+  options = ChooseWebViewParent("transient", wayland, &reason);
+  EXPECT_EQ(options.parent_window, wayland);
+  EXPECT_FALSE(options.modal);
+
+  // No reason requested.
+  options = ChooseWebViewParent(nullptr, "x11:5");
+  EXPECT_EQ(options.parent_window, "x11:5");
+}
+
+TEST(WebViewHelperLauncherTest, OpensItsOwnWindowWithoutAUsableGameWindow) {
+  const std::string wayland = "wayland:0f8c2c1e-55aa-4d2b-9a0e-3b6a7f1c9d42";
+  std::string reason;
+
+  WebViewHelperLaunchOptions options =
+      ChooseWebViewParent("0", wayland, &reason);
+  EXPECT_TRUE(options.parent_window.empty());
+  EXPECT_FALSE(options.modal);
+  EXPECT_NE(reason.find("MOCKTAIL_WEBVIEW_PARENT=0"), std::string::npos);
+
+  // A compositor without xdg-foreign, or a hidden game window.
+  options = ChooseWebViewParent(nullptr, "", &reason);
+  EXPECT_TRUE(options.parent_window.empty());
+  EXPECT_FALSE(options.modal);
+  EXPECT_NE(reason.find("no handle"), std::string::npos);
+
+  options = ChooseWebViewParent("transient", "wayland:bad handle", &reason);
+  EXPECT_TRUE(options.parent_window.empty());
+  EXPECT_FALSE(options.modal);
+  EXPECT_NE(reason.find("unsafe"), std::string::npos);
+
+  options = ChooseWebViewParent(nullptr, "x11:0", &reason);
+  EXPECT_TRUE(options.parent_window.empty());
+  EXPECT_FALSE(reason.empty());
+}
+
 TEST(WebViewHelperLauncherTest, RejectsInvalidUrlBeforeSpawn) {
   const WebViewHelperLaunchResult result = LaunchWebViewHelper(
       "/definitely/missing/helper", "https://example.org/login");

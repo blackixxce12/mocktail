@@ -23,6 +23,7 @@ inline constexpr std::size_t kMaximumWebViewControlPacketBytes =
 inline constexpr std::size_t kMaximumWebViewHybridEventBytes = 64 * 1024;
 inline constexpr std::size_t kMaximumWebViewEventPacketBytes =
     kMaximumWebViewHybridEventBytes + 12;
+inline constexpr std::size_t kMaximumWebViewParentWindowBytes = 256;
 
 // The launcher installs one end of a private SOCK_SEQPACKET socket at this
 // descriptor in the helper. It is never exposed through argv or the
@@ -61,11 +62,43 @@ struct WebViewHelperEvent {
   std::string payload;
 };
 
+// The game window a helper surface belongs to. Compositors and window managers
+// keep a child window above its parent, and tiling ones float it instead of
+// tiling it next to the game (which on Hyprland also ends a fullscreen game's
+// fullscreen).
+//   "wayland:<handle>"  an xdg-foreign (zxdg_exporter_v2) toplevel handle
+//   "x11:<window>"      a decimal X11 window id, for WM_TRANSIENT_FOR
+struct WebViewHelperLaunchOptions {
+  std::string parent_window;
+  // Only meaningful with a parent: the helper window is a modal dialog of the
+  // game, as the Android WebView covers the app it was opened from.
+  bool modal = false;
+};
+
+struct WebViewRequest {
+  std::string url;
+  std::string parent_window;
+  bool modal = false;
+};
+
 bool ValidateWebViewUrl(std::string_view url, std::string *error = nullptr);
 bool NormalizeWebViewUrl(std::string_view url, std::string *normalized_url,
                          std::string *error = nullptr);
+bool ValidateWebViewParentWindow(std::string_view parent_window,
+                                 std::string* error = nullptr);
+// Chooses how a web surface of the game relates to the game window.
+// `game_window` is the window as GetParentWindowHandleForHelpers() reports it
+// (empty when it has no handle); `policy` is MOCKTAIL_WEBVIEW_PARENT, or null
+// when unset. "0" opens the surface as its own window, "transient" as a child
+// the game stays usable beside, anything else as a modal child. Without a
+// usable game window it is its own window, and `reason` says why.
+WebViewHelperLaunchOptions ChooseWebViewParent(const char* policy,
+                                               std::string_view game_window,
+                                               std::string* reason = nullptr);
 bool DecodeWebViewRequest(std::string_view request, std::string *url,
                           std::string *error = nullptr);
+bool DecodeWebViewRequest(std::string_view request, WebViewRequest* decoded,
+                          std::string* error = nullptr);
 bool DecodeWebViewHelperControlPacket(std::string_view packet,
                                       WebViewHelperControlCommand* command,
                                       std::string* error = nullptr);
@@ -108,7 +141,7 @@ class WebViewHelperProcess final {
   friend struct WebViewHelperLaunchResult;
   friend WebViewHelperLaunchResult LaunchWebViewHelper(
       const std::filesystem::path&, std::string_view,
-      WebViewHelperExitObserver);
+      WebViewHelperExitObserver, const WebViewHelperLaunchOptions&);
 };
 
 struct WebViewHelperLaunchResult {
@@ -136,9 +169,12 @@ struct WebViewHelperExitObserver {
 // Internal Roblox www: routes are normalized to the fixed Roblox HTTPS origin
 // before the helper receives them. A detached reaper owns the child after a
 // successful return; this call does not wait for the helper window to close.
+// A parent window in `options` travels in the same bounded request, so the
+// helper attaches its window to the game before the window is first shown.
 WebViewHelperLaunchResult LaunchWebViewHelper(
     const std::filesystem::path& helper, std::string_view url,
-    WebViewHelperExitObserver exit_observer = {});
+    WebViewHelperExitObserver exit_observer = {},
+    const WebViewHelperLaunchOptions& options = {});
 
 } // namespace runtime
 } // namespace mocktail
