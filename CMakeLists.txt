@@ -587,6 +587,30 @@ target_link_libraries(mocktail_config_editor
     PkgConfig::LIBYAML
 )
 
+# The settings window's GTK-free model: the staged config.yaml draft,
+# environment overrides, machine profile, recommendations and search. Unit
+# tested without a display; the GTK helper below is a thin layer over it.
+add_library(mocktail_launcher_ui_model STATIC
+  src/launcher_ui/env_overrides.cc
+  src/launcher_ui/machine_profile.cc
+  src/launcher_ui/recommendations.cc
+  src/launcher_ui/search_index.cc
+  src/launcher_ui/setting_kinds.cc
+  src/launcher_ui/settings_draft.cc
+  # Pure policy shared with the game window (no SDL).
+  src/window/video_driver_policy.cc
+)
+target_include_directories(mocktail_launcher_ui_model PUBLIC include src)
+mocktail_apply_compile_options(mocktail_launcher_ui_model)
+target_link_libraries(mocktail_launcher_ui_model
+  PUBLIC
+    Mocktail::ConfigEditor
+    Mocktail::Runtime
+    Mocktail::LauncherUiLaunch
+  PRIVATE
+    PkgConfig::GIO
+)
+
 add_library(mocktail_roblox_output_device_runtime STATIC
   src/audio/roblox_output_device_bridge.cc
 )
