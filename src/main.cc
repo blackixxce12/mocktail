@@ -972,14 +972,15 @@ int main(int argc, char* argv[]) {
   if (command_line.options.mode == mocktail::runtime::CommandMode::kRun) {
     auto http_client = std::make_shared<mocktail::services::CurlHttpClient>();
     mocktail::services::BrowserTrackerService browser_tracker(*http_client);
+    // The browser tracker is device-wide. It stays out of the session file,
+    // which the credential sink rewrites with the session alone on every
+    // authenticated start, dropping the tracker and forcing a new one.
     std::filesystem::path tracker_cookie_file =
         paths.data_root() / "browser_tracker.cookie";
     bool tracker_cookie_owned = true;
     if (environment.HasNonEmpty("MOCKTAIL_COOKIE_FILE")) {
       tracker_cookie_file = environment.GetOr("MOCKTAIL_COOKIE_FILE", "");
       tracker_cookie_owned = false;
-    } else if (mocktail::runtime::RuntimePaths::Exists(paths.cookie_file())) {
-      tracker_cookie_file = paths.cookie_file();
     }
     const mocktail::services::BrowserTrackerResult browser_tracker_result =
         browser_tracker.EnsureInitialized(app_storage_file, tracker_cookie_file,
