@@ -550,7 +550,8 @@ int main(int argc, char* argv[]) {
                    "out\n";
       break;
     case mocktail::runtime::ActiveAccountKind::kEnvironmentOverride:
-      // A memory-limit re-exec inherits the slot its parent selected.
+      // A memory-limit re-exec inherits the slot its parent selected, and a
+      // restart after website sign-in keeps the slot of the run before it.
       if (mocktail::runtime::IsAccountStoreSlot(paths)) {
         std::cout << "  [auth] account slot selected by MOCKTAIL_AUTH_ROOT\n";
       }
@@ -1199,8 +1200,11 @@ int main(int argc, char* argv[]) {
         if (instance_lock.has_value()) {
           instance_lock->Release();
         }
+        // The credential sink saved the session under this run's auth
+        // root, which the restart keeps whatever the store selects.
         (void)mocktail::runtime::ExecProcessRelaunch(
-            process_start, relaunch_arguments, &relaunch_error);
+            process_start, relaunch_arguments, paths.auth_root(),
+            &relaunch_error);
       }
       // After a failed exec the log has ended; this reaches the console.
       std::cerr << "  [runtime] " << relaunch_error

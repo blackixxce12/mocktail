@@ -25,21 +25,26 @@ constexpr char kSelfExecutable[] = "/proc/self/exe";
 constexpr std::string_view kDeletedSuffix = " (deleted)";
 
 // The restart follows a website sign-in whose session the credential sink
-// saved to the managed cookie file. Each of these names a session that
+// saved under this run's auth root. Each of these names a session that
 // would be loaded in its place.
 constexpr std::string_view kSessionOverrideVariables[] = {
     "MOCKTAIL_ROBLOX_COOKIES",
     "MOCKTAIL_COOKIE_FILE",
 };
+constexpr std::string_view kAuthRootVariable = "MOCKTAIL_AUTH_ROOT";
 
 bool IsLaunchOption(std::string_view argument) {
   return argument == "--launch-uri" || argument == "--launch-request-json";
 }
 
+bool SetsVariable(std::string_view entry, std::string_view name) {
+  return entry.size() > name.size() && entry.substr(0, name.size()) == name &&
+         entry[name.size()] == '=';
+}
+
 bool IsSessionOverride(std::string_view entry) {
   for (const std::string_view name : kSessionOverrideVariables) {
-    if (entry.size() > name.size() && entry.substr(0, name.size()) == name &&
-        entry[name.size()] == '=') {
+    if (SetsVariable(entry, name)) {
       return true;
     }
   }
@@ -220,6 +225,7 @@ ProcessStartState CaptureProcessStartState() {
 
 bool ExecProcessRelaunch(const ProcessStartState& start,
                          const std::vector<std::string>& arguments,
+                         const std::filesystem::path& auth_root,
                          std::string* error) {
   if (start.executable.empty() || arguments.empty()) {
     if (error != nullptr) *error = "relaunch has no executable or arguments";
@@ -231,12 +237,24 @@ bool ExecProcessRelaunch(const ProcessStartState& start,
     argv.push_back(const_cast<char*>(argument.c_str()));
   }
   argv.push_back(nullptr);
+  // Resolved afresh, a run that a session override kept out of the account
+  // store would restart in the store's selected slot, away from the file
+  // the sign-in was saved to.
+  const std::string pinned_auth_root =
+      auth_root.empty()
+          ? std::string()
+          : std::string(kAuthRootVariable) + "=" + auth_root.string();
   std::vector<char*> envp;
-  envp.reserve(start.environment.size() + 1);
+  envp.reserve(start.environment.size() + 2);
   for (const std::string& entry : start.environment) {
-    if (!IsSessionOverride(entry)) {
-      envp.push_back(const_cast<char*>(entry.c_str()));
+    if (IsSessionOverride(entry) ||
+        (!pinned_auth_root.empty() && SetsVariable(entry, kAuthRootVariable))) {
+      continue;
     }
+    envp.push_back(const_cast<char*>(entry.c_str()));
+  }
+  if (!pinned_auth_root.empty()) {
+    envp.push_back(const_cast<char*>(pinned_auth_root.c_str()));
   }
   envp.push_back(nullptr);
 

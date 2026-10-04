@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <gtest/gtest.h>
 #include <sys/file.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -164,13 +165,14 @@ void IgnoreSignal(int) {}
 // returns its exit status, or -1 if it did not exit normally.
 template <typename Prepare>
 int RunRelaunched(const ProcessStartState& start, const std::string& script,
-                  Prepare prepare) {
+                  Prepare prepare,
+                  const std::filesystem::path& auth_root = {}) {
   const pid_t child = fork();
   if (child < 0) return -1;
   if (child == 0) {
     prepare();
     std::string error;
-    (void)ExecProcessRelaunch(start, {"sh", "-c", script}, &error);
+    (void)ExecProcessRelaunch(start, {"sh", "-c", script}, auth_root, &error);
     _exit(99);
   }
   int status = 0;
@@ -207,7 +209,7 @@ TEST(ProcessRelaunchTest, ExecUsesTheStartEnvironmentAndSignalMask) {
             7);
 }
 
-// The website sign-in saved its session to the managed cookie file. A
+// The website sign-in saved its session under the run's auth root. A
 // session named in the environment the process started with would replace
 // it, so the restart leaves those variables out, and only those.
 TEST(ProcessRelaunchTest, ExecLeavesOutSessionOverrides) {
@@ -222,6 +224,31 @@ TEST(ProcessRelaunchTest, ExecLeavesOutSessionOverrides) {
                           "test \"$MOCKTAIL_AUTH_ROOT\" = /nonexistent/auth "
                           "&& exit 7; exit 3",
                           [] {}),
+            7);
+}
+
+// The restart reads the session file under the auth root it is given, in
+// place of any MOCKTAIL_AUTH_ROOT the run started with.
+TEST(ProcessRelaunchTest, ExecPinsTheAuthRootTheSessionWasSavedUnder) {
+  const std::string script =
+      "test \"$MOCKTAIL_AUTH_ROOT\" = /run/auth && "
+      "test \"$(env | grep -c '^MOCKTAIL_AUTH_ROOT=')\" = 1 && "
+      "test -z \"${MOCKTAIL_COOKIE_FILE+set}\" && exit 7; exit 3";
+  EXPECT_EQ(RunRelaunched(ShellStart({"PATH=/usr/bin:/bin",
+                                      "MOCKTAIL_COOKIE_FILE=/alt.cookie"}),
+                          script, [] {}, "/run/auth"),
+            7);
+  EXPECT_EQ(RunRelaunched(ShellStart({"PATH=/usr/bin:/bin",
+                                      "MOCKTAIL_AUTH_ROOT=/old/auth",
+                                      "MOCKTAIL_AUTH_ROOT=/older/auth"}),
+                          script, [] {}, "/run/auth"),
+            7);
+  EXPECT_EQ(RunRelaunched(ShellStart({"PATH=/usr/bin:/bin",
+                                      "MOCKTAIL_AUTH_ROOTS=kept"}),
+                          "test \"$MOCKTAIL_AUTH_ROOTS\" = kept && "
+                          "test \"$MOCKTAIL_AUTH_ROOT\" = /run/auth && "
+                          "exit 7; exit 3",
+                          [] {}, "/run/auth"),
             7);
 }
 
@@ -304,7 +331,7 @@ TEST(ProcessRelaunchTest, FailedExecReportsTheErrorAndRestoresTheProcess) {
   ASSERT_EQ(sigaction(SIGUSR2, &ignore, &previous_action), 0);
 
   std::string error;
-  EXPECT_FALSE(ExecProcessRelaunch(start, {"mocktail"}, &error));
+  EXPECT_FALSE(ExecProcessRelaunch(start, {"mocktail"}, {}, &error));
   EXPECT_NE(error.find("cannot restart Mocktail"), std::string::npos);
   EXPECT_EQ(write(pipe_ends[1], "x", 1), 1);
   EXPECT_EQ(std::filesystem::current_path(directory_error).string(),
@@ -315,8 +342,8 @@ TEST(ProcessRelaunchTest, FailedExecReportsTheErrorAndRestoresTheProcess) {
   close(pipe_ends[0]);
   close(pipe_ends[1]);
   start.executable.clear();
-  EXPECT_FALSE(ExecProcessRelaunch(start, {"mocktail"}, &error));
-  EXPECT_FALSE(ExecProcessRelaunch(ShellStart({}), {}, &error));
+  EXPECT_FALSE(ExecProcessRelaunch(start, {"mocktail"}, {}, &error));
+  EXPECT_FALSE(ExecProcessRelaunch(ShellStart({}), {}, {}, &error));
 }
 
 // The session log writer is forked after the lock is taken and keeps a copy
@@ -440,7 +467,7 @@ TEST(ProcessRelaunchTest, RestartHandsTheLockAndConsoleToTheNewProcess) {
         {"sh", "-c",
          "flock -n '" + lock_file.string() +
              "' true && echo new-run-marker && exit 7; exit 3"},
-        &error);
+        paths.auth_root(), &error);
     _exit(99);
   }
   close(release[0]);
@@ -465,6 +492,97 @@ TEST(ProcessRelaunchTest, RestartHandsTheLockAndConsoleToTheNewProcess) {
 
   // The helper, then the old writer, end.
   close(release[1]);
+  std::filesystem::remove_all(root, error);
+}
+
+// Reads the NAME=value lines env printed.
+MapEnvironment ReadEnvironmentDump(const std::filesystem::path& path) {
+  std::unordered_map<std::string, std::string> values;
+  std::ifstream input(path);
+  for (std::string line; std::getline(input, line);) {
+    const std::size_t equals = line.find('=');
+    if (equals != std::string::npos && equals > 0) {
+      values[line.substr(0, equals)] = line.substr(equals + 1);
+    }
+  }
+  return MapEnvironment(std::move(values));
+}
+
+// The session file main() starts from: the selected slot's when the store
+// chooses, else the one under the auth root the environment gives.
+std::filesystem::path StartingCookieFile(
+    const Environment& environment,
+    const std::filesystem::path& working_directory) {
+  const RuntimePaths paths =
+      RuntimePaths::FromEnvironment(environment, working_directory);
+  const ActiveAccountResolution resolution =
+      ResolveActiveAccountAuthRoot(paths, environment);
+  EXPECT_TRUE(resolution) << resolution.error;
+  return resolution.uses_account_store()
+             ? resolution.auth_root / "roblox.cookie"
+             : paths.cookie_file();
+}
+
+// MOCKTAIL_COOKIE_FILE or MOCKTAIL_ROBLOX_COOKIES makes a run ignore the
+// account store, so the credential sink saves a website sign-in under the
+// run's own auth root. The restart leaves the override out and must still
+// read that file, not the session of the account the store selects. A run
+// in a store slot restarts in that slot.
+TEST(ProcessRelaunchTest, RestartReadsTheSessionTheRunSaved) {
+  char pattern[] = "/tmp/mocktail_relaunch_store_XXXXXX";
+  const char* directory = mkdtemp(pattern);
+  ASSERT_NE(directory, nullptr);
+  const std::filesystem::path root(directory);
+  const std::string home = (root / "home").string();
+  const RuntimePaths base =
+      RuntimePaths::FromEnvironment(MapEnvironment({{"HOME", home}}), root);
+  // The launcher selected account 42.
+  const std::filesystem::path accounts = base.auth_root() / "accounts";
+  ASSERT_TRUE(RuntimePaths::EnsureDirectory(accounts / "42"));
+  for (const std::filesystem::path& path :
+       {base.auth_root(), accounts, accounts / "42"}) {
+    ASSERT_EQ(chmod(path.c_str(), 0700), 0);
+  }
+  std::ofstream(accounts / "active") << "42\n";
+  ASSERT_EQ(chmod((accounts / "active").c_str(), 0600), 0);
+
+  const std::filesystem::path dump = root / "restart.env";
+  const std::vector<std::pair<std::string, std::string>> overrides = {
+      {"MOCKTAIL_COOKIE_FILE", (root / "alt.cookie").string()},
+      {"MOCKTAIL_ROBLOX_COOKIES", ".ROBLOSECURITY=placeholder"},
+  };
+  for (const auto& [name, value] : overrides) {
+    SCOPED_TRACE(name);
+    const MapEnvironment run({{"HOME", home}, {name, value}});
+    // main() keeps an override run's paths, so the sink writes here.
+    const RuntimePaths run_paths = RuntimePaths::FromEnvironment(run, root);
+    ASSERT_EQ(ResolveActiveAccountAuthRoot(run_paths, run).kind,
+              ActiveAccountKind::kEnvironmentOverride);
+    const ProcessStartState start = ShellStart(
+        {"PATH=/usr/bin:/bin", "HOME=" + home, name + "=" + value});
+    ASSERT_EQ(RunRelaunched(start,
+                            "env > '" + dump.string() + "' && exit 7; exit 3",
+                            [] {}, run_paths.auth_root()),
+              7);
+    EXPECT_EQ(StartingCookieFile(ReadEnvironmentDump(dump), root),
+              run_paths.cookie_file());
+  }
+
+  // main() exports the selected slot and rebuilds its paths.
+  const MapEnvironment run({{"HOME", home}});
+  const ActiveAccountResolution selected = ResolveActiveAccountAuthRoot(
+      RuntimePaths::FromEnvironment(run, root), run);
+  ASSERT_EQ(selected.kind, ActiveAccountKind::kAccount);
+  const MapEnvironment exported(
+      {{"HOME", home}, {"MOCKTAIL_AUTH_ROOT", selected.auth_root.string()}});
+  const RuntimePaths slot_paths = RuntimePaths::FromEnvironment(exported, root);
+  ASSERT_EQ(RunRelaunched(ShellStart({"PATH=/usr/bin:/bin", "HOME=" + home}),
+                          "env > '" + dump.string() + "' && exit 7; exit 3",
+                          [] {}, slot_paths.auth_root()),
+            7);
+  EXPECT_EQ(StartingCookieFile(ReadEnvironmentDump(dump), root),
+            accounts / "42/roblox.cookie");
+  std::error_code error;
   std::filesystem::remove_all(root, error);
 }
 

@@ -3,6 +3,7 @@
 
 #include <signal.h>
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -43,16 +44,21 @@ struct ProcessStartState {
 ProcessStartState CaptureProcessStartState();
 
 // Replaces this process image with |start.executable| running |arguments| in
-// |start|'s working directory and environment. MOCKTAIL_ROBLOX_COOKIES and
-// MOCKTAIL_COOKIE_FILE are left out: the restart follows a website sign-in
-// whose session went to the managed cookie file, and either would load the
-// session that was signed out instead. Every descriptor above stderr is made
-// close-on-exec first, so nothing this run opened (database locks, sockets,
-// pipes to helpers) reaches the new process, and the signal mask and which
-// signals are ignored return to |start|'s. Returns only on failure, with the
-// working directory and signal state restored.
+// |start|'s working directory and environment, set up to start from the
+// session the website sign-in saved. The credential sink wrote it to
+// roblox.cookie under |auth_root|, this run's auth root, and
+// MOCKTAIL_AUTH_ROOT is set to that root (an empty path keeps |start|'s).
+// MOCKTAIL_ROBLOX_COOKIES and MOCKTAIL_COOKIE_FILE are left out, since either
+// would load the session that was signed out instead; without the pinned
+// root, a run they overrode would then restart in the account store's
+// selected slot rather than with the new session. Every descriptor above
+// stderr is made close-on-exec first, so nothing this run opened (database
+// locks, sockets, pipes to helpers) reaches the new process, and the signal
+// mask and which signals are ignored return to |start|'s. Returns only on
+// failure, with the working directory and signal state restored.
 bool ExecProcessRelaunch(const ProcessStartState& start,
                          const std::vector<std::string>& arguments,
+                         const std::filesystem::path& auth_root,
                          std::string* error);
 
 }  // namespace runtime
