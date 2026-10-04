@@ -612,6 +612,23 @@ target_link_libraries(mocktail_launcher_ui_model
     PkgConfig::GIO
 )
 
+# GTK-free rules of the Integrations, Network & Updates, Advanced and About
+# pages (Discord and proxy validation, Fleasion conflicts, the updater's
+# answers, Fast Flag conflicts, diagnostics). Unit tested without a display.
+add_library(mocktail_launcher_ui_page_rules STATIC
+  src/launcher_ui/page_rules.cc
+)
+target_include_directories(mocktail_launcher_ui_page_rules PUBLIC include src)
+mocktail_apply_compile_options(mocktail_launcher_ui_page_rules)
+target_link_libraries(mocktail_launcher_ui_page_rules
+  PUBLIC
+    Mocktail::ConfigEditor
+    Mocktail::Runtime
+    mocktail_launcher_ui_model
+  PRIVATE
+    nlohmann_json::nlohmann_json
+)
+
 # The settings window: a GTK helper mocktail runs before Roblox
 # (include/runtime/launcher_ui_launch.h). It needs libadwaita 1.9 (AdwSidebar);
 # without it, configure with -DMOCKTAIL_BUILD_LAUNCHER_UI=OFF and mocktail
