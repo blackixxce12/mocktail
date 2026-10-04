@@ -463,7 +463,9 @@ GtkWidget* LauncherWindow::BuildLaunchBar() {
 }
 
 void LauncherWindow::Refresh() {
-  if (window_ == nullptr || finished_) return;
+  // Pages are built before the banner and the launch bar exist, and may
+  // already report (AddDirtySource); the constructor refreshes at its end.
+  if (window_ == nullptr || finished_ || play_button_ == nullptr) return;
   BannerKind kind = BannerKind::kConfigError;
   const Banner* banner = context_->TopBanner(&kind);
   if (banner != nullptr) {
