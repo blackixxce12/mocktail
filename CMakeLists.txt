@@ -448,6 +448,7 @@ mocktail_apply_compile_options(mocktail_credential_store)
 # Saved-account store and browser sign-in, shared by mocktail and the
 # launcher. GTK-free and without jnivm.
 add_library(mocktail_account_store STATIC
+  src/runtime/account_store.cc
   src/runtime/browser_sign_in.cc
 )
 add_library(Mocktail::AccountStore ALIAS mocktail_account_store)
@@ -458,6 +459,10 @@ target_link_libraries(mocktail_account_store PUBLIC
   mocktail_services
   mocktail_webview_launcher
   Threads::Threads
+)
+target_link_libraries(mocktail_account_store PRIVATE
+  OpenSSL::Crypto
+  nlohmann_json::nlohmann_json
 )
 mocktail_apply_compile_options(mocktail_account_store)
 

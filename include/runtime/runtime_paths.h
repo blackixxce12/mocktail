@@ -147,6 +147,16 @@ struct ActiveAccountPointer {
   std::int64_t user_id = 0;
 };
 
+inline bool operator==(const ActiveAccountPointer& left,
+                       const ActiveAccountPointer& right) {
+  return left.guest == right.guest &&
+         (left.guest || left.user_id == right.user_id);
+}
+inline bool operator!=(const ActiveAccountPointer& left,
+                       const ActiveAccountPointer& right) {
+  return !(left == right);
+}
+
 std::optional<ActiveAccountPointer> ParseActiveAccountPointer(
     std::string_view contents);
 std::string FormatActiveAccountPointer(const ActiveAccountPointer& pointer);

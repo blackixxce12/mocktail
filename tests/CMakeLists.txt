@@ -761,6 +761,14 @@ target_link_libraries(browser_sign_in_test PRIVATE
 )
 mocktail_apply_compile_options(browser_sign_in_test)
 
+add_executable(account_store_test account_store_test.cc)
+target_link_libraries(account_store_test PRIVATE
+  Mocktail::AccountStore
+  nlohmann_json::nlohmann_json
+  GTest::gtest_main
+)
+mocktail_apply_compile_options(account_store_test)
+
 add_executable(client_settings_service_test client_settings_service_test.cc)
 target_link_libraries(client_settings_service_test PRIVATE
   Mocktail::Services
@@ -1104,6 +1112,7 @@ gtest_discover_tests(auth_service_test)
 gtest_discover_tests(auth_runtime_composition_test)
 gtest_discover_tests(private_credential_file_test)
 gtest_discover_tests(browser_sign_in_test)
+gtest_discover_tests(account_store_test)
 gtest_discover_tests(client_settings_service_test)
 gtest_discover_tests(elf_build_id_test)
 gtest_discover_tests(build_profile_test)
