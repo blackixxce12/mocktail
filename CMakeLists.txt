@@ -514,6 +514,28 @@ target_link_libraries(mocktail_window PUBLIC
     nlohmann_json::nlohmann_json
 )
 
+# Editors behind the settings window (config.yaml, window-state.json,
+# fflags.json, the desktop shortcut). GTK-free so they are unit tested; the
+# window itself is a separate helper process.
+add_library(mocktail_config_editor STATIC
+  src/launcher/config_document.cc
+  src/launcher/private_file.cc
+  src/launcher/yaml_layout.cc
+)
+add_library(Mocktail::ConfigEditor ALIAS mocktail_config_editor)
+target_include_directories(mocktail_config_editor PUBLIC include)
+mocktail_apply_compile_options(mocktail_config_editor)
+target_link_libraries(mocktail_config_editor
+  PUBLIC
+    Mocktail::Runtime
+  PRIVATE
+    mocktail_update_config
+    mocktail_window_state
+    nlohmann_json::nlohmann_json
+    PkgConfig::GIO
+    PkgConfig::LIBYAML
+)
+
 add_library(mocktail_roblox_output_device_runtime STATIC
   src/audio/roblox_output_device_bridge.cc
 )
