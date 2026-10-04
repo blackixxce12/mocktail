@@ -289,6 +289,14 @@ void LauncherWindow::Reveal(GtkWidget* widget) {
       break;
     }
   }
+  // A row inside a collapsed expander row (advanced options) cannot take
+  // focus until the expander is open.
+  for (GtkWidget* parent = gtk_widget_get_parent(widget); parent != nullptr;
+       parent = gtk_widget_get_parent(parent)) {
+    if (ADW_IS_EXPANDER_ROW(parent)) {
+      adw_expander_row_set_expanded(ADW_EXPANDER_ROW(parent), TRUE);
+    }
+  }
   // Focusing scrolls the page's viewport to the row.
   gtk_widget_grab_focus(widget);
   gtk_widget_add_css_class(widget, "search-highlight");
