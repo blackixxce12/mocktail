@@ -80,12 +80,13 @@ if [[ "$1" == --make-appimage ]]; then
   cp -- "$(type -P true)" "${OUTPATH}/${OUTNAME}"
   exit 0
 fi
-[[ "$#" == 7 && "$1" == /usr/bin/mocktail &&
+[[ "$#" == 8 && "$1" == /usr/bin/mocktail &&
    "$2" == /usr/lib/mocktail/mocktail_webview_helper &&
    "$3" == /usr/lib/mocktail/mocktail_failure_dialog &&
-   "$4" == /usr/lib/mocktail/mocktail_updater &&
-   "$5" == /usr/lib/mocktail && "$6" == /usr/share/mocktail &&
-   "$7" == /usr/bin/bash ]]
+   "$4" == /usr/lib/mocktail/mocktail_launcher_ui &&
+   "$5" == /usr/lib/mocktail/mocktail_updater &&
+   "$6" == /usr/lib/mocktail && "$7" == /usr/share/mocktail &&
+   "$8" == /usr/bin/bash ]]
 [[ "${DESKTOP}" == /usr/share/applications/space.bigrat.mocktail.desktop ]]
 [[ "${MAIN_BIN}" == mocktail && "${STRACE_MODE}" == 1 ]]
 [[ "${STRACE_BINARY}" == mocktail && "${STRACE_FLAGS}" == --help ]]
@@ -109,8 +110,8 @@ for metadata in roblox_compatibility roblox_bootstrap_sources \
     roblox_host_abi_reference roblox_signing_certificates; do
   printf '{}\n' >"${APPDIR}/share/mocktail/metadata/${metadata}.json"
 done
-for name in mocktail_updater mocktail_failure_dialog mocktail_webview_helper \
-    WebKitNetworkProcess WebKitWebProcess WebKitGPUProcess; do
+for name in mocktail_updater mocktail_failure_dialog mocktail_launcher_ui \
+    mocktail_webview_helper WebKitNetworkProcess WebKitWebProcess WebKitGPUProcess; do
   cp -- "$(type -P true)" "${APPDIR}/bin/${name}"
 done
 for name in WebKitNetworkProcess WebKitWebProcess WebKitGPUProcess; do
@@ -160,6 +161,8 @@ output="$(
   [[ "${USE_HOST_XDG_CACHE_HOME}" == 1 &&
      "${XDG_CACHE_HOME}" == "${TEMP_DIR}/user-cache" ]]
   [[ "${MOCKTAIL_WEBVIEW_HELPER}" == "${app_dir}/bin/mocktail_webview_helper" ]]
+  [[ "${MOCKTAIL_LAUNCHER_UI_HELPER}" == "${app_dir}/bin/mocktail_launcher_ui" ]]
+  [[ "${MOCKTAIL_LOCALE_DIR}" == "${app_dir}/share/locale" ]]
   [[ "${MOCKTAIL_UPDATE_SIGNING_TRUST_PATH}" == \
      "${app_dir}/share/mocktail/metadata/roblox_signing_certificates.json" ]]
   [[ "${MOCKTAIL_COMPATIBILITY_MANIFEST}" == "${TEMP_DIR}/candidate-override.json" ]]
@@ -214,7 +217,8 @@ set -Eeuo pipefail
 prefix="${DESTDIR}/usr"
 mkdir -p "${prefix}/bin" "${prefix}/lib/mocktail" "${prefix}/share/mocktail/metadata"
 cp -- "${MOCKTAIL_PACKAGING_FIXTURES}/mocktail" "${prefix}/bin/mocktail"
-for helper in mocktail_updater mocktail_failure_dialog mocktail_webview_helper; do
+for helper in mocktail_updater mocktail_failure_dialog mocktail_launcher_ui \
+    mocktail_webview_helper; do
   cp -- "$(type -P true)" "${prefix}/lib/mocktail/${helper}"
 done
 for adapter in libEGL.so libvulkan.so libmediandk.so; do

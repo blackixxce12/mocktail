@@ -75,6 +75,7 @@ AnyLinuxVerifyInstalled() {
   for entry in /usr/bin/mocktail \
       /usr/lib/mocktail/mocktail_updater \
       /usr/lib/mocktail/mocktail_failure_dialog \
+      /usr/lib/mocktail/mocktail_launcher_ui \
       /usr/lib/mocktail/mocktail_webview_helper; do
     [[ -x "${entry}" ]] || AnyLinuxDie "missing installed executable: ${entry}"
   done
@@ -100,7 +101,7 @@ AnyLinuxVerifyAppDir() {
   [[ ! -e "${app_dir}/share/mocktail-bundle" ]] ||
     AnyLinuxDie "a portable bundle was embedded in AppDir"
   for entry in mocktail mocktail_updater mocktail_failure_dialog \
-      mocktail_webview_helper; do
+      mocktail_launcher_ui mocktail_webview_helper; do
     [[ -x "${app_dir}/bin/${entry}" ]] ||
       AnyLinuxDie "quick-sharun did not deploy ${entry}"
   done
@@ -193,9 +194,20 @@ EOF
     /usr/bin/mocktail \
     /usr/lib/mocktail/mocktail_webview_helper \
     /usr/lib/mocktail/mocktail_failure_dialog \
+    /usr/lib/mocktail/mocktail_launcher_ui \
     /usr/lib/mocktail/mocktail_updater \
     /usr/lib/mocktail /usr/share/mocktail /usr/bin/bash
   AnyLinuxVerifyAppDir "${app_dir}"
+  # DEPLOY_LOCALE=0 keeps toolkit catalogues out; the settings window's
+  # own catalogues are found through MOCKTAIL_LOCALE_DIR (anylinux.env).
+  local catalogue language
+  for catalogue in /usr/share/locale/*/LC_MESSAGES/mocktail.mo; do
+    [[ -f "${catalogue}" ]] || continue
+    language="${catalogue#/usr/share/locale/}"
+    language="${language%%/*}"
+    install -D -m 0644 -- "${catalogue}" \
+      "${app_dir}/share/locale/${language}/LC_MESSAGES/mocktail.mo"
+  done
 
   # Use the upstream creation entry point, rather than maintaining a second
   # appimagetool invocation and a second copy of the userspace libraries.

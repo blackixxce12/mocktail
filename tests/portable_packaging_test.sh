@@ -28,7 +28,7 @@ grep -q '^artifact_name=mocktail-linux-x86_64-glibc-standalone$' \
   <<<"${dry_run}"
 grep -q '^interpreter=.*/ld-linux-x86-64\.so\.2$' <<<"${dry_run}"
 grep -q '^android_tools_libc=glibc$' <<<"${dry_run}"
-grep -q '^project_artifacts=17$' <<<"${dry_run}"
+grep -q '^project_artifacts=18$' <<<"${dry_run}"
 grep -q 'host=libc\.so\.6 reason=glibc' <<<"${dry_run}"
 grep -q 'host=libEGL\.so\.1 reason=gpu-driver-stack' <<<"${dry_run}"
 ! grep -q 'host=libwebkitgtk-6\.0\.so\.4' <<<"${dry_run}"
@@ -121,8 +121,10 @@ for path in \
     mocktail/bin/mocktail \
     mocktail/bin/mocktail_updater \
     mocktail/bin/mocktail_failure_dialog \
+    mocktail/bin/mocktail_launcher_ui \
     mocktail/bin/mocktail_webview_helper \
     mocktail/bin/mocktail_freebsd_socket_helper \
+    mocktail/share/locale/ru/LC_MESSAGES/mocktail.mo \
     mocktail/bin/libEGL.so \
     mocktail/bin/libvulkan.so \
     mocktail/runtime \
@@ -275,6 +277,8 @@ EOF
     "${musl_runtime}/bin/mocktail_updater"
   cp -- "${musl_runtime}/bin/mocktail" \
     "${musl_runtime}/bin/mocktail_webview_helper"
+  cp -- "${musl_runtime}/bin/mocktail" \
+    "${musl_runtime}/bin/mocktail_launcher_ui"
   for tool in aapt apkanalyzer apksigner; do
     cat >"${musl_runtime}/runtime/android-tools/bin/${tool}" <<'EOF'
 #!/usr/bin/env bash

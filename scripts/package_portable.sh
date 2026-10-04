@@ -34,6 +34,7 @@ readonly -a PROJECT_ARTIFACTS=(
   mocktail
   mocktail_updater
   mocktail_failure_dialog
+  mocktail_launcher_ui
   mocktail_webview_helper
   libmocktail_audio_sdl.so
   libc.so
@@ -484,6 +485,15 @@ CopyRuntimeTree() {
   done
   install -m 0755 -- "${BUILD_DIR}/${FREEBSD_SOCKET_HELPER}" \
     "${runtime_root}/bin/${FREEBSD_SOCKET_HELPER}"
+  # The settings window's catalogues, found from bin/ as ../share/locale.
+  local catalogue language
+  for catalogue in "${BUILD_DIR}"/locale/*/LC_MESSAGES/mocktail.mo; do
+    [[ -f "${catalogue}" ]] || continue
+    language="${catalogue#"${BUILD_DIR}"/locale/}"
+    language="${language%%/*}"
+    install -D -m 0644 -- "${catalogue}" \
+      "${runtime_root}/share/locale/${language}/LC_MESSAGES/mocktail.mo"
+  done
 
   install -m 0755 -- "${PROJECT_ROOT}/packaging/run.sh" "${STAGING}/run.sh"
   install -m 0755 -- "${PROJECT_ROOT}/packaging/mocktail-launcher.sh" \
@@ -758,6 +768,7 @@ PatchRuntimePaths() {
   patchelf --set-rpath '$ORIGIN:$ORIGIN/../lib' \
     "${STAGING}/mocktail/bin/mocktail" \
     "${STAGING}/mocktail/bin/mocktail_failure_dialog" \
+    "${STAGING}/mocktail/bin/mocktail_launcher_ui" \
     "${STAGING}/mocktail/bin/mocktail_webview_helper"
 }
 

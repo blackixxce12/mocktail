@@ -42,6 +42,7 @@ fi
 MAIN_BINARY="${BIN_DIR}/mocktail"
 UPDATE_HELPER="${BIN_DIR}/mocktail_updater"
 FAILURE_DIALOG_HELPER="${BIN_DIR}/mocktail_failure_dialog"
+LAUNCHER_UI_HELPER="${BIN_DIR}/mocktail_launcher_ui"
 WEBVIEW_HELPER="${BIN_DIR}/mocktail_webview_helper"
 FREEBSD_SOCKET_HELPER="${BUNDLED_BIN_DIR}/mocktail_freebsd_socket_helper"
 ANDROID_BUILD_TOOLS="${RUNTIME_ROOT}/runtime/android-tools/bin"
@@ -424,6 +425,7 @@ CheckSystem() {
   if [[ "${ABI_MODE}" == thin ]]; then
     CheckElfDependencies "${MAIN_BINARY}" runtime || status=1
     CheckElfDependencies "${FAILURE_DIALOG_HELPER}" libadwaita/GTK || status=1
+    CheckElfDependencies "${LAUNCHER_UI_HELPER}" libadwaita/GTK || status=1
     CheckElfDependencies "${WEBVIEW_HELPER}" WebKit/GTK || status=1
   fi
 
@@ -487,6 +489,8 @@ CheckSystem() {
 [[ -x "${FAILURE_DIALOG_HELPER}" ]] ||
   Die "missing executable: ${FAILURE_DIALOG_HELPER}"
 [[ -x "${WEBVIEW_HELPER}" ]] || Die "missing WebView helper: ${WEBVIEW_HELPER}"
+[[ -x "${LAUNCHER_UI_HELPER}" ]] ||
+  Die "missing settings window helper: ${LAUNCHER_UI_HELPER}"
 [[ -x "${ANDROID_BUILD_TOOLS}/aapt" &&
    -x "${ANDROID_BUILD_TOOLS}/apksigner" ]] ||
   Die "missing bundled Android validation tools"
@@ -526,6 +530,8 @@ export MOCKTAIL_UPDATE_HELPER="${UPDATE_HELPER}"
 export MOCKTAIL_UPDATE_CANARY_BIN="${MAIN_BINARY}"
 export MOCKTAIL_BIN="${MAIN_BINARY}"
 export MOCKTAIL_PORTABLE_MODE="${ABI_MODE}"
+export MOCKTAIL_LAUNCHER_UI_HELPER="${LAUNCHER_UI_HELPER}"
+export MOCKTAIL_LOCALE_DIR="${RUNTIME_ROOT}/share/locale"
 # AnyLinux relocates executables into its own bin directory. The Bionic
 # adapters stay in the original bundle and must be loaded by exact path.
 export MOCKTAIL_RUNTIME_LIBRARY_DIR="${BUNDLED_BIN_DIR}"
