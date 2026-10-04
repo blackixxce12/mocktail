@@ -534,3 +534,247 @@ msgstr "_Сбросить"
 
 msgid "All settings reset; save to keep them"
 msgstr "Все настройки сброшены; сохраните, чтобы применить"
+
+# Graphics page.
+
+msgid "Custom…"
+msgstr "Своё…"
+
+msgid "Automatic"
+msgstr "Автоматически"
+
+#, c-format
+msgid "Mocktail default (level %d)"
+msgstr "Стандарт Mocktail (уровень %d)"
+
+msgid "Roblox's own setting decides while Mocktail's performance preset is off"
+msgstr "Пока пресет производительности Mocktail выключен, решает настройка самого Roblox"
+
+msgid "Level 1 of 21: Mocktail's choice for Intel graphics with Vulkan"
+msgstr "Уровень 1 из 21: выбор Mocktail для графики Intel с Vulkan"
+
+msgid "Level 3 of 21, forced by Mocktail's performance preset"
+msgstr "Уровень 3 из 21, его задаёт пресет производительности Mocktail"
+
+msgid "Roblox in-game slider"
+msgstr "Ползунок в игре Roblox"
+
+msgid "Roblox's Graphics Quality setting decides (automatic unless you change it)"
+msgstr "Решает настройка качества графики в Roblox (автоматическая, если её не менять)"
+
+#, c-format
+msgid "Level %d"
+msgstr "Уровень %d"
+
+#, c-format
+msgid "Level %d of 21, forced by Mocktail"
+msgstr "Уровень %d из 21, его задаёт Mocktail"
+
+#, c-format
+msgid "Level %d of 21; no effect while the performance preset is off"
+msgstr "Уровень %d из 21; не действует, пока пресет производительности выключен"
+
+msgid "Custom level…"
+msgstr "Свой уровень…"
+
+msgid "Pick a level from 1 (fastest) to 21 (best looking)"
+msgstr "Выбрать уровень от 1 (быстрее всего) до 21 (красивее всего)"
+
+msgid "Graphics quality"
+msgstr "Качество графики"
+
+msgid "Roblox's graphics quality level, from 1 to 21, decides how much detail Roblox draws: view distance, shadows, effects and similar. Higher levels look better and need more of the graphics card."
+msgstr "Уровень качества графики Roblox, от 1 до 21, определяет, сколько деталей рисует Roblox: дальность прорисовки, тени, эффекты и тому подобное. Чем выше уровень, тем красивее картинка и тем больше нагрузка на видеокарту."
+
+msgid "Mocktail forces a level only while its performance preset is on: with Physics workers on Throughput (the default), or on Automatic with Multithreaded rendering. Otherwise Roblox's own setting always decides."
+msgstr "Mocktail задаёт уровень только при включённом пресете производительности: когда «Потоки физики» стоят на «Пропускная способность» (по умолчанию) или на «Автоматически» вместе с многопоточным рендерингом. В остальных случаях всегда решает настройка самого Roblox."
+
+msgid "• Mocktail default: level 3, or level 1 with Vulkan on computers that have only Intel graphics. Roblox's in-game quality slider then has no effect."
+msgstr "• Стандарт Mocktail: уровень 3, а с Vulkan на компьютерах только с графикой Intel — уровень 1. Ползунок качества в самой игре Roblox тогда не действует."
+
+msgid "• Roblox in-game slider: Mocktail forces nothing, and the Graphics Quality option in Roblox's settings decides. It is automatic unless you change it, so Roblox raises or lowers the level with the frame rate."
+msgstr "• Ползунок в игре Roblox: Mocktail ничего не задаёт, решает параметр качества графики в настройках Roblox. Если его не менять, он автоматический: Roblox сам повышает или понижает уровень в зависимости от частоты кадров."
+
+msgid "• Custom level: forces the level you pick."
+msgstr "• Свой уровень: задаётся выбранный вами уровень."
+
+msgid "The preset also lowers texture memory, turns anti-aliasing (MSAA) off and uses simpler shadows and level of detail, whatever level is chosen here."
+msgstr "Кроме того, пресет при любом уровне урезает память под текстуры, выключает сглаживание (MSAA) и упрощает тени и детализацию."
+
+msgid "With the current settings Roblox's own Graphics Quality setting decides."
+msgstr "С текущими настройками решает настройка качества графики самого Roblox."
+
+msgid "Mocktail's performance preset is off with the current Performance settings, so Roblox's own Graphics Quality setting decides."
+msgstr "С текущими настройками в разделе «Производительность» пресет производительности Mocktail выключен, поэтому решает настройка качества графики самого Roblox."
+
+#, c-format
+msgid "With the current settings Roblox runs at level %d."
+msgstr "С текущими настройками Roblox работает на уровне %d."
+
+#, c-format
+msgid "Your %s graphics can usually draw more than level 3, and Roblox's automatic setting keeps the frame rate up by itself."
+msgstr "Видеокарта %s обычно тянет больше третьего уровня, а автоматическая настройка Roblox сама удерживает частоту кадров."
+
+msgid "With integrated or unknown graphics, Mocktail's low default keeps the frame rate up."
+msgstr "Со встроенной или неизвестной графикой низкий стандартный уровень Mocktail помогает удержать частоту кадров."
+
+#, c-format
+msgid "fflags.json sets %s to another level, so Roblox will not start. Remove that flag or choose “Roblox in-game slider”."
+msgstr "В fflags.json для %s задан другой уровень, поэтому Roblox не запустится. Удалите этот флаг или выберите «Ползунок в игре Roblox»."
+
+msgid "No effect: Mocktail's performance preset is off (Performance › Physics workers)."
+msgstr "Не действует: пресет производительности Mocktail выключен («Производительность» › «Потоки физики»)."
+
+msgid "Quality level"
+msgstr "Уровень качества"
+
+msgid "1 is the fastest, 21 looks best"
+msgstr "1 — быстрее всего, 21 — красивее всего"
+
+msgid "The graphics quality level Mocktail forces while its performance preset is on. Level 1 draws the least and runs fastest; level 21 draws the most detail. Roblox's own quality slider has no effect while a level is set here."
+msgstr "Уровень качества графики, который Mocktail задаёт при включённом пресете производительности. На уровне 1 рисуется меньше всего и игра идёт быстрее всего; на уровне 21 деталей больше всего. Пока уровень задан здесь, ползунок качества в самом Roblox не действует."
+
+msgid "Change it in small steps and check the frame rate in a busy experience. Choose “Roblox in-game slider” above to let Roblox pick the level again."
+msgstr "Меняйте его понемногу и проверяйте частоту кадров в насыщенном месте. Чтобы уровень снова выбирал Roblox, выберите выше «Ползунок в игре Roblox»."
+
+msgid "Set in Roblox"
+msgstr "Как в настройках Roblox"
+
+msgid "Roblox's own Maximum Frame Rate menu decides; Mocktail sets no target"
+msgstr "Решает меню «Максимальная частота кадров» самого Roblox; Mocktail цель не задаёт"
+
+#, c-format
+msgid "Match display (%d Hz)"
+msgstr "Как у экрана (%d Гц)"
+
+#, c-format
+msgid "Target of %d frames per second, the refresh rate of this screen"
+msgstr "Цель — %d кадров в секунду, частота обновления этого экрана"
+
+#, c-format
+msgid "%d FPS"
+msgstr "%d FPS"
+
+#, c-format
+msgid "Target of %d frames per second"
+msgstr "Цель — %d кадров в секунду"
+
+msgid "240 (maximum)"
+msgstr "240 (максимум)"
+
+msgid "Roblox's highest target; Vulkan frames do not wait for the display"
+msgstr "Самая высокая цель Roblox; кадры Vulkan не ждут экран"
+
+msgid "Roblox's highest target; Vertical sync On still waits for the display"
+msgstr "Самая высокая цель Roblox; при включённой вертикальной синхронизации кадры всё равно ждут экран"
+
+msgid "Set in Roblox, synchronized"
+msgstr "Как в настройках Roblox, с синхронизацией"
+
+msgid "Roblox's own menu decides; with Automatic vertical sync, Vulkan frames wait for the display"
+msgstr "Решает меню самого Roblox; при автоматической вертикальной синхронизации кадры Vulkan ждут экран"
+
+#, c-format
+msgid "%d FPS (custom)"
+msgstr "%d FPS (своё)"
+
+msgid "Any number of frames per second"
+msgstr "Любое число кадров в секунду"
+
+msgid "Frame rate limit"
+msgstr "Ограничение FPS"
+
+msgid "How many frames per second Roblox aims for. A number here is passed to Roblox as its task scheduler target (DFIntTaskSchedulerTargetFps), so Roblox's in-game Maximum Frame Rate menu no longer decides. The change applies the next time Roblox starts."
+msgstr "Сколько кадров в секунду старается выдавать Roblox. Число отсюда передаётся Roblox как цель планировщика задач (DFIntTaskSchedulerTargetFps), и меню «Максимальная частота кадров» в самой игре больше не решает. Изменение вступит в силу при следующем запуске Roblox."
+
+msgid "• Set in Roblox: Mocktail sets no target, and Roblox's own Maximum Frame Rate menu, which Mocktail always turns on, sets the cap."
+msgstr "• Как в настройках Roblox: Mocktail цель не задаёт, а предел устанавливает меню «Максимальная частота кадров» самого Roblox, которое Mocktail всегда включает."
+
+msgid "• A number: Roblox aims for exactly that many frames per second. “Match display” writes this screen's refresh rate as a number, so choose it again after moving to another screen."
+msgstr "• Число: Roblox старается выдавать ровно столько кадров в секунду. «Как у экрана» записывает частоту обновления этого экрана числом, поэтому после перехода на другой экран выберите этот вариант снова."
+
+msgid "• 240 (maximum): Roblox's highest target. With Vulkan and Vertical sync on Automatic, frames are shown without waiting for the display, and Roblox is told the display runs at 240 Hz."
+msgstr "• 240 (максимум): самая высокая цель Roblox. С Vulkan и автоматической вертикальной синхронизацией кадры выводятся без ожидания экрана, а Roblox сообщается, что экран работает на 240 Гц."
+
+msgid "More frames make motion smoother and input quicker, at the cost of power, heat and fan noise. A target above the screen's refresh rate shows little difference, and a target the computer cannot reach changes nothing."
+msgstr "Чем больше кадров, тем плавнее движение и быстрее отклик, но тем выше расход энергии, нагрев и шум вентиляторов. Цель выше частоты обновления экрана почти незаметна, а цель, до которой компьютер не дотягивает, ничего не меняет."
+
+#, c-format
+msgid "This screen refreshes at %d Hz."
+msgstr "Частота обновления этого экрана — %d Гц."
+
+#, c-format
+msgid "This screen (%s) refreshes at %d Hz."
+msgstr "Частота обновления этого экрана (%s) — %d Гц."
+
+#, c-format
+msgid "Your screen refreshes %d times a second, so this target gives it a new frame on every refresh."
+msgstr "Экран обновляется %d раз в секунду, и с такой целью на каждое обновление приходится новый кадр."
+
+#, c-format
+msgid "Your screen refreshes %d times a second, which Roblox's own menu already reaches."
+msgstr "Экран обновляется %d раз в секунду, а столько даёт и меню самого Roblox."
+
+#, c-format
+msgid "fflags.json sets %s to another value, so Roblox will not start. Remove that flag or choose “Set in Roblox”."
+msgstr "В fflags.json для %s задано другое значение, поэтому Roblox не запустится. Удалите этот флаг или выберите «Как в настройках Roblox»."
+
+msgid "Roblox's highest target is 240, so a larger number may not raise the frame rate."
+msgstr "Самая высокая цель Roblox — 240, поэтому большее число может не поднять частоту кадров."
+
+msgid "Custom frame rate"
+msgstr "Своя частота кадров"
+
+msgid "Frames per second Roblox aims for"
+msgstr "Сколько кадров в секунду старается выдавать Roblox"
+
+msgid "Any whole number of frames per second. Mocktail passes it to Roblox unchanged, without a list of allowed values."
+msgstr "Любое целое число кадров в секунду. Mocktail передаёт его Roblox как есть, без списка допустимых значений."
+
+msgid "Pick the refresh rate of your screen, or a lower number to save power and heat. Roblox's own maximum is 240."
+msgstr "Выберите частоту обновления экрана или число поменьше, чтобы сберечь энергию и меньше греться. Максимум самого Roblox — 240."
+
+msgid "The driver's default, since Roblox owns the frame-rate cap"
+msgstr "Как решит драйвер, потому что предел кадров задаёт Roblox"
+
+msgid "Synchronized, because a frame-rate target is set"
+msgstr "С синхронизацией, потому что задана цель частоты кадров"
+
+msgid "Not synchronized, because the frame rate is set to the maximum"
+msgstr "Без синхронизации, потому что частота кадров выставлена на максимум"
+
+msgid "Vertical sync"
+msgstr "Вертикальная синхронизация"
+
+msgid "Decides whether Vulkan frames wait for the display's next refresh. Only the Vulkan backend uses it: with OpenGL ES and ANGLE the driver's default applies, which normally waits."
+msgstr "Определяет, ждут ли кадры Vulkan следующего обновления экрана. Действует только с движком Vulkan: с OpenGL ES и ANGLE всё решает драйвер, который обычно ждёт."
+
+msgid "• Automatic: synchronized when a frame-rate target is set, not synchronized with the 240 maximum, and the driver's default while Roblox owns the cap."
+msgstr "• Автоматически: с синхронизацией, если задана цель частоты кадров; без неё при максимуме 240; на усмотрение драйвера, пока предел задаёт Roblox."
+
+msgid "• On: frames wait for the display, using the newest finished frame when the driver allows it. No tearing, slightly more input latency."
+msgstr "• Вкл.: кадры ждут экран, причём, если драйвер позволяет, выводится самый свежий готовый кадр. Без разрывов картинки, но с чуть большей задержкой ввода."
+
+msgid "• Off: frames are shown as soon as they are ready, for the lowest input latency. Roblox is also told the display runs at 240 Hz."
+msgstr "• Выкл.: кадры выводятся сразу, как только готовы, — задержка ввода минимальна. Кроме того, Roblox сообщается, что экран работает на 240 Гц."
+
+msgid "On Wayland a window only tears when the compositor allows it (on Hyprland, for example, allow_tearing); otherwise Off still shows whole frames, just with less waiting."
+msgstr "В Wayland картинка в окне рвётся, только если это разрешает композитор (в Hyprland, например, allow_tearing); иначе и в режиме «Выкл.» показываются целые кадры, просто с меньшим ожиданием."
+
+msgid "Waits for the display: no tearing, a little more latency"
+msgstr "Ждёт экран: без разрывов, задержка чуть больше"
+
+msgid "Lowest input latency; may tear if the compositor allows it"
+msgstr "Минимальная задержка ввода; разрывы возможны, если их разрешает композитор"
+
+msgid "No effect with this graphics backend; the driver decides"
+msgstr "С этим графическим движком не действует; решает драйвер"
+
+msgid "Only the Vulkan backend applies this; choose Vulkan or set Automatic."
+msgstr "Это действует только с движком Vulkan; выберите Vulkan или «Автоматически»."
+
+msgid "Frame rate"
+msgstr "Частота кадров"
+
+msgid "How many frames Roblox draws and when they reach the screen"
+msgstr "Сколько кадров рисует Roblox и когда они попадают на экран"
