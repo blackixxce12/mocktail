@@ -367,6 +367,40 @@ GtkWidget* BuildApplicationIdRow(LauncherContext* context) {
   return BindEntryRow(context, std::move(spec), std::move(entry));
 }
 
+gboolean ClearSelectionIdle(gpointer data) {
+  GtkEditable* editable = GTK_EDITABLE(data);
+  if (gtk_widget_has_focus(GTK_WIDGET(editable))) {
+    const int end = gtk_editable_get_position(editable);
+    gtk_editable_select_region(editable, end, end);
+  }
+  g_object_unref(editable);
+  return G_SOURCE_REMOVE;
+}
+
+void OnWindowFocusChanged(GtkWindow* window, GParamSpec*, gpointer dialog) {
+  GtkWidget* focus = gtk_window_get_focus(window);
+  if (focus == nullptr || !gtk_widget_is_ancestor(focus, GTK_WIDGET(dialog))) {
+    return;
+  }
+  g_signal_handlers_disconnect_by_func(
+      window, reinterpret_cast<gpointer>(OnWindowFocusChanged), dialog);
+  // The text is selected while it takes focus; clear that afterwards.
+  if (GTK_IS_EDITABLE(focus)) {
+    g_idle_add(ClearSelectionIdle, g_object_ref(focus));
+  }
+}
+
+// A dialog focuses its first entry when it opens, and an entry selects all
+// of its text when it takes focus, so the first key typed would replace the
+// whole "While browsing" text. The first time focus lands inside `dialog`,
+// the cursor goes to the end of that text instead. The handler goes away
+// with the dialog.
+void KeepFirstTextUnselected(AdwDialog* dialog, GtkWindow* window) {
+  g_signal_connect_object(window, "notify::focus-widget",
+                          G_CALLBACK(OnWindowFocusChanged), dialog,
+                          static_cast<GConnectFlags>(0));
+}
+
 // ---- Fleasion ---------------------------------------------------------------
 
 GtkWidget* BuildFleasionRow(LauncherContext* context) {
@@ -653,6 +687,7 @@ void OpenDiscordTextsDialog(LauncherContext* context) {
   adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(toolbar), adw_header_bar_new());
   adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(toolbar), page);
   adw_dialog_set_child(dialog, toolbar);
+  KeepFirstTextUnselected(dialog, GTK_WINDOW(context->window()));
   adw_dialog_present(dialog, GTK_WIDGET(context->window()));
 }
 
