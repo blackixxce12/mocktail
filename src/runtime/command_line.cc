@@ -79,6 +79,17 @@ CommandLineParseResult ParseCommandLine(int argc, const char* const argv[]) {
       result.options.allow_unverified_build = true;
     } else if (argument == "--force-run-latest") {
       result.options.force_run_latest = true;
+    } else if (argument == "--launcher" || argument == "--play" ||
+               argument == "--no-launcher") {
+      const LauncherRequest requested = argument == "--launcher"
+                                            ? LauncherRequest::kShow
+                                            : LauncherRequest::kSkip;
+      if (result.options.launcher != LauncherRequest::kDefault &&
+          result.options.launcher != requested) {
+        result.error = "--launcher cannot be combined with --play";
+        return result;
+      }
+      result.options.launcher = requested;
     } else if (argument == "--launch-uri") {
       if (!result.options.launch_request_json.empty()) {
         result.error = "duplicate option: --launch-uri";
@@ -143,8 +154,16 @@ CommandLineParseResult ParseCommandLine(int argc, const char* const argv[]) {
        result.options.window_mode != WindowMode::kUnspecified ||
        !result.options.graphics_backend.empty() ||
        result.options.allow_unverified_build ||
-       !result.options.launch_request_json.empty())) {
+       !result.options.launch_request_json.empty() ||
+       result.options.launcher != LauncherRequest::kDefault)) {
     result.error = "--force-run-latest must be used on its own";
+  } else if (result.options.launcher != LauncherRequest::kDefault &&
+             !result.options.launch_request_json.empty()) {
+    // A website join never shows the settings window, so either flag would
+    // be a mistake. The message must not echo the launch ticket.
+    result.error =
+        "--launcher, --play and --no-launcher cannot be used with a Roblox "
+        "link";
   }
   return result;
 }
@@ -258,12 +277,17 @@ std::string CommandLineUsage(const std::string& program_name) {
          "without approval; it is not activated\n"
       << "  --launch-uri <uri>       Join from a roblox: or roblox-player: "
          "website link\n"
+      << "  --launcher               Show the Mocktail settings window before "
+         "Roblox starts\n"
+      << "  --play, --no-launcher    Start Roblox without the settings "
+         "window\n"
       << "  --help, -h               Show this help\n\n"
       << "Auth:\n"
       << "  When no saved Roblox session is found, Roblox's welcome screen "
          "opens with the native sign-in flow.\n"
-      << "  Set MOCKTAIL_NATIVE_LOGIN=0 to use the optional WebView sign-in "
-         "window.\n"
+      << "  Set account.sign_in: browser in config.yaml (or "
+         "MOCKTAIL_NATIVE_LOGIN=0)\n"
+      << "  to use the optional WebView sign-in window.\n"
       << "  Roblox may still open a WebView for required verification "
          "challenges.\n"
       << "  If it asks for device attestation such as Google Play Integrity, "

@@ -18,6 +18,16 @@ enum class WindowMode {
   kWindowed,
 };
 
+// Whether the settings window should open before Roblox starts on this run.
+// kDefault leaves it to launcher.show_on_start.
+enum class LauncherRequest {
+  kDefault,
+  // --launcher
+  kShow,
+  // --play or --no-launcher
+  kSkip,
+};
+
 struct CommandLineOptions {
   CommandMode mode = CommandMode::kRun;
   WindowMode window_mode = WindowMode::kUnspecified;
@@ -33,6 +43,7 @@ struct CommandLineOptions {
   // Requests one explicit launch of the provider latest without promoting it
   // into the managed payload state.
   bool force_run_latest = false;
+  LauncherRequest launcher = LauncherRequest::kDefault;
 };
 
 struct CommandLineParseResult {

@@ -270,7 +270,7 @@ TEST(CommandLineTest, UsageContainsEverySupportedOption) {
   for (const char* option :
        {"--roblox-lib", "--headless", "--windowed", "--graphics",
         "--allow-unverified-build", "--force-run-latest", "--launch-uri",
-        "--help"}) {
+        "--launcher", "--play", "--no-launcher", "--help"}) {
     EXPECT_NE(usage.find(option), std::string::npos) << option;
   }
   EXPECT_EQ(usage.find("--login"), std::string::npos);
@@ -283,6 +283,104 @@ TEST(CommandLineTest, UsageContainsEverySupportedOption) {
   EXPECT_EQ(usage.find("Normal startup uses rbx_bin/libroblox.so"),
             std::string::npos);
   EXPECT_EQ(usage.find("--launch-request-json"), std::string::npos);
+  EXPECT_NE(usage.find("account.sign_in: browser"), std::string::npos);
+}
+
+TEST(CommandLineTest, LauncherDefaultsToTheConfiguredPolicy) {
+  const std::array<const char*, 1> arguments = {"mocktail"};
+  const CommandLineParseResult result =
+      ParseCommandLine(arguments.size(), arguments.data());
+  ASSERT_TRUE(result) << result.error;
+  EXPECT_EQ(result.options.launcher, LauncherRequest::kDefault);
+}
+
+TEST(CommandLineTest, ParsesLauncherRequests) {
+  struct Case {
+    std::vector<const char*> arguments;
+    LauncherRequest expected;
+  };
+  for (const Case& entry : {
+           Case{{"mocktail", "--launcher"}, LauncherRequest::kShow},
+           Case{{"mocktail", "--play"}, LauncherRequest::kSkip},
+           Case{{"mocktail", "--no-launcher"}, LauncherRequest::kSkip},
+           // Repeating the same request, in either spelling, is harmless.
+           Case{{"mocktail", "--play", "--no-launcher"},
+                LauncherRequest::kSkip},
+           Case{{"mocktail", "--launcher", "--launcher"},
+                LauncherRequest::kShow},
+           Case{{"mocktail", "--windowed", "--graphics", "opengl", "--play"},
+                LauncherRequest::kSkip},
+       }) {
+    const CommandLineParseResult result = ParseCommandLine(
+        static_cast<int>(entry.arguments.size()), entry.arguments.data());
+    ASSERT_TRUE(result) << result.error << " " << entry.arguments.back();
+    EXPECT_EQ(result.options.launcher, entry.expected)
+        << entry.arguments.back();
+    EXPECT_EQ(result.options.mode, CommandMode::kRun);
+  }
+}
+
+TEST(CommandLineTest, RejectsContradictoryLauncherRequests) {
+  for (const auto& arguments : {
+           std::vector<const char*>{"mocktail", "--launcher", "--play"},
+           std::vector<const char*>{"mocktail", "--no-launcher",
+                                    "--launcher"},
+       }) {
+    const CommandLineParseResult result = ParseCommandLine(
+        static_cast<int>(arguments.size()), arguments.data());
+    EXPECT_FALSE(result);
+    EXPECT_EQ(result.error, "--launcher cannot be combined with --play");
+  }
+}
+
+TEST(CommandLineTest, RejectsLauncherRequestsWithRobloxLinks) {
+  constexpr char kSecret[] = "SECRET-BROWSER-TICKET";
+  for (const char* option : {"--launcher", "--play", "--no-launcher"}) {
+    for (const auto& arguments : {
+             std::vector<const char*>{
+                 "mocktail", option,
+                 "roblox-player:1+launchmode:play+"
+                 "gameinfo:SECRET-BROWSER-TICKET+"
+                 "placelauncherurl:https%3A%2F%2Fwww.roblox.com%2FGame%2F"
+                 "PlaceLauncher.ashx%3Frequest%3DRequestGame%26placeId%3D"
+                 "17580461965"},
+             std::vector<const char*>{
+                 "mocktail", "--launch-uri",
+                 "roblox://experiences/start?placeId=17580461965", option},
+         }) {
+      const CommandLineParseResult result = ParseCommandLine(
+          static_cast<int>(arguments.size()), arguments.data());
+      EXPECT_FALSE(result) << option;
+      EXPECT_NE(result.error.find("Roblox link"), std::string::npos)
+          << option << ": " << result.error;
+      EXPECT_EQ(result.error.find(kSecret), std::string::npos);
+    }
+  }
+}
+
+TEST(CommandLineTest, ForceRunLatestRejectsLauncherRequests) {
+  for (const char* option : {"--launcher", "--play", "--no-launcher"}) {
+    const std::array<const char*, 3> arguments = {
+        "mocktail", "--force-run-latest", option};
+    const CommandLineParseResult result =
+        ParseCommandLine(arguments.size(), arguments.data());
+    EXPECT_FALSE(result) << option;
+    EXPECT_EQ(result.error, "--force-run-latest must be used on its own");
+  }
+}
+
+TEST(CommandLineTest, LauncherRequestsSurviveTheReexecArguments) {
+  const std::array<const char*, 3> arguments = {"mocktail", "--play",
+                                                "--windowed"};
+  const CommandLineParseResult result =
+      ParseCommandLine(arguments.size(), arguments.data());
+  ASSERT_TRUE(result) << result.error;
+  std::vector<std::string> reexec;
+  std::string error;
+  ASSERT_TRUE(BuildCommandLineReexecArguments(
+      result.options, arguments.size(), arguments.data(), &reexec, &error))
+      << error;
+  EXPECT_EQ(reexec, (std::vector<std::string>{"--play", "--windowed"}));
 }
 
 }  // namespace
