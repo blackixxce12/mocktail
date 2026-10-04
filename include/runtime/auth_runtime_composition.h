@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "jnivm/jnivm.h"
+#include "runtime/private_credential_file.h"
 
 namespace mocktail {
 namespace services {
@@ -48,8 +49,6 @@ class SecureRobloxCredential final {
  private:
   std::vector<char> bytes_;
 };
-
-void SecurelyClearString(std::string* value);
 
 // Must be created after the credential reaches its final address and destroyed
 // before the credential or VM. Guest bindings block legacy env/disk fallback.
@@ -98,24 +97,6 @@ AuthRuntimeComposition ComposeAuthRuntime(
     const Environment& environment, const RuntimePaths& paths,
     services::AuthService& auth_service,
     std::shared_ptr<services::HttpClient> live_auth_http_client);
-
-// Persists a raw or prefixed Roblox credential to the given cookie file atomically.
-bool PersistRobloxCookie(const std::filesystem::path& path,
-                         std::string_view cookie_value);
-
-enum class BrowserSignInStatus {
-  kAccepted,
-  kRejected,
-  kUnverified,
-  kStoreFailed,
-};
-
-// Persists a browser sign-in cookie only after Roblox resolves its account.
-// WebKit can still hold a revoked session, so a rejected or unverified cookie
-// is never written. Blocks for one authentication request.
-BrowserSignInStatus PersistValidatedRobloxCookie(
-    const std::filesystem::path& path, services::AuthService& auth_service,
-    std::string_view cookie_value);
 
 }  // namespace runtime
 }  // namespace mocktail

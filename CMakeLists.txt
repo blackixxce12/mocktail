@@ -433,6 +433,18 @@ if(MOCKTAIL_WEBVIEW_X11_FOUND)
 endif()
 mocktail_apply_compile_options(mocktail_webview_helper)
 
+# Saved Roblox sessions, without jnivm, for the runtime and the launcher.
+add_library(mocktail_credential_store STATIC
+  src/runtime/private_credential_file.cc
+)
+add_library(Mocktail::CredentialStore ALIAS mocktail_credential_store)
+target_include_directories(mocktail_credential_store PUBLIC include)
+target_link_libraries(mocktail_credential_store PUBLIC
+  mocktail_runtime
+  mocktail_services
+)
+mocktail_apply_compile_options(mocktail_credential_store)
+
 add_library(mocktail_auth_runtime_composition STATIC
   src/runtime/auth_runtime_composition.cc
   src/runtime/webview_roblox_cookie.cc
@@ -442,6 +454,7 @@ add_library(Mocktail::AuthRuntimeComposition ALIAS
 target_include_directories(mocktail_auth_runtime_composition PUBLIC include)
 target_link_libraries(mocktail_auth_runtime_composition PUBLIC
   mocktail_legacy_jnivm
+  mocktail_credential_store
   mocktail_runtime
   mocktail_services
 )

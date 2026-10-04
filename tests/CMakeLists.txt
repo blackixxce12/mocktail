@@ -746,6 +746,14 @@ target_link_libraries(auth_runtime_composition_test PRIVATE
 )
 mocktail_apply_compile_options(auth_runtime_composition_test)
 
+# Links only the jnivm-free store, so a jnivm dependency fails to link here.
+add_executable(private_credential_file_test private_credential_file_test.cc)
+target_link_libraries(private_credential_file_test PRIVATE
+  Mocktail::CredentialStore
+  GTest::gtest_main
+)
+mocktail_apply_compile_options(private_credential_file_test)
+
 add_executable(client_settings_service_test client_settings_service_test.cc)
 target_link_libraries(client_settings_service_test PRIVATE
   Mocktail::Services
@@ -1087,6 +1095,7 @@ gtest_discover_tests(window_pointer_capture_owner_test)
 gtest_discover_tests(roblox_text_input_jni_bridge_test)
 gtest_discover_tests(auth_service_test)
 gtest_discover_tests(auth_runtime_composition_test)
+gtest_discover_tests(private_credential_file_test)
 gtest_discover_tests(client_settings_service_test)
 gtest_discover_tests(elf_build_id_test)
 gtest_discover_tests(build_profile_test)
