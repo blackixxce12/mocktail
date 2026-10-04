@@ -941,6 +941,114 @@ TEST(LauncherConfigDocumentTest, CopiesAMissingSectionFromTheShippedTemplate) {
   EXPECT_TRUE(loaded.config.use_system_proxy());
 }
 
+// The shipped template's top-level `name:` section, from its header to the
+// blank line that ends it.
+std::string ShippedTemplateSection(std::string_view name) {
+  const std::string shipped(runtime::DefaultRuntimeConfigYaml());
+  const std::string header = "\n" + std::string(name) + ":\n";
+  const std::size_t begin = shipped.find(header);
+  const std::size_t end =
+      begin == std::string::npos ? begin : shipped.find("\n\n", begin + 1);
+  if (end == std::string::npos) {
+    ADD_FAILURE() << "shipped template has no section " << name;
+    return std::string();
+  }
+  return shipped.substr(begin + 1, end - begin);
+}
+
+std::string ReplacedOnce(std::string text, std::string_view from,
+                         std::string_view to) {
+  const std::size_t at = text.find(from);
+  if (at == std::string::npos) {
+    ADD_FAILURE() << "text not found: " << from;
+    return text;
+  }
+  return text.replace(at, from.size(), to);
+}
+
+TEST(LauncherConfigDocumentTest, AddsTheLauncherSectionsToAnOlderConfig) {
+  // The fixture was written before display:, account:, engine: and
+  // launcher: existed. The settings window sets two of them, and the new
+  // sections come from the shipped template.
+  const std::string original = Fixture();
+  for (const char* section :
+       {"\ndisplay:", "\naccount:", "\nengine:", "\nlauncher:"}) {
+    ASSERT_EQ(original.find(section), std::string::npos) << section;
+  }
+  ConfigDocument document = ConfigDocument::FromBytes(original);
+  std::string error;
+  ASSERT_TRUE(document.Set("display.server", "wayland", ScalarKind::kEnum,
+                           &error))
+      << error;
+  ASSERT_TRUE(document.Set("account.sign_in", "browser", ScalarKind::kEnum,
+                           &error))
+      << error;
+
+  // Each new section is the template's, comments included, with only the
+  // edited value changed.
+  const std::string& bytes = document.bytes();
+  const std::string display = ReplacedOnce(ShippedTemplateSection("display"),
+                                           "  server: auto\n",
+                                           "  server: wayland\n");
+  const std::string account = ReplacedOnce(ShippedTemplateSection("account"),
+                                           "  sign_in: native\n",
+                                           "  sign_in: browser\n");
+  EXPECT_NE(display.find("\n  # "), std::string::npos) << display;
+  EXPECT_NE(account.find("\n  # "), std::string::npos) << account;
+  EXPECT_NE(bytes.find("\n\n" + display + "\n"), std::string::npos) << bytes;
+  EXPECT_NE(bytes.find("\n\n" + account + "\n"), std::string::npos) << bytes;
+
+  // Nothing of the user's file is lost, and the two sections it did not
+  // need stay out.
+  const LineDiff diff = Diff(original, bytes);
+  EXPECT_TRUE(diff.removed.empty());
+  const std::vector<std::string> shipped =
+      SplitLines(std::string(runtime::DefaultRuntimeConfigYaml()));
+  for (const std::string& line : diff.added) {
+    if (line == "  server: wayland" || line == "  sign_in: browser") {
+      continue;
+    }
+    EXPECT_NE(std::find(shipped.begin(), shipped.end(), line), shipped.end())
+        << "not a template line: " << line;
+  }
+  EXPECT_EQ(bytes.find("\nengine:"), std::string::npos);
+  EXPECT_EQ(bytes.find("\nlauncher:"), std::string::npos);
+
+  // Template order: window, display, account, then network.
+  const std::size_t window = bytes.find("\nwindow:\n");
+  const std::size_t display_at = bytes.find("\ndisplay:\n");
+  const std::size_t account_at = bytes.find("\naccount:\n");
+  const std::size_t network = bytes.find("\nnetwork:\n");
+  ASSERT_NE(window, std::string::npos);
+  ASSERT_NE(network, std::string::npos);
+  EXPECT_LT(window, display_at);
+  EXPECT_LT(display_at, account_at);
+  EXPECT_LT(account_at, network);
+
+  // The runtime's own loader accepts the result and reads both settings,
+  // and the user's values elsewhere are untouched.
+  ASSERT_TRUE(document.Validate(&error)) << error;
+  const runtime::RuntimeConfigLoadResult loaded = LoadWithRealLoader(bytes);
+  ASSERT_TRUE(loaded) << loaded.error;
+  EXPECT_EQ(loaded.config.display().server, runtime::DisplayServer::kWayland);
+  EXPECT_TRUE(loaded.config.display().server_valid);
+  EXPECT_EQ(loaded.config.display().start_mode,
+            runtime::WindowStartMode::kRemember);
+  EXPECT_EQ(loaded.config.account().sign_in, runtime::SignInMethod::kBrowser);
+  EXPECT_EQ(loaded.config.engine().graphics_quality,
+            runtime::GraphicsQuality{});
+  EXPECT_TRUE(loaded.config.launcher().show_on_start);
+  const runtime::RuntimeConfigLoadResult before = LoadWithRealLoader(original);
+  ASSERT_TRUE(before) << before.error;
+  EXPECT_EQ(before.config.display().server, runtime::DisplayServer::kAuto);
+  EXPECT_EQ(before.config.account().sign_in, runtime::SignInMethod::kNative);
+  EXPECT_EQ(loaded.config.window().width, before.config.window().width);
+  EXPECT_EQ(loaded.config.window().height, before.config.window().height);
+  EXPECT_EQ(loaded.config.window().high_dpi, before.config.window().high_dpi);
+  EXPECT_EQ(loaded.config.performance().game_mode,
+            before.config.performance().game_mode);
+}
+
 TEST(LauncherConfigDocumentTest, NeverLeavesAnEmptySectionHeader) {
   const std::string original = Fixture();
   ConfigDocument document = ConfigDocument::FromBytes(original);
