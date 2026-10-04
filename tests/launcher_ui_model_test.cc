@@ -522,5 +522,245 @@ TEST(SearchIndexTest, MatchesTitlesKeywordsAndBothLanguages) {
   EXPECT_EQ(index.Get(99), nullptr);
 }
 
+// ---- Graphics, Display, Performance and Audio pages -------------------------
+
+MachineProfile DetectedMachine() {
+  MachineProfile machine;
+  machine.detected = true;
+  machine.wayland_available = true;
+  machine.x11_available = true;
+  machine.monitor.valid = true;
+  machine.monitor.width = 1600;
+  machine.monitor.height = 900;
+  machine.monitor.scale = 1.6;
+  machine.monitor.refresh_millihertz = 165003;
+  return machine;
+}
+
+TEST(GamePagesTest, RenderingPresetFollowsPhysicsWorkers) {
+  // performance_policy.cc: throughput (the default) always, auto only with
+  // multithreaded rendering, latency never.
+  EXPECT_TRUE(RenderingPresetActive("", ""));
+  EXPECT_TRUE(RenderingPresetActive("throughput", "false"));
+  EXPECT_TRUE(RenderingPresetActive("auto", "true"));
+  EXPECT_FALSE(RenderingPresetActive("auto", "false"));
+  EXPECT_FALSE(RenderingPresetActive("latency", "true"));
+}
+
+TEST(GamePagesTest, ResolvesTheGraphicsQualityLevel) {
+  QualityEffect effect = ResolveGraphicsQuality("default", true, false);
+  EXPECT_EQ(effect.source, QualitySource::kMocktailDefault);
+  EXPECT_EQ(effect.level, 3);
+  EXPECT_FALSE(effect.ignored);
+  EXPECT_EQ(ResolveGraphicsQuality("", true, true).level, 1);
+  effect = ResolveGraphicsQuality("12", true, true);
+  EXPECT_EQ(effect.source, QualitySource::kConfiguredLevel);
+  EXPECT_EQ(effect.level, 12);
+  effect = ResolveGraphicsQuality("manual", true, false);
+  EXPECT_EQ(effect.source, QualitySource::kRobloxSetting);
+  EXPECT_FALSE(effect.ignored);
+  effect = ResolveGraphicsQuality("12", false, false);
+  EXPECT_EQ(effect.source, QualitySource::kRobloxSetting);
+  EXPECT_TRUE(effect.ignored);
+  EXPECT_EQ(ParseQualityLevel("21"), 21);
+  EXPECT_FALSE(ParseQualityLevel("22").has_value());
+  EXPECT_FALSE(ParseQualityLevel("0").has_value());
+  EXPECT_FALSE(ParseQualityLevel("default").has_value());
+
+  MachineProfile machine = DetectedMachine();
+  machine.gpu.nvidia = true;
+  EXPECT_EQ(RecommendGraphicsQuality(machine).value, "manual");
+  machine.gpu = {};
+  machine.gpu.intel = true;
+  EXPECT_EQ(RecommendGraphicsQuality(machine).value, "default");
+  EXPECT_EQ(RecommendGraphicsQuality(machine).reason,
+            QualityRecommendationReason::kModestGraphics);
+  EXPECT_EQ(RecommendGraphicsQuality(MachineProfile{}).reason,
+            QualityRecommendationReason::kUnknown);
+}
+
+TEST(GamePagesTest, PresentationMatchesThePresentModePolicy) {
+  // present_mode_policy.cc ResolvePresentModePolicy.
+  EXPECT_EQ(ResolvePresentation("auto", "-1"), Presentation::kDriverDefault);
+  EXPECT_EQ(ResolvePresentation("auto", ""), Presentation::kDriverDefault);
+  EXPECT_EQ(ResolvePresentation("auto", "display"),
+            Presentation::kSynchronized);
+  EXPECT_EQ(ResolvePresentation("auto", "165"), Presentation::kSynchronized);
+  EXPECT_EQ(ResolvePresentation("auto", "unlimited"),
+            Presentation::kUnthrottled);
+  EXPECT_EQ(ResolvePresentation("on", "unlimited"),
+            Presentation::kSynchronized);
+  EXPECT_EQ(ResolvePresentation("off", "-1"), Presentation::kUnthrottled);
+}
+
+TEST(GamePagesTest, RecommendsTheDisplaysFrameRate) {
+  MonitorInfo monitor;
+  EXPECT_FALSE(RecommendFrameRate(monitor).has_value());
+  monitor.valid = true;
+  monitor.refresh_millihertz = 165003;
+  EXPECT_EQ(RecommendFrameRate(monitor), "165");
+  monitor.refresh_millihertz = 59950;
+  EXPECT_EQ(RecommendFrameRate(monitor), "-1");
+  EXPECT_EQ(ParseFrameRate("75"), 75);
+  EXPECT_FALSE(ParseFrameRate("-1").has_value());
+  EXPECT_FALSE(ParseFrameRate("display").has_value());
+}
+
+TEST(GamePagesTest, FindsFastFlagsThatBlockTheStart) {
+  launcher::FastFlagsDocument flags;
+  std::string error;
+  ASSERT_TRUE(launcher::FastFlagsDocument::FromBytes(
+      R"({"DFIntTaskSchedulerTargetFps": 144,
+          "FIntDebugFRMQualityLevelOverride": "5"})",
+      &flags, &error))
+      << error;
+  // Roblox owns the cap: the target flag is the user's own.
+  EXPECT_EQ(FrameRateFlagConflict(flags, "-1"), "");
+  EXPECT_EQ(FrameRateFlagConflict(flags, "144"), "");
+  EXPECT_EQ(FrameRateFlagConflict(flags, "165"), "DFIntTaskSchedulerTargetFps");
+  EXPECT_EQ(FrameRateFlagConflict(flags, "unlimited"),
+            "DFIntTaskSchedulerTargetFps");
+  EXPECT_EQ(QualityFlagConflict(flags,
+                                ResolveGraphicsQuality("default", true, false)),
+            "FIntDebugFRMQualityLevelOverride");
+  EXPECT_EQ(
+      QualityFlagConflict(flags, ResolveGraphicsQuality("5", true, false)), "");
+  EXPECT_EQ(
+      QualityFlagConflict(flags, ResolveGraphicsQuality("manual", true, false)),
+      "");
+}
+
+TEST(GamePagesTest, DerivesWindowSizesFromTheMonitor) {
+  MonitorInfo monitor;
+  monitor.valid = true;
+  monitor.width = 1600;
+  monitor.height = 900;
+  std::vector<WindowSizePreset> presets = WindowSizePresets(monitor);
+  ASSERT_GE(presets.size(), 3U);
+  EXPECT_TRUE(presets.front().whole_screen);
+  EXPECT_EQ(presets.front().size, (WindowSize{1600, 900}));
+  bool has_default = false;
+  for (const WindowSizePreset& preset : presets) {
+    EXPECT_LE(preset.size.width, 1600);
+    EXPECT_LE(preset.size.height, 900);
+    if (preset.runtime_default) {
+      has_default = true;
+      EXPECT_EQ(preset.size, (WindowSize{1280, 720}));
+    }
+  }
+  EXPECT_TRUE(has_default);
+  // A small screen still offers the default, and an odd one its own size.
+  monitor.width = 1201;
+  monitor.height = 675;
+  presets = WindowSizePresets(monitor);
+  EXPECT_EQ(presets.front().size, (WindowSize{1280, 720}));
+  EXPECT_TRUE(presets.front().runtime_default);
+  EXPECT_EQ(presets[1].size, (WindowSize{1201, 675}));
+  EXPECT_TRUE(presets[1].whole_screen);
+  EXPECT_EQ(WindowSizePresets(MonitorInfo{}).size(), 4U);
+}
+
+TEST(GamePagesTest, ComputesTheGameResolution) {
+  MonitorInfo monitor;
+  monitor.valid = true;
+  monitor.width = 1600;
+  monitor.height = 900;
+  monitor.scale = 1.6;
+  GameResolution resolution = ComputeGameResolution(
+      monitor, {1280, 720}, WindowMode::kFullscreen, true, true);
+  EXPECT_EQ(resolution.logical, (WindowSize{1600, 900}));
+  EXPECT_EQ(resolution.pixels, (WindowSize{2560, 1440}));
+  EXPECT_FALSE(resolution.upscaled);
+  EXPECT_TRUE(resolution.high_dpi_matters);
+  resolution = ComputeGameResolution(monitor, {1280, 720},
+                                     WindowMode::kWindowed, false, true);
+  EXPECT_EQ(resolution.pixels, (WindowSize{1280, 720}));
+  EXPECT_TRUE(resolution.upscaled);
+  resolution = ComputeGameResolution(monitor, {1280, 720},
+                                     WindowMode::kMaximized, true, true);
+  EXPECT_TRUE(resolution.approximate);
+  // X11 (XWayland): no pixel density, High-DPI changes nothing.
+  resolution = ComputeGameResolution(monitor, {1280, 720},
+                                     WindowMode::kWindowed, true, false);
+  EXPECT_EQ(resolution.pixels, (WindowSize{1280, 720}));
+  EXPECT_FALSE(resolution.high_dpi_matters);
+
+  EXPECT_EQ(StartWindowMode("", true, true, true), WindowMode::kFullscreen);
+  EXPECT_EQ(StartWindowMode("remember", true, false, true),
+            WindowMode::kMaximized);
+  EXPECT_EQ(StartWindowMode("remember", false, true, false),
+            WindowMode::kWindowed);
+  EXPECT_EQ(StartWindowMode("windowed", true, true, false),
+            WindowMode::kWindowed);
+}
+
+TEST(GamePagesTest, RecommendsHighDpiOnlyWhereItMatters) {
+  MachineProfile machine = DetectedMachine();
+  machine.gpu.nvidia = true;
+  EXPECT_EQ(RecommendHighDpi(machine, true), "true");
+  EXPECT_FALSE(RecommendHighDpi(machine, false).has_value());
+  machine.gpu = {};
+  machine.gpu.intel = true;
+  EXPECT_EQ(RecommendHighDpi(machine, true), "false");
+  machine.monitor.scale = 1.0;
+  EXPECT_FALSE(RecommendHighDpi(machine, true).has_value());
+}
+
+TEST(GamePagesTest, ExplainsTheDisplayServer) {
+  MachineProfile machine = DetectedMachine();
+  machine.gpu.nvidia = true;
+  machine.gpu.nvidia_kernel_driver = true;
+  DisplayServerChoice choice =
+      ResolveDisplayServer(machine, "auto", "direct-vulkan");
+  EXPECT_EQ(choice.server, "x11");
+  EXPECT_EQ(choice.reason, DisplayServerReason::kNvidiaVulkan);
+  choice = ResolveDisplayServer(machine, "auto", "opengl");
+  EXPECT_EQ(choice.server, "wayland");
+  EXPECT_EQ(choice.reason, DisplayServerReason::kWaylandSession);
+  choice = ResolveDisplayServer(machine, "wayland", "direct-vulkan");
+  EXPECT_EQ(choice.server, "wayland");
+  EXPECT_EQ(choice.reason, DisplayServerReason::kChosen);
+  // A chosen server the session lacks falls back to automatic.
+  machine.x11_available = false;
+  choice = ResolveDisplayServer(machine, "x11", "direct-vulkan");
+  EXPECT_EQ(choice.server, "wayland");
+  EXPECT_EQ(choice.reason, DisplayServerReason::kChosenUnavailable);
+  machine.wayland_available = false;
+  machine.x11_available = true;
+  choice = ResolveDisplayServer(machine, "", "opengl");
+  EXPECT_EQ(choice.server, "x11");
+  EXPECT_EQ(choice.reason, DisplayServerReason::kX11Only);
+  EXPECT_EQ(ResolveDisplayServer(MachineProfile{}, "auto", "").reason,
+            DisplayServerReason::kUnknown);
+}
+
+TEST(GamePagesTest, SuggestsAMemoryLimit) {
+  constexpr std::uint64_t kGiB = 1024ULL * 1024ULL * 1024ULL;
+  EXPECT_EQ(SuggestedMemoryLimitMiB(32 * kGiB), 6144U);
+  EXPECT_EQ(SuggestedMemoryLimitMiB(16 * kGiB), 4096U);
+  EXPECT_EQ(SuggestedMemoryLimitMiB(0), 4096U);
+  EXPECT_EQ(SuggestedMemoryLimitMiB(64 * kGiB) % 512U, 0U);
+}
+
+TEST(GamePagesTest, ClassifiesSavedAudioDevices) {
+  const std::vector<std::string> devices = {"FxSound (Вывод)", "HDMI", "HDMI"};
+  EXPECT_EQ(ClassifyAudioDevice("default", &devices, false),
+            AudioDeviceState::kDefault);
+  EXPECT_EQ(ClassifyAudioDevice("FxSound (Вывод)", &devices, false),
+            AudioDeviceState::kConnected);
+  EXPECT_EQ(ClassifyAudioDevice("HDMI", &devices, false),
+            AudioDeviceState::kAmbiguous);
+  EXPECT_EQ(ClassifyAudioDevice("USB headset", &devices, false),
+            AudioDeviceState::kMissing);
+  EXPECT_EQ(ClassifyAudioDevice("USB headset", nullptr, false),
+            AudioDeviceState::kNotListed);
+  EXPECT_EQ(ClassifyAudioDevice("disabled", &devices, true),
+            AudioDeviceState::kDisabled);
+  EXPECT_EQ(ClassifyAudioDevice("disabled", &devices, false),
+            AudioDeviceState::kMissing);
+  EXPECT_EQ(ClassifyAudioDevice("id:18", &devices, true),
+            AudioDeviceState::kNumericId);
+}
+
 }  // namespace
 }  // namespace mocktail::launcher_ui
