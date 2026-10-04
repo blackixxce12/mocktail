@@ -14,6 +14,11 @@ inline constexpr std::size_t kMaximumHybridCommandBytes = 64 * 1024;
 inline constexpr char kExecuteRobloxHandler[] = "executeRoblox";
 inline constexpr char kRobloxWkHybridHandler[] = "RobloxWKHybrid";
 inline constexpr char kCompatibilityHandler[] = "mocktailRobloxBridge";
+// Desktop web checkout. It is the only URL ever handed to the host browser for
+// a purchase; the page's own purchase URL carries a payment session and is
+// never forwarded.
+inline constexpr char kWebRobuxPurchaseUrl[] =
+    "https://www.roblox.com/upgrades/robux";
 
 enum class CaptchaEventType {
   kShown,
@@ -42,6 +47,22 @@ const char* AndroidBridgeSource();
 std::string BuildRobloxAndroidUserAgent();
 bool IsBrowserLoginUrl(std::string_view url);
 bool IsEssentialWebResource(const char* uri);
+// The Robux page served to the Android app ("GooglePlayStore" user agent)
+// starts a purchase by navigating to /mobile-app-upgrades/buy?id=<sku>&...;
+// the APK's RobloxWebFragment.shouldOverrideUrlLoading intercepts that URL and
+// opens Google Play Billing. Mocktail has no Play Billing, so the helper must
+// intercept it too instead of letting it reach the server.
+bool IsAndroidStorePurchaseNavigation(const char* uri);
+enum class StorePurchaseNavigation {
+  kNone,     // Not a store purchase: decide the navigation as usual.
+  kHandOff,  // A Roblox page started a purchase: open the web checkout.
+  kIgnore,   // Any other page: drop the navigation and launch nothing.
+};
+// |current_uri| is the web view's main-frame URI (for a new-window action, the
+// opener's). It cannot tell a Roblox page from a third-party iframe inside it,
+// so this only keeps non-Roblox top-level pages from opening browser tabs.
+StorePurchaseNavigation ClassifyStorePurchaseNavigation(const char* current_uri,
+                                                        const char* target_uri);
 std::string BoundedLogToken(const char* value, std::string_view fallback);
 UriPolicyResult EvaluateNavigationUri(const char* uri);
 const char* CaptchaEventName(CaptchaEventType type);

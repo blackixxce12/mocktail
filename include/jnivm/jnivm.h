@@ -230,6 +230,19 @@ struct RobloxExperienceLifecycleCallbacks {
   void (*on_lua_app_did_return)(void *context) = nullptr;
 };
 
+// Google Play Billing entry points of the Android shell:
+// NativeGLJavaInterface.promptNativePurchase*(J player, String productId, ...)
+// (in-experience Robux upsell) and IAPPurchaseManager.invokeStore* (payments
+// protocol). Mocktail has no Play Billing; the consumer hands the purchase to
+// the web checkout. Consumers must copy product_id before returning.
+// expects_in_game_result is true for promptNativePurchase*, whose caller waits
+// for NativeGLInterface.nativeInGamePurchaseFinished.
+struct RobloxNativeStoreCallbacks {
+  void (*on_purchase_requested)(void* context, JNIEnv* env, jlong player_id,
+                                jstring product_id,
+                                bool expects_in_game_result) = nullptr;
+};
+
 class Class {
 public:
   explicit Class(std::string name) : name_(std::move(name)) {}
@@ -451,6 +464,14 @@ public:
   void ClearRobloxExperienceLifecycleCallbacks();
   bool DispatchRobloxExperienceLuaAppDidReturn();
 
+  // Same snapshot/clear contract as the lifecycle callbacks above.
+  void SetRobloxNativeStoreCallbacks(std::shared_ptr<void> context,
+                                     const RobloxNativeStoreCallbacks& callbacks);
+  void ClearRobloxNativeStoreCallbacks();
+  bool DispatchRobloxNativeStorePurchase(JNIEnv* env, jlong player_id,
+                                         jstring product_id,
+                                         bool expects_in_game_result);
+
   // Restores the pseudo-JNI table after guest code replaces env->functions.
   void RestoreFunctions();
 
@@ -582,6 +603,13 @@ private:
   mutable std::mutex roblox_experience_lifecycle_mutex_;
   std::shared_ptr<RobloxExperienceLifecycleBinding>
       roblox_experience_lifecycle_binding_;
+
+  struct RobloxNativeStoreBinding {
+    std::shared_ptr<void> context;
+    RobloxNativeStoreCallbacks callbacks;
+  };
+  mutable std::mutex roblox_native_store_mutex_;
+  std::shared_ptr<RobloxNativeStoreBinding> roblox_native_store_binding_;
 
   void InitJNIFunctionTables();
 };

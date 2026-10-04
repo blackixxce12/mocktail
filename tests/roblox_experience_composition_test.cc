@@ -1038,6 +1038,66 @@ TEST(RobloxExperienceCompositionTest,
   EXPECT_FALSE(composition.subscribed());
 }
 
+struct StorePurchaseReport {
+  bool success = true;
+  jlong player_id = 0;
+  std::string product_id;
+};
+
+std::vector<StorePurchaseReport> g_store_reports;
+std::atomic<int> g_web_checkout_opens{0};
+std::atomic<bool> g_web_checkout_opened{true};
+std::atomic<int> g_checkout_opened_notices{0};
+std::atomic<int> g_checkout_failed_notices{0};
+bool g_fail_store_report = false;
+bool g_store_exception_pending = false;
+JNINativeInterface_ g_store_exception_functions{};
+
+// Both run on the detached checkout worker, in place of the default browser
+// and the desktop notification.
+bool OpenWebCheckout() {
+  ++g_web_checkout_opens;
+  return g_web_checkout_opened.load();
+}
+
+void NoticeWebCheckout(bool browser_opened) {
+  ++(browser_opened ? g_checkout_opened_notices : g_checkout_failed_notices);
+}
+
+bool WaitForCheckoutNotices(int count) {
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (g_checkout_opened_notices + g_checkout_failed_notices < count) {
+    if (std::chrono::steady_clock::now() >= deadline) {
+      return false;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  return true;
+}
+
+void FinishInGamePurchase(JNIEnv* env, jclass, jboolean success,
+                          jlong player_id, jstring product_id) {
+  const char* chars = env->GetStringUTFChars(product_id, nullptr);
+  g_store_reports.push_back(
+      {success == JNI_TRUE, player_id, chars != nullptr ? chars : ""});
+  if (chars != nullptr) env->ReleaseStringUTFChars(product_id, chars);
+  if (!g_fail_store_report) {
+    return;
+  }
+  // jnivm never raises Java exceptions; emulate one left pending by the
+  // engine so that the report fails its JNI check.
+  g_store_exception_functions = *env->functions;
+  g_store_exception_functions.ExceptionCheck = [](JNIEnv*) -> jboolean {
+    return g_store_exception_pending ? JNI_TRUE : JNI_FALSE;
+  };
+  g_store_exception_functions.ExceptionClear = [](JNIEnv*) {
+    g_store_exception_pending = false;
+  };
+  g_store_exception_pending = true;
+  env->functions = &g_store_exception_functions;
+}
+
 }  // namespace
 
 class RobloxExperienceCompositionWebSurfaceTest : public ::testing::Test {
@@ -1157,6 +1217,17 @@ while True:
   static void PhysicalExit(RobloxExperienceComposition* composition,
                            uint64_t process_generation) {
     composition->HandleWebSurfaceExit(process_generation);
+  }
+
+  static void ReplaceWebCheckout(RobloxExperienceComposition* composition,
+                                 bool (*open)(), void (*notify)(bool)) {
+    composition->open_web_checkout_ = open;
+    composition->notify_web_checkout_ = notify;
+  }
+
+  static void EndWebCheckoutDebounce(RobloxExperienceComposition* composition) {
+    std::lock_guard<std::mutex> lock(composition->mutex_);
+    composition->last_web_checkout_launch_ = {};
   }
 };
 
@@ -1302,6 +1373,103 @@ TEST_F(RobloxExperienceCompositionWebSurfaceTest,
   PhysicalExit(composition.get(), 9);
   PhysicalExit(composition.get(), 9);
   EXPECT_EQ(probe->calls, 1);
+}
+
+// Synthetic product ids only; nothing here reaches a store, a browser or the
+// network.
+TEST_F(RobloxExperienceCompositionWebSurfaceTest,
+       StorePurchasesOpenWebCheckoutAndNeverFailThePlatformLoop) {
+  jnivm::VM vm;
+  Probe probe{&vm};
+  g_probe = &probe;
+  g_store_reports.clear();
+  g_web_checkout_opens = 0;
+  g_web_checkout_opened = true;
+  g_checkout_opened_notices = 0;
+  g_checkout_failed_notices = 0;
+  g_fail_store_report = false;
+  for (const char* class_name : {
+           "com/roblox/protocols/webview/WebViewProtocol",
+           "com/roblox/universalapp/messagebus/MessageBus",
+           "com/roblox/universalapp/messagebus/Connection",
+           "com/roblox/engine/jni/memstorage/MemStorage",
+           "com/roblox/engine/jni/memstorage/Connection",
+           "com/roblox/engine/jni/memstorage/Callback",
+           "com/roblox/engine/jni/NativeGLInterface",
+       }) {
+    vm.RegisterClass(class_name);
+  }
+  RobloxExperienceComposition composition(
+      {vm.GetJavaVM(), &vm, Prepare}, {},
+      {GetWebViewOpenId, GetWebViewHandleWindowCloseId, GetWebViewProtocolName,
+       GetWebViewAvailabilityId, GetWebViewMessageId, InitializeWebViewProtocol,
+       Subscribe, Disconnect, SetRequestHandler, ClearNativeRequestHandler,
+       PublishRaw, BroadcastDataModelFocus, GetWebViewMutateId,
+       GetWebViewCloseId, SignalWebViewJavascriptCallback,
+       UpdateCookieSetHandler, FinishInGamePurchase},
+      BrowserServiceSymbols(), PermissionsSymbols(), {}, JniFactory(&probe),
+      {});
+  ReplaceWebCheckout(&composition, OpenWebCheckout, NoticeWebCheckout);
+  ASSERT_TRUE(composition.InitializePlatformProtocols().ok());
+
+  JNIEnv* env = vm.GetJNIEnv();
+  jclass gl = env->FindClass("com/roblox/engine/jni/NativeGLJavaInterface");
+  jclass iap = env->FindClass("com/roblox/client/purchase/IAPPurchaseManager");
+  jmethodID prompt = env->GetStaticMethodID(gl, "promptNativePurchase",
+                                            "(JLjava/lang/String;)V");
+  jmethodID invoke_store = env->GetStaticMethodID(
+      iap, "invokeStore", "(Ljava/lang/String;Ljava/lang/String;)Z");
+  env->CallStaticVoidMethod(gl, prompt, static_cast<jlong>(42),
+                            env->NewStringUTF("test.robux.small"));
+  EXPECT_EQ(env->CallStaticBooleanMethod(iap, invoke_store,
+                                         env->NewStringUTF("test.sku"),
+                                         env->NewStringUTF("extra")),
+            JNI_FALSE);
+  ASSERT_TRUE(composition.DrainPlatformEvents().ok());
+  // The worker opens the browser, then tells the player where it went.
+  ASSERT_TRUE(WaitForCheckoutNotices(1));
+  EXPECT_EQ(g_web_checkout_opens, 1);
+  EXPECT_EQ(g_checkout_opened_notices, 1);
+  // Only the in-experience prompt waits for a result: not purchased.
+  ASSERT_EQ(g_store_reports.size(), 1u);
+  EXPECT_FALSE(g_store_reports[0].success);
+  EXPECT_EQ(g_store_reports[0].player_id, 42);
+  EXPECT_EQ(g_store_reports[0].product_id, "test.robux.small");
+
+  // A failed report is logged, never returned to the main loop, and a
+  // repeated prompt inside the debounce window opens no second browser tab.
+  g_fail_store_report = true;
+  env->CallStaticVoidMethod(gl, prompt, static_cast<jlong>(43),
+                            env->NewStringUTF("test.robux.medium"));
+  EXPECT_TRUE(composition.DrainPlatformEvents().ok());
+  EXPECT_FALSE(g_store_exception_pending);
+  EXPECT_EQ(g_web_checkout_opens, 1);
+  ASSERT_EQ(g_store_reports.size(), 2u);
+  EXPECT_EQ(g_store_reports[1].player_id, 43);
+  g_fail_store_report = false;
+  EXPECT_TRUE(composition.DrainPlatformEvents().ok());
+  EXPECT_EQ(g_store_reports.size(), 2u);
+
+  // Without a browser the player is told where to buy Robux instead.
+  EndWebCheckoutDebounce(&composition);
+  g_web_checkout_opened = false;
+  EXPECT_EQ(env->CallStaticBooleanMethod(iap, invoke_store,
+                                         env->NewStringUTF("test.sku"),
+                                         env->NewStringUTF("extra")),
+            JNI_FALSE);
+  EXPECT_TRUE(composition.DrainPlatformEvents().ok());
+  ASSERT_TRUE(WaitForCheckoutNotices(2));
+  EXPECT_EQ(g_web_checkout_opens, 2);
+  EXPECT_EQ(g_checkout_opened_notices, 1);
+  EXPECT_EQ(g_checkout_failed_notices, 1);
+  EXPECT_EQ(g_store_reports.size(), 2u);
+
+  EXPECT_TRUE(composition.Shutdown().ok());
+  env->CallStaticVoidMethod(gl, prompt, static_cast<jlong>(44),
+                            env->NewStringUTF("test.robux.large"));
+  EXPECT_EQ(g_store_reports.size(), 2u);
+  EXPECT_EQ(g_web_checkout_opens, 2);
+  g_probe = nullptr;
 }
 
 namespace {}  // namespace

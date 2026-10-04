@@ -3287,6 +3287,55 @@ void DispatchDataModelNotification(JNIEnv* env, jstring type, jstring data) {
   DeleteLocalJniReference(callback);
 }
 
+constexpr char kNativeGlJavaInterfaceClassName[] =
+    "com/roblox/engine/jni/NativeGLJavaInterface";
+constexpr char kIapPurchaseManagerClassName[] =
+    "com/roblox/client/purchase/IAPPurchaseManager";
+
+// APK 2.736: NativeGLJavaInterface.promptNativePurchase(JLjava/lang/String;)V,
+// promptNativePurchase(JLString;String;)V, promptNativePurchaseWithPayload(...)
+// and promptNativePurchaseWithPaymentSessionId(...) all lead with
+// (long player, String productId) and end in Google Play Billing.
+bool IsNativePromptPurchaseMethod(const std::shared_ptr<Class>& method_class,
+                                  const char* name, const char* signature) {
+  if (method_class == nullptr ||
+      method_class->GetName() != kNativeGlJavaInterfaceClassName ||
+      name == nullptr || signature == nullptr) {
+    return false;
+  }
+  const std::string_view sig(signature);
+  return (std::strcmp(name, "promptNativePurchase") == 0 ||
+          std::strcmp(name, "promptNativePurchaseWithPayload") == 0 ||
+          std::strcmp(name, "promptNativePurchaseWithPaymentSessionId") == 0) &&
+         sig.rfind("(JLjava/lang/String;", 0) == 0 && !sig.empty() &&
+         sig.back() == 'V';
+}
+
+bool IsIapStoreMethod(const std::shared_ptr<Class>& method_class,
+                      const char* name, const char* signature,
+                      const char* expected_name,
+                      const char* expected_signature) {
+  return method_class != nullptr &&
+         method_class->GetName() == kIapPurchaseManagerClassName &&
+         name != nullptr && signature != nullptr &&
+         std::strcmp(name, expected_name) == 0 &&
+         std::strcmp(signature, expected_signature) == 0;
+}
+
+void RouteNativeStorePurchase(JNIEnv* env, jlong player_id, jstring product_id,
+                              bool expects_in_game_result, const char* entry) {
+  // Never log the product id or payload: only the entry point.
+  std::cerr << "  [store] " << entry
+            << " requested; Google Play Billing is unavailable, routing to "
+               "the web checkout\n";
+  VM* vm = CurrentVM();
+  if (vm == nullptr ||
+      !vm->DispatchRobloxNativeStorePurchase(env, player_id, product_id,
+                                             expects_in_game_result)) {
+    std::cerr << "  [store] no web checkout consumer is registered\n";
+  }
+}
+
 void HandleStaticVoidMethodV(JNIEnv *env, jclass clazz, jmethodID methodID,
                              va_list args) {
   if (HandleRobloxTextInputStaticVoidMethodV(clazz, methodID, args)) {
@@ -3300,6 +3349,20 @@ void HandleStaticVoidMethodV(JNIEnv *env, jclass clazz, jmethodID methodID,
     return;
   }
   const std::shared_ptr<Class> method_class = ClassFromJClass(clazz);
+  if (IsNativePromptPurchaseMethod(method_class, name,
+                                   MethodSignature(methodID))) {
+    const jlong player_id = va_arg(args, jlong);
+    jstring product_id = va_arg(args, jstring);
+    RouteNativeStorePurchase(env, player_id, product_id, true, name);
+    return;
+  }
+  if (IsIapStoreMethod(method_class, name, MethodSignature(methodID),
+                       "invokeStoreV2", "(Ljava/lang/String;JLjava/lang/String;)V")) {
+    jstring product_id = va_arg(args, jstring);
+    const jlong player_id = va_arg(args, jlong);
+    RouteNativeStorePurchase(env, player_id, product_id, false, name);
+    return;
+  }
   if (std::strcmp(name, "openNativeOverlay") == 0 &&
       std::strcmp(MethodSignature(methodID),
                   "(Ljava/lang/String;Ljava/lang/String;)V") == 0 &&
@@ -3405,6 +3468,18 @@ void HandleStaticVoidMethodA(JNIEnv *env, jclass clazz, jmethodID methodID,
     return;
   }
   const std::shared_ptr<Class> method_class = ClassFromJClass(clazz);
+  if (IsNativePromptPurchaseMethod(method_class, name,
+                                   MethodSignature(methodID))) {
+    RouteNativeStorePurchase(env, args[0].j, static_cast<jstring>(args[1].l),
+                             true, name);
+    return;
+  }
+  if (IsIapStoreMethod(method_class, name, MethodSignature(methodID),
+                       "invokeStoreV2", "(Ljava/lang/String;JLjava/lang/String;)V")) {
+    RouteNativeStorePurchase(env, args[1].j, static_cast<jstring>(args[0].l),
+                             false, name);
+    return;
+  }
   if (std::strcmp(name, "openNativeOverlay") == 0 &&
       std::strcmp(MethodSignature(methodID),
                   "(Ljava/lang/String;Ljava/lang/String;)V") == 0 &&
@@ -3707,12 +3782,21 @@ jobject JNICALL CallStaticObjectMethod(JNIEnv * /*env*/, jclass clazz,
   return result != nullptr ? result : StaticObjectResultForMethod(methodID);
 }
 
-jboolean JNICALL CallStaticBooleanMethod(JNIEnv* /*env*/, jclass /*clazz*/, jmethodID methodID, ...) {
+jboolean JNICALL CallStaticBooleanMethod(JNIEnv* env, jclass clazz, jmethodID methodID, ...) {
   if (TraceEnabled()) {
     std::cout << "  [JNI] CallStaticBooleanMethod: " << MethodName(methodID) << '\n';
   }
   jboolean result = JNI_FALSE;
   const char* name = MethodName(methodID);
+  if (IsIapStoreMethod(ClassFromJClass(clazz), name, MethodSignature(methodID),
+                       "invokeStore", "(Ljava/lang/String;Ljava/lang/String;)Z")) {
+    va_list args;
+    va_start(args, methodID);
+    jstring product_id = va_arg(args, jstring);
+    va_end(args);
+    RouteNativeStorePurchase(env, 0, product_id, false, name);
+    return JNI_FALSE;  // The store was not invoked.
+  }
   if (std::strcmp(name, "isSystemThemeAvailable") == 0) {
     return JNI_TRUE;
   }
@@ -4200,6 +4284,7 @@ VM::~VM() {
   }
   ClearRobloxDataModelNotificationCallbacks();
   ClearRobloxExperienceLifecycleCallbacks();
+  ClearRobloxNativeStoreCallbacks();
   ClearRobloxCredentialSink();
   ClearRobloxCredentialProvider();
   ClearRobloxTextInputCallbacks();
@@ -4759,6 +4844,48 @@ bool VM::DispatchRobloxExperienceLuaAppDidReturn() {
     return false;
   }
   binding->callbacks.on_lua_app_did_return(binding->context.get());
+  return true;
+}
+
+void VM::SetRobloxNativeStoreCallbacks(
+    std::shared_ptr<void> context, const RobloxNativeStoreCallbacks& callbacks) {
+  std::shared_ptr<RobloxNativeStoreBinding> binding;
+  if (context != nullptr && callbacks.on_purchase_requested != nullptr) {
+    binding = std::make_shared<RobloxNativeStoreBinding>();
+    binding->context = std::move(context);
+    binding->callbacks = callbacks;
+  }
+  std::shared_ptr<RobloxNativeStoreBinding> old_binding;
+  {
+    std::lock_guard<std::mutex> lock(roblox_native_store_mutex_);
+    old_binding = std::move(roblox_native_store_binding_);
+    roblox_native_store_binding_ = std::move(binding);
+  }
+}
+
+void VM::ClearRobloxNativeStoreCallbacks() {
+  std::shared_ptr<RobloxNativeStoreBinding> old_binding;
+  {
+    std::lock_guard<std::mutex> lock(roblox_native_store_mutex_);
+    old_binding = std::move(roblox_native_store_binding_);
+  }
+}
+
+bool VM::DispatchRobloxNativeStorePurchase(JNIEnv* env, jlong player_id,
+                                           jstring product_id,
+                                           bool expects_in_game_result) {
+  std::shared_ptr<RobloxNativeStoreBinding> binding;
+  {
+    std::lock_guard<std::mutex> lock(roblox_native_store_mutex_);
+    binding = roblox_native_store_binding_;
+  }
+  if (binding == nullptr || binding->context == nullptr ||
+      binding->callbacks.on_purchase_requested == nullptr || env == nullptr) {
+    return false;
+  }
+  binding->callbacks.on_purchase_requested(binding->context.get(), env,
+                                           player_id, product_id,
+                                           expects_in_game_result);
   return true;
 }
 
@@ -6001,12 +6128,18 @@ void VM::InitJNIFunctionTables() {
   native_interface_.CallStaticBooleanMethod = CallStaticBooleanMethod;
 
   native_interface_.CallStaticBooleanMethodV =
-      [](JNIEnv* /*env*/, jclass /*clazz*/, jmethodID methodID, va_list /*args*/) -> jboolean {
+      [](JNIEnv* env, jclass clazz, jmethodID methodID, va_list args) -> jboolean {
     if (TraceEnabled()) {
       std::cout << "  [JNI] CallStaticBooleanMethodV: " << MethodName(methodID) << '\n';
     }
     jboolean result = JNI_FALSE;
     const char* name = MethodName(methodID);
+    if (IsIapStoreMethod(ClassFromJClass(clazz), name, MethodSignature(methodID),
+                         "invokeStore",
+                         "(Ljava/lang/String;Ljava/lang/String;)Z")) {
+      RouteNativeStorePurchase(env, 0, va_arg(args, jstring), false, name);
+      return JNI_FALSE;
+    }
     if (std::strcmp(name, "isSystemThemeAvailable") == 0) {
       return JNI_TRUE;
     }
@@ -6017,13 +6150,21 @@ void VM::InitJNIFunctionTables() {
   };
 
   native_interface_.CallStaticBooleanMethodA =
-      [](JNIEnv* /*env*/, jclass /*clazz*/, jmethodID methodID,
-         const jvalue* /*args*/) -> jboolean {
+      [](JNIEnv* env, jclass clazz, jmethodID methodID,
+         const jvalue* args) -> jboolean {
     if (TraceEnabled()) {
       std::cout << "  [JNI] CallStaticBooleanMethodA: " << MethodName(methodID) << '\n';
     }
     jboolean result = JNI_FALSE;
     const char* name = MethodName(methodID);
+    if (args != nullptr &&
+        IsIapStoreMethod(ClassFromJClass(clazz), name, MethodSignature(methodID),
+                         "invokeStore",
+                         "(Ljava/lang/String;Ljava/lang/String;)Z")) {
+      RouteNativeStorePurchase(env, 0, static_cast<jstring>(args[0].l), false,
+                               name);
+      return JNI_FALSE;
+    }
     if (std::strcmp(name, "isSystemThemeAvailable") == 0) {
       return JNI_TRUE;
     }

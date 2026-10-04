@@ -356,6 +356,89 @@ TEST(WebViewHelperPolicyTest, ShowsLoadErrorsForContentWithoutTelemetryNoise) {
   EXPECT_FALSE(IsEssentialWebResource(nullptr));
 }
 
+// Synthetic URLs only: these tests never contact Roblox.
+TEST(WebViewHelperPolicyTest, RecognizesOnlyAndroidStorePurchaseNavigations) {
+  for (const char* uri : {
+           "https://www.roblox.com/mobile-app-upgrades/buy?id=sku.example",
+           "https://www.roblox.com/mobile-app-upgrades/buy?id=x&ctx=nav",
+           "https://WWW.ROBLOX.COM/Mobile-App-Upgrades/Buy?id=x",
+           "https://roblox.com/mobile-app-upgrades/buy/?id=x",
+           "https://web.roblox.com/mobile-app-upgrades/buy",
+           "https://www.roblox.com/de/mobile-app-upgrades/buy?id=x",
+           "https://www.roblox.com:443/pt-br/Mobile-App-Upgrades/buy?id=x",
+       }) {
+    EXPECT_TRUE(IsAndroidStorePurchaseNavigation(uri)) << uri;
+  }
+  for (const char* uri : {
+           "https://www.roblox.com/upgrades/robux",
+           "https://www.roblox.com/upgrades/robux?showHeader=true",
+           "https://www.roblox.com/mobile-app-upgrades/buyer",
+           "https://www.roblox.com/de/mobile-app-upgrades/buyer?id=x",
+           "https://www.roblox.com/x-mobile-app-upgrades/buy?id=x",
+           "https://www.roblox.com/home?next=/mobile-app-upgrades/buy",
+           "https://www.roblox.com/home#/mobile-app-upgrades/buy",
+           "http://www.roblox.com/mobile-app-upgrades/buy?id=x",
+           "http://www.roblox.com/de/mobile-app-upgrades/buy?id=x",
+           "https://www.roblox.com:8443/mobile-app-upgrades/buy?id=x",
+           "https://user@www.roblox.com/mobile-app-upgrades/buy?id=x",
+           "https://user@www.roblox.com/de/mobile-app-upgrades/buy?id=x",
+           "https://roblox.com.evil.example/mobile-app-upgrades/buy?id=x",
+           "https://evilroblox.com/mobile-app-upgrades/buy?id=x",
+           "https://example.com/de/mobile-app-upgrades/buy?id=x",
+           "about:blank", "",
+       }) {
+    EXPECT_FALSE(IsAndroidStorePurchaseNavigation(uri)) << uri;
+  }
+  EXPECT_FALSE(IsAndroidStorePurchaseNavigation(nullptr));
+  EXPECT_EQ(std::string_view(kWebRobuxPurchaseUrl),
+            "https://www.roblox.com/upgrades/robux");
+}
+
+TEST(WebViewHelperPolicyTest, HandsOffStorePurchasesOnlyFromRobloxPages) {
+  constexpr char kPurchase[] =
+      "https://www.roblox.com/mobile-app-upgrades/buy?id=sku.example";
+  for (const char* current : {
+           "https://www.roblox.com/upgrades/robux?ctx=navigation",
+           "https://roblox.com/home",
+           "https://web.roblox.com/de/upgrades/robux",
+           "https://WWW.ROBLOX.COM:443/upgrades/robux",
+       }) {
+    EXPECT_EQ(ClassifyStorePurchaseNavigation(current, kPurchase),
+              StorePurchaseNavigation::kHandOff)
+        << current;
+  }
+  for (const char* current : {
+           "https://example.com/robux",
+           "https://roblox.com.evil.example/upgrades/robux",
+           "https://evilroblox.com/upgrades/robux",
+           "http://www.roblox.com/upgrades/robux",
+           "https://www.roblox.com:8443/upgrades/robux",
+           "https://user@www.roblox.com/upgrades/robux",
+           "about:blank",
+           "",
+       }) {
+    EXPECT_EQ(ClassifyStorePurchaseNavigation(current, kPurchase),
+              StorePurchaseNavigation::kIgnore)
+        << current;
+  }
+  EXPECT_EQ(ClassifyStorePurchaseNavigation(nullptr, kPurchase),
+            StorePurchaseNavigation::kIgnore);
+  for (const char* target : {
+           "https://www.roblox.com/upgrades/robux",
+           "https://example.com/mobile-app-upgrades/buy?id=x",
+           "http://www.roblox.com/mobile-app-upgrades/buy?id=x",
+       }) {
+    for (const char* current :
+         {"https://www.roblox.com/home", "https://example.com/"}) {
+      EXPECT_EQ(ClassifyStorePurchaseNavigation(current, target),
+                StorePurchaseNavigation::kNone)
+          << current << " -> " << target;
+    }
+  }
+  EXPECT_EQ(ClassifyStorePurchaseNavigation("https://www.roblox.com/", nullptr),
+            StorePurchaseNavigation::kNone);
+}
+
 }  // namespace
 }  // namespace webview
 }  // namespace mocktail

@@ -3,6 +3,7 @@
 
 #include <jni.h>
 
+#include <chrono>
 #include <cstdint>
 #include <deque>
 #include <memory>
@@ -188,6 +189,10 @@ class RobloxExperienceComposition final {
       void* context, const RobloxBrowserServiceExecuteRequest& request);
   static void WebSurfaceExited(void* context);
   static void NotifyLateLuaAppDidReturn(void* context);
+  static void NotifyNativeStorePurchase(void* context, JNIEnv* env,
+                                        jlong player_id, jstring product_id,
+                                        bool expects_in_game_result);
+  void DrainNativeStorePurchases();
   static void GamePresented(void* context, uint64_t frame_serial);
   static void* RunLaunchWorker(void* context);
   static Status RouteWebSurfaceEvent(WebSurfaceRoute route,
@@ -266,6 +271,19 @@ class RobloxExperienceComposition final {
   bool web_view_cookie_synchronized_ = false;
   bool clear_persisted_web_view_cookie_ = false;
   std::deque<RobloxExperienceLaunchRequest> pending_launch_requests_;
+  struct PendingNativeStorePurchase {
+    jlong player_id = 0;
+    std::string product_id;
+    bool expects_in_game_result = false;
+  };
+  std::deque<PendingNativeStorePurchase> pending_native_store_purchases_;
+  jnivm::VM* native_store_vm_ = nullptr;
+  std::chrono::steady_clock::time_point last_web_checkout_launch_{};
+  // Tests replace the browser launch and the desktop notification that
+  // follows it; both run on the checkout worker. nullptr opens the web
+  // checkout in the default browser and notifies the desktop.
+  bool (*open_web_checkout_)() = nullptr;
+  void (*notify_web_checkout_)(bool browser_opened) = nullptr;
   std::unique_ptr<LaunchTask> active_launch_;
   std::optional<RobloxExperienceLaunchRequest> presence_request_;
   std::string active_game_canonical_json_;

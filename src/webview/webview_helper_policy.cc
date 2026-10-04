@@ -181,6 +181,41 @@ bool IsEssentialWebResource(const char* uri) {
   return essential;
 }
 
+bool IsAndroidStorePurchaseNavigation(const char* uri) {
+  if (uri == nullptr) return false;
+  // https, default port, no userinfo, and a roblox.com host or subdomain.
+  if (!EvaluateNavigationUri(uri).privileged_bridge_allowed) return false;
+  GUri* parsed = g_uri_parse(uri, G_URI_FLAGS_NONE, nullptr);
+  if (parsed == nullptr) return false;
+  // The APK matches url.contains("mobile-app-upgrades/buy?"), so a locale
+  // prefix such as /de/ still starts a purchase. Match whole path segments.
+  constexpr std::string_view kPurchasePath = "/mobile-app-upgrades/buy";
+  gchar* path = g_ascii_strdown(g_uri_get_path(parsed), -1);
+  g_uri_unref(parsed);
+  const std::string_view value(path);
+  bool purchase = false;
+  for (std::size_t at = value.find(kPurchasePath);
+       !purchase && at != std::string_view::npos;
+       at = value.find(kPurchasePath, at + 1)) {
+    const std::size_t end = at + kPurchasePath.size();
+    purchase = end == value.size() || value[end] == '/';
+  }
+  g_free(path);
+  return purchase;
+}
+
+StorePurchaseNavigation ClassifyStorePurchaseNavigation(
+    const char* current_uri, const char* target_uri) {
+  if (!IsAndroidStorePurchaseNavigation(target_uri)) {
+    return StorePurchaseNavigation::kNone;
+  }
+  // Only Roblox's own pages may make Mocktail open the browser; any other
+  // page could otherwise open browser tabs at will.
+  return EvaluateNavigationUri(current_uri).privileged_bridge_allowed
+             ? StorePurchaseNavigation::kHandOff
+             : StorePurchaseNavigation::kIgnore;
+}
+
 std::string BoundedLogToken(const char* value, std::string_view fallback) {
   if (value == nullptr || *value == '\0') {
     return std::string(fallback);

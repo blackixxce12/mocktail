@@ -108,6 +108,9 @@ using BroadcastWebViewDataModelFocusFn = void (*)(JNIEnv *, jclass, jstring,
 using SignalWebViewJavascriptCallbackFn = void (*)(JNIEnv*, jclass, jstring);
 using UpdateRobloxCookieSetHandlerFn =
     void (*)(JNIEnv*, jobject, jobject);
+// NativeGLInterface.nativeInGamePurchaseFinished(ZJLjava/lang/String;)V
+using NativeInGamePurchaseFinishedFn = void (*)(JNIEnv*, jclass, jboolean,
+                                                jlong, jstring);
 
 struct RobloxWebViewMessageBusSymbols {
   GetWebViewOpenWindowIdFn get_open_window_id = nullptr;
@@ -129,6 +132,9 @@ struct RobloxWebViewMessageBusSymbols {
   GetWebViewCloseWindowIdFn get_close_window_id = nullptr;
   SignalWebViewJavascriptCallbackFn signal_javascript_callback = nullptr;
   UpdateRobloxCookieSetHandlerFn update_cookie_set_handler = nullptr;
+  // Optional, deliberately outside complete(): without it a declined native
+  // store purchase is simply not reported back to MarketplaceService.
+  NativeInGamePurchaseFinishedFn native_in_game_purchase_finished = nullptr;
 
   bool complete() const {
     return get_open_window_id != nullptr &&

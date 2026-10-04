@@ -83,6 +83,11 @@ RobloxPlatformWebSymbols ResolveRobloxPlatformWebSymbols(
           roblox_library,
           "Java_com_roblox_universalapp_cookie_JNICookieProtocol_"
           "updateOnSetCookieHandler");
+  symbols.web_view.native_in_game_purchase_finished =
+      Resolve<NativeInGamePurchaseFinishedFn>(
+          roblox_library,
+          "Java_com_roblox_engine_jni_NativeGLInterface_"
+          "nativeInGamePurchaseFinished");
 
   symbols.browser_service.bind = Resolve<BindRobloxMemStorageFn>(
       roblox_library, "Java_com_roblox_engine_jni_memstorage_MemStorage_bind");

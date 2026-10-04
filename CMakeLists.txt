@@ -266,6 +266,7 @@ target_include_directories(mocktail_legacy_jnivm PUBLIC
 add_library(mocktail_runtime STATIC
   src/runtime/command_line.cc
   src/runtime/crash_report_policy.cc
+  src/runtime/desktop_notification.cc
   src/runtime/discord_rpc.cc
   src/runtime/device_memory_profile.cc
   src/runtime/device_profile.cc
@@ -276,6 +277,7 @@ add_library(mocktail_runtime STATIC
   src/runtime/game_mode.cc
   src/runtime/game_session_coordinator.cc
   src/runtime/graphics_launch_policy.cc
+  src/runtime/host_launch_environment.cc
   src/runtime/http_client_policy.cc
   src/runtime/memory_limit.cc
   src/runtime/owned_pthread.cc
@@ -526,6 +528,8 @@ target_link_libraries(mocktail_experience_runtime PUBLIC
     Mocktail::LegacyJni
     mocktail_linker
     mocktail_window
+    # g_app_info_launch_default_for_uri() for the Robux web checkout.
+    PkgConfig::GIO
 )
 mocktail_apply_compile_options(mocktail_experience_runtime)
 

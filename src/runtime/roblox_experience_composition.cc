@@ -9,8 +9,12 @@
 #include <limits>
 #include <utility>
 
+#include <gio/gio.h>
+
 #include "jnivm/jnivm.h"
+#include "runtime/desktop_notification.h"
 #include "runtime/external_launch_broker.h"
+#include "runtime/host_launch_environment.h"
 #include "runtime/webview_helper_launcher.h"
 #include "window/window.h"
 
@@ -23,6 +27,86 @@ constexpr size_t kMaxPendingLaunchRequests = 8;
 constexpr size_t kLaunchWorkerStackSize = 64ULL * 1024 * 1024;
 constexpr std::chrono::milliseconds kWebSurfaceReadyTimeout{3000};
 constexpr char kRobloxBaseUrl[] = "https://www.roblox.com/";
+// Fixed web checkout. Engine-supplied strings are never handed to the host
+// URI launcher, and the browser keeps its own Roblox session: no credential
+// leaves Mocktail.
+constexpr char kWebRobuxCheckoutUrl[] = "https://www.roblox.com/upgrades/robux";
+constexpr size_t kMaxPendingNativeStorePurchases = 8;
+constexpr size_t kMaximumNativeStoreProductIdBytes = 256;
+constexpr std::chrono::seconds kWebCheckoutLaunchDebounce{3};
+constexpr char kNativeGlInterfaceClass[] =
+    "com/roblox/engine/jni/NativeGLInterface";
+
+struct WebCheckoutLaunch {
+  GAppLaunchContext* launch_context = nullptr;
+  bool (*open)() = nullptr;
+  void (*notify)(bool browser_opened) = nullptr;
+};
+
+// The browser can open on another workspace with only an urgency hint, so the
+// player is told where the purchase went.
+void NotifyWebRobuxCheckout(bool browser_opened) {
+  if (browser_opened) {
+    (void)ShowDesktopNotification(
+        "Robux purchase opened in your web browser",
+        "Finish buying Robux there, then try the purchase in the experience "
+        "again.");
+  } else {
+    (void)ShowDesktopNotification("Couldn't open your web browser",
+                                  "Buy Robux at roblox.com/upgrades/robux.");
+  }
+}
+
+gpointer RunWebRobuxCheckoutLaunch(gpointer data) {
+  auto* launch = static_cast<WebCheckoutLaunch*>(data);
+  bool opened = false;
+  if (launch->open != nullptr) {
+    opened = launch->open();
+  } else {
+    GError* error = nullptr;
+    opened = g_app_info_launch_default_for_uri(
+        kWebRobuxCheckoutUrl, launch->launch_context, &error);
+    if (opened) {
+      std::fprintf(stderr, "  [store] Robux web checkout opened in the system "
+                           "browser\n");
+    } else {
+      std::fprintf(stderr,
+                   "  [store] could not open the system browser (code %d); "
+                   "buy Robux at %s\n",
+                   error != nullptr ? error->code : 0, kWebRobuxCheckoutUrl);
+      g_clear_error(&error);
+    }
+  }
+  g_object_unref(launch->launch_context);
+  (launch->notify != nullptr ? launch->notify : NotifyWebRobuxCheckout)(opened);
+  delete launch;
+  return nullptr;
+}
+
+// Finding and starting the default browser reads desktop files and may wait
+// on D-Bus activation, and so does the notification after it, so neither runs
+// on the game loop. The detached worker owns its only state, the launch
+// context, and touches nothing of Mocktail's. |open| and |notify| replace the
+// browser and the notification in tests.
+void OpenWebRobuxCheckout(bool (*open)(), void (*notify)(bool)) {
+  auto* launch = new WebCheckoutLaunch{g_app_launch_context_new(), open,
+                                       notify};
+  RemoveMocktailEnvironment(launch->launch_context);
+  GError* error = nullptr;
+  GThread* worker = g_thread_try_new("mocktail-checkout",
+                                     RunWebRobuxCheckoutLaunch, launch, &error);
+  if (worker == nullptr) {
+    std::fprintf(stderr,
+                 "  [store] could not start the browser launch (code %d); buy "
+                 "Robux at %s\n",
+                 error != nullptr ? error->code : 0, kWebRobuxCheckoutUrl);
+    g_clear_error(&error);
+    g_object_unref(launch->launch_context);
+    delete launch;
+    return;
+  }
+  g_thread_unref(worker);
+}
 
 Status Invalid(std::string message) {
   return Status::Error(StatusCode::kInvalidArgument, std::move(message));
@@ -455,6 +539,19 @@ Status RobloxExperienceComposition::InitializePlatformProtocols() {
     permissions_bridge_ = std::move(permissions_bridge);
     call_protocol_bridge_ = std::move(call_protocol_bridge);
     platform_protocols_initialized_ = true;
+  }
+  if (jnivm::VM* vm = jnivm::VM::FromJavaVM(environment_.java_vm)) {
+    vm->SetRobloxNativeStoreCallbacks(
+        lifecycle_target_,
+        jnivm::RobloxNativeStoreCallbacks{
+            &RobloxExperienceComposition::NotifyNativeStorePurchase});
+    if (web_view_symbols_.native_in_game_purchase_finished == nullptr) {
+      std::fprintf(stderr, "  [store] libroblox has no "
+                           "nativeInGamePurchaseFinished; in-experience "
+                           "purchases are not reported back\n");
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    native_store_vm_ = vm;
   }
   std::fprintf(stderr,
                "  [platform] Android WebViewProtocol, BrowserService and "
@@ -1023,6 +1120,7 @@ Status RobloxExperienceComposition::DrainPlatformEvents() {
   Status status = web_view_bridge != nullptr
                       ? web_view_bridge->DrainHostWindowEvents()
                       : Status::Ok();
+  DrainNativeStorePurchases();
   if (status.ok()) {
     status = drain_helper(web_surface_process, process_generation,
                           logical_generation);
@@ -1190,6 +1288,97 @@ void RobloxExperienceComposition::NotifyLateLuaAppDidReturn(void* context) {
   std::lock_guard<std::mutex> lock(target->mutex);
   if (target->composition != nullptr) {
     target->composition->NotifyLuaAppDidReturn();
+  }
+}
+
+// Runs inside the engine's JNI call: copy, queue, return. No JNI back into
+// libroblox here; DrainNativeStorePurchases reports the result later, like
+// the Android shell does from its UI thread.
+void RobloxExperienceComposition::NotifyNativeStorePurchase(
+    void* context, JNIEnv* env, jlong player_id, jstring product_id,
+    bool expects_in_game_result) {
+  auto* target = static_cast<LifecycleTarget*>(context);
+  if (target == nullptr || env == nullptr) {
+    return;
+  }
+  PendingNativeStorePurchase pending;
+  pending.player_id = player_id;
+  pending.expects_in_game_result = expects_in_game_result;
+  if (product_id != nullptr) {
+    const jsize size = env->GetStringUTFLength(product_id);
+    const char* chars = env->GetStringUTFChars(product_id, nullptr);
+    if (chars != nullptr && size >= 0 &&
+        static_cast<size_t>(size) <= kMaximumNativeStoreProductIdBytes) {
+      pending.product_id.assign(chars, static_cast<size_t>(size));
+    }
+    if (chars != nullptr) env->ReleaseStringUTFChars(product_id, chars);
+  }
+  std::lock_guard<std::mutex> target_lock(target->mutex);
+  RobloxExperienceComposition* composition = target->composition;
+  if (composition == nullptr) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(composition->mutex_);
+  if (composition->pending_native_store_purchases_.size() <
+      kMaxPendingNativeStorePurchases) {
+    composition->pending_native_store_purchases_.push_back(std::move(pending));
+  }
+}
+
+// Never fails the platform loop: legacy_runtime ends the session on any
+// DrainPlatformEvents error, and a store hand-off problem is only logged.
+void RobloxExperienceComposition::DrainNativeStorePurchases() {
+  std::deque<PendingNativeStorePurchase> purchases;
+  bool launch_browser = false;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    purchases.swap(pending_native_store_purchases_);
+    const auto now = std::chrono::steady_clock::now();
+    if (!purchases.empty() &&
+        now - last_web_checkout_launch_ >= kWebCheckoutLaunchDebounce) {
+      last_web_checkout_launch_ = now;
+      launch_browser = true;
+    }
+  }
+  if (launch_browser) {
+    OpenWebRobuxCheckout(open_web_checkout_, notify_web_checkout_);
+  }
+  // APK 2.736 IAPPurchaseManager reports through nativeInGamePurchaseFinishedV2
+  // only while the native FFlag EnableSignalCheckoutSessionIdOnPurchase is on;
+  // libroblox 2.736 initializes it off, so the shell's default is the V1 call.
+  const NativeInGamePurchaseFinishedFn finished =
+      web_view_symbols_.native_in_game_purchase_finished;
+  for (const PendingNativeStorePurchase& purchase : purchases) {
+    if (!purchase.expects_in_game_result || finished == nullptr) {
+      continue;
+    }
+    JNIEnv* env = nullptr;
+    Status status = environment_.Acquire(&env);
+    jclass native_gl = nullptr;
+    jstring product = nullptr;
+    if (status.ok()) {
+      native_gl = env->FindClass(kNativeGlInterfaceClass);
+      product = env->NewStringUTF(purchase.product_id.c_str());
+      status = CheckJni(env, "prepare native purchase result");
+    }
+    if (status.ok() && (native_gl == nullptr || product == nullptr)) {
+      status = Unavailable("native purchase result values are unavailable");
+    }
+    if (status.ok()) {
+      // Same result the Android shell reports when Play Billing cannot start:
+      // not purchased. MarketplaceService closes the upsell instead of waiting
+      // forever; the player retries after buying Robux on the web.
+      finished(env, native_gl, JNI_FALSE, purchase.player_id, product);
+      status = CheckJni(env, "report native purchase result");
+    }
+    if (product != nullptr) env->DeleteLocalRef(product);
+    if (native_gl != nullptr) env->DeleteLocalRef(native_gl);
+    if (!status.ok()) {
+      std::fprintf(stderr, "  [store] %s\n", status.message().c_str());
+      continue;
+    }
+    std::fprintf(stderr, "  [store] in-experience purchase reported as not "
+                         "completed\n");
   }
 }
 
@@ -1577,9 +1766,19 @@ Status RobloxExperienceComposition::Shutdown() {
   std::unique_ptr<RobloxCallProtocolBridge> call_protocol_bridge;
   std::shared_ptr<WebViewHelperProcess> web_surface_process;
   jnivm::VM* late_lifecycle_vm = nullptr;
+  jnivm::VM* native_store_vm = nullptr;
   {
     std::lock_guard<std::mutex> target_lock(lifecycle_target_->mutex);
     lifecycle_target_->composition = nullptr;
+  }
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    native_store_vm = native_store_vm_;
+    native_store_vm_ = nullptr;
+    pending_native_store_purchases_.clear();
+  }
+  if (native_store_vm != nullptr) {
+    native_store_vm->ClearRobloxNativeStoreCallbacks();
   }
   {
     std::lock_guard<std::mutex> target_lock(web_surface_exit_target_->mutex);

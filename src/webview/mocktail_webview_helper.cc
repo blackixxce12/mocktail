@@ -24,6 +24,7 @@
 #include <string>
 #include <string_view>
 
+#include "runtime/host_launch_environment.h"
 #include "runtime/runtime_config.h"
 #include "runtime/webview_helper_launcher.h"
 #include "webview/webview_helper_policy.h"
@@ -34,6 +35,13 @@ constexpr std::size_t kMaximumRequestBytes =
     mocktail::runtime::kMaximumWebViewUrlBytes + 64;
 constexpr std::size_t kMaximumQueuedHybridEvents = 64;
 constexpr std::size_t kMaximumQueuedHybridBytes = 1024 * 1024;
+constexpr gint64 kWebPurchaseLaunchDebounceUs = 3 * G_USEC_PER_SEC;
+constexpr char kLoadErrorMessage[] =
+    "Couldn't load the page. Check your connection and try again.";
+constexpr char kWebPurchaseOpenedMessage[] =
+    "Opened the Robux page in your web browser. Finish your purchase there.";
+constexpr char kWebPurchaseFailedMessage[] =
+    "Couldn't open your web browser. Buy Robux at roblox.com/upgrades/robux.";
 
 using mocktail::webview::BoundedLogToken;
 using mocktail::webview::BuildCallbackScript;
@@ -41,12 +49,14 @@ using mocktail::webview::BuildRobloxAndroidUserAgent;
 using mocktail::webview::CaptchaEvent;
 using mocktail::webview::CaptchaEventName;
 using mocktail::webview::CaptchaEventType;
+using mocktail::webview::ClassifyStorePurchaseNavigation;
 using mocktail::webview::EvaluateNavigationUri;
 using mocktail::webview::ExtractExecuteRobloxCommand;
 using mocktail::webview::ExtractRobloxWkHybridCommand;
 using mocktail::webview::IsBrowserLoginUrl;
 using mocktail::webview::IsEssentialWebResource;
 using mocktail::webview::ParseCaptchaEvent;
+using mocktail::webview::StorePurchaseNavigation;
 using mocktail::webview::UriPolicyResult;
 
 enum class PendingRobloxCookieOperation {
@@ -71,6 +81,7 @@ struct AppState {
   guint control_source = 0;
   guint hybrid_write_source = 0;
   uint64_t cookie_generation = 0;
+  gint64 last_web_purchase_launch_us = 0;
   PendingRobloxCookieOperation pending_cookie_operation =
       PendingRobloxCookieOperation::kNone;
   bool back_navigation_disabled = false;
@@ -823,14 +834,38 @@ void UpdateDomainTitle(WebKitWebView* web_view, SurfaceState* surface) {
   }
 }
 
+// One in-window banner carries both the load error, with its Retry action,
+// and the purchase hand-off notice, without one.
+bool ShowBanner(WebKitWebView* web_view, const char* message, bool retry) {
+  auto* banner = GTK_REVEALER(
+      g_object_get_data(G_OBJECT(web_view), "mocktail-load-error"));
+  auto* label = GTK_LABEL(
+      g_object_get_data(G_OBJECT(web_view), "mocktail-banner-message"));
+  auto* retry_button = GTK_WIDGET(
+      g_object_get_data(G_OBJECT(web_view), "mocktail-banner-retry"));
+  if (banner == nullptr || label == nullptr || retry_button == nullptr) {
+    return false;
+  }
+  const bool changed =
+      !gtk_revealer_get_reveal_child(banner) ||
+      std::string_view(gtk_label_get_text(label)) != message;
+  gtk_label_set_text(label, message);
+  gtk_widget_set_visible(retry_button, retry);
+  gtk_revealer_set_reveal_child(banner, TRUE);
+  return changed;
+}
+
 void SetLoadErrorVisible(WebKitWebView* web_view, bool visible) {
+  if (visible) {
+    if (ShowBanner(web_view, kLoadErrorMessage, true)) {
+      std::cerr << "[webview] showing page load error with retry action\n";
+    }
+    return;
+  }
   auto* banner = GTK_REVEALER(
       g_object_get_data(G_OBJECT(web_view), "mocktail-load-error"));
   if (banner != nullptr) {
-    if (visible && !gtk_revealer_get_reveal_child(banner)) {
-      std::cerr << "[webview] showing page load error with retry action\n";
-    }
-    gtk_revealer_set_reveal_child(banner, visible);
+    gtk_revealer_set_reveal_child(banner, FALSE);
   }
 }
 
@@ -975,6 +1010,61 @@ void OnWebProcessTerminated(WebKitWebView* web_view,
             << ProcessTerminationName(reason) << '\n';
 }
 
+// The surface that asked for the browser; its window may close first.
+struct BrowserLaunchConfirmation {
+  explicit BrowserLaunchConfirmation(WebKitWebView* web_view) {
+    g_weak_ref_init(&surface, G_OBJECT(web_view));
+  }
+
+  ~BrowserLaunchConfirmation() { g_weak_ref_clear(&surface); }
+
+  GWeakRef surface;
+};
+
+// The banner reports the outcome only; nothing is shown while the browser
+// starts.
+void FinishSystemBrowserLaunch(GObject*, GAsyncResult* result,
+                               gpointer user_data) {
+  std::unique_ptr<BrowserLaunchConfirmation> confirmation(
+      static_cast<BrowserLaunchConfirmation*>(user_data));
+  GError* error = nullptr;
+  const bool opened =
+      g_app_info_launch_default_for_uri_finish(result, &error) != FALSE;
+  if (opened) {
+    std::cerr << "[webview] system browser opened for the Robux page\n";
+  } else {
+    std::cerr << "[webview] system browser launch failed domain="
+              << BoundedLogToken(error == nullptr
+                                     ? nullptr
+                                     : g_quark_to_string(error->domain),
+                                 "unknown")
+              << " code=" << (error == nullptr ? 0 : error->code) << '\n';
+    if (error != nullptr) g_error_free(error);
+  }
+  auto* web_view_object =
+      static_cast<GObject*>(g_weak_ref_get(&confirmation->surface));
+  if (web_view_object != nullptr) {
+    ShowBanner(WEBKIT_WEB_VIEW(web_view_object),
+               opened ? kWebPurchaseOpenedMessage : kWebPurchaseFailedMessage,
+               false);
+    g_object_unref(web_view_object);
+  }
+}
+
+// The same launch GtkUriLauncher performs outside a sandbox: the display's
+// launch context carries the startup/activation token. GtkUriLauncher cannot
+// drop variables, though, and the browser must not inherit Mocktail's own.
+void OpenWebPurchaseInSystemBrowser(WebKitWebView* web_view) {
+  GdkAppLaunchContext* context = gdk_display_get_app_launch_context(
+      gtk_widget_get_display(GTK_WIDGET(web_view)));
+  mocktail::runtime::RemoveMocktailEnvironment(G_APP_LAUNCH_CONTEXT(context));
+  g_app_info_launch_default_for_uri_async(
+      mocktail::webview::kWebRobuxPurchaseUrl, G_APP_LAUNCH_CONTEXT(context),
+      nullptr, FinishSystemBrowserLaunch,
+      new BrowserLaunchConfirmation(web_view));
+  g_object_unref(context);
+}
+
 gboolean OnDecidePolicy(WebKitWebView* web_view, WebKitPolicyDecision* decision,
                         WebKitPolicyDecisionType type, gpointer user_data) {
   if (type != WEBKIT_POLICY_DECISION_TYPE_NAVIGATION_ACTION &&
@@ -995,6 +1085,38 @@ gboolean OnDecidePolicy(WebKitWebView* web_view, WebKitPolicyDecision* decision,
     std::cerr << "[webview] navigation blocked scheme=" << policy.scheme
               << " host=" << policy.host << '\n';
     webkit_policy_decision_ignore(decision);
+    return TRUE;
+  }
+  // The main frame's page (for a new-window action, the opener's). WebKitGTK
+  // does not say which frame started a navigation, so a third-party iframe on
+  // a Roblox page still counts as Roblox; the hand-off only ever opens the
+  // fixed Robux page, at most once per debounce interval.
+  const char* current_uri = webkit_web_view_get_uri(web_view);
+  const StorePurchaseNavigation purchase =
+      ClassifyStorePurchaseNavigation(current_uri, uri);
+  if (purchase == StorePurchaseNavigation::kIgnore) {
+    std::cerr << "[webview] store purchase navigation from host="
+              << EvaluateNavigationUri(current_uri).host << " ignored\n";
+    webkit_policy_decision_ignore(decision);
+    return TRUE;
+  }
+  if (purchase == StorePurchaseNavigation::kHandOff) {
+    // Android hands this URL to Google Play Billing. Without Play Billing the
+    // request would reach the server and fail silently, so the Robux page
+    // seemed to ignore every package click. Hand the purchase to the user's
+    // browser instead; the original URL (payment session, SKU) is dropped.
+    webkit_policy_decision_ignore(decision);
+    AppState* app = static_cast<SurfaceState*>(user_data)->app;
+    const gint64 now = g_get_monotonic_time();
+    if (app->last_web_purchase_launch_us != 0 &&
+        now - app->last_web_purchase_launch_us < kWebPurchaseLaunchDebounceUs) {
+      std::cerr << "[webview] repeated store purchase navigation ignored\n";
+      return TRUE;
+    }
+    app->last_web_purchase_launch_us = now;
+    std::cerr << "[webview] store purchase navigation handed to the system "
+                 "browser\n";
+    OpenWebPurchaseInSystemBrowser(web_view);
     return TRUE;
   }
   webkit_policy_decision_use(decision);
@@ -1353,8 +1475,7 @@ WebKitWebView* CreateSurface(AppState* app, WebKitWebView* related_view) {
   gtk_widget_set_margin_end(error_content, 12);
   gtk_widget_set_margin_top(error_content, 8);
   gtk_widget_set_margin_bottom(error_content, 8);
-  GtkWidget* error_message = gtk_label_new(
-      "Couldn't load the page. Check your connection and try again.");
+  GtkWidget* error_message = gtk_label_new(kLoadErrorMessage);
   gtk_label_set_wrap(GTK_LABEL(error_message), TRUE);
   gtk_label_set_xalign(GTK_LABEL(error_message), 0);
   gtk_widget_set_hexpand(error_message, TRUE);
@@ -1370,6 +1491,10 @@ WebKitWebView* CreateSurface(AppState* app, WebKitWebView* related_view) {
   gtk_window_set_child(GTK_WINDOW(window), content);
   g_object_set_data_full(G_OBJECT(web_view), "mocktail-load-error",
                          g_object_ref(error_banner), g_object_unref);
+  g_object_set_data_full(G_OBJECT(web_view), "mocktail-banner-message",
+                         g_object_ref(error_message), g_object_unref);
+  g_object_set_data_full(G_OBJECT(web_view), "mocktail-banner-retry",
+                         g_object_ref(retry), g_object_unref);
 
   auto* surface =
       new SurfaceState(app, GTK_WINDOW(window), related_view == nullptr);

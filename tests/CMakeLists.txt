@@ -50,6 +50,21 @@ target_link_libraries(discord_rpc_test PRIVATE
   GTest::gtest_main
 )
 
+add_executable(desktop_notification_test desktop_notification_test.cc)
+target_link_libraries(desktop_notification_test PRIVATE
+  Mocktail::Runtime
+  PkgConfig::GIO
+  GTest::gtest_main
+  Threads::Threads
+)
+
+add_executable(host_launch_environment_test host_launch_environment_test.cc)
+target_link_libraries(host_launch_environment_test PRIVATE
+  Mocktail::Runtime
+  PkgConfig::GIO
+  GTest::gtest_main
+)
+
 add_executable(native_update_helper_fixture native_update_helper_fixture.cc)
 add_executable(native_progress_helper_fixture native_progress_helper_fixture.cc)
 mocktail_apply_compile_options(native_update_helper_fixture)
@@ -415,6 +430,16 @@ target_link_libraries(jnivm_experience_lifecycle_test PRIVATE
   Threads::Threads
 )
 mocktail_apply_compile_options(jnivm_experience_lifecycle_test)
+
+add_executable(jnivm_native_store_test
+  jnivm_native_store_test.cc
+)
+target_link_libraries(jnivm_native_store_test PRIVATE
+  Mocktail::LegacyJni
+  GTest::gtest_main
+  Threads::Threads
+)
+mocktail_apply_compile_options(jnivm_native_store_test)
 
 add_executable(jnivm_native_text_box_info_test
   jnivm_native_text_box_info_test.cc
@@ -945,6 +970,7 @@ gtest_discover_tests(roblox_fresh_game_launch_controller_test)
 gtest_discover_tests(roblox_experience_composition_test)
 gtest_discover_tests(jnivm_message_bus_test)
 gtest_discover_tests(jnivm_experience_lifecycle_test)
+gtest_discover_tests(jnivm_native_store_test)
 gtest_discover_tests(jnivm_native_text_box_info_test)
 gtest_discover_tests(jnivm_webrtc_audio_manager_test)
 gtest_discover_tests(vulkan_present_observer_test)
@@ -991,6 +1017,8 @@ if(MOCKTAIL_ENABLE_UPSTREAM_JNIVM)
 endif()
 gtest_discover_tests(libc_shim_test)
 gtest_discover_tests(discord_rpc_test)
+gtest_discover_tests(desktop_notification_test)
+gtest_discover_tests(host_launch_environment_test)
 gtest_discover_tests(asset_manager_test)
 gtest_discover_tests(android_looper_test)
 gtest_discover_tests(android_native_window_test)
