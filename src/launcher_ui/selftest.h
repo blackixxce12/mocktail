@@ -52,6 +52,9 @@ class Selftest {
   guint RenderBindingPage();
   guint SearchStep();
   guint SaveStep();
+  guint OpenEnvironmentDialog();
+  guint RenderEnvironmentDialog();
+  guint MoveEnvironment();
   guint Resize(int width, int height);
   guint RecordResize(int requested_width);
   guint CheckHints();

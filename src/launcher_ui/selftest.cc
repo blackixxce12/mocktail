@@ -165,6 +165,9 @@ void Selftest::Start() {
   steps_.push_back([this] { return RenderBindingPage(); });
   steps_.push_back([this] { return SearchStep(); });
   steps_.push_back([this] { return SaveStep(); });
+  steps_.push_back([this] { return OpenEnvironmentDialog(); });
+  steps_.push_back([this] { return RenderEnvironmentDialog(); });
+  steps_.push_back([this] { return MoveEnvironment(); });
   steps_.push_back([this] { return Resize(480, 720); });
   steps_.push_back([this] { return RecordResize(480); });
   for (const SectionInfo& info : Sections()) {
@@ -580,6 +583,71 @@ guint Selftest::SaveStep() {
   }
   Note("window_state_updated", state.width == 1366 ? "true" : "false");
   return 100;
+}
+
+// The banner's Details button opens the dialog that lists the overriding
+// variables; it is rendered with the whole window, which hosts dialogs.
+guint Selftest::OpenEnvironmentDialog() {
+  BannerKind kind = BannerKind::kConfigError;
+  const Banner* banner = context_->TopBanner(&kind);
+  if (banner == nullptr || kind != BannerKind::kEnvironmentOverrides ||
+      !banner->on_button) {
+    Error("no environment banner to open");
+    return 50;
+  }
+  const std::function<void()> open = banner->on_button;
+  open();
+  return kSettleMilliseconds * 2;
+}
+
+guint Selftest::RenderEnvironmentDialog() {
+  AdwDialog* dialog = adw_application_window_get_visible_dialog(
+      ADW_APPLICATION_WINDOW(window_->widget()));
+  if (dialog == nullptr) {
+    Error("the environment dialog did not open");
+    return 50;
+  }
+  const std::filesystem::path path = out_dir_ / "environment-dialog.png";
+  std::string detail;
+  GtkWidget* root = gtk_window_get_child(GTK_WINDOW(window_->widget()));
+  if (root == nullptr || !Render(root, path, &detail)) {
+    Error("cannot render " + path.string());
+  } else {
+    rendered_.push_back(path.filename().string() + " " + detail);
+  }
+  adw_dialog_force_close(dialog);
+  return kSettleMilliseconds;
+}
+
+// "Move into settings": the override's value lands in the draft, the
+// banner goes, and Play would report "play ignore-env".
+guint Selftest::MoveEnvironment() {
+  context_->MoveEnvironmentIntoSettings();
+  if (!context_->ignoring_environment()) {
+    Error("moving the environment did not mark it ignored");
+  }
+  BannerKind kind = BannerKind::kConfigError;
+  if (context_->TopBanner(&kind) != nullptr &&
+      kind == BannerKind::kEnvironmentOverrides) {
+    Error("the environment banner stayed after moving the variables");
+  }
+  if (context_->Value("graphics.backend") !=
+      std::optional<std::string>("direct-vulkan")) {
+    Error("the overriding value was not moved into the draft");
+  }
+  if (!context_->Save()) Error("Save after moving the variables failed");
+  if (!context_->can_play()) {
+    Error("Play is blocked after moving the variables: " +
+          context_->play_blocker());
+  }
+  GAction* play =
+      g_action_map_lookup_action(G_ACTION_MAP(window_->widget()), "play");
+  if (play == nullptr || !g_action_get_enabled(play)) {
+    Error("the play action is disabled");
+  }
+  Note("environment_moved",
+       context_->ignoring_environment() ? "true" : "false");
+  return kSettleMilliseconds;
 }
 
 guint Selftest::Resize(int width, int height) {
