@@ -550,6 +550,11 @@ int main(int argc, char* argv[]) {
                    "out\n";
       break;
     case mocktail::runtime::ActiveAccountKind::kEnvironmentOverride:
+      // A memory-limit re-exec inherits the slot its parent selected.
+      if (mocktail::runtime::IsAccountStoreSlot(paths)) {
+        std::cout << "  [auth] account slot selected by MOCKTAIL_AUTH_ROOT\n";
+      }
+      break;
     case mocktail::runtime::ActiveAccountKind::kLegacy:
       break;
   }
@@ -1010,7 +1015,7 @@ int main(int argc, char* argv[]) {
       // Inside the account store WebKit's jar never decides the account: a
       // session it kept may belong to another saved account.
       PromptFirstLaunchSignIn(environment, paths, auth_service, http_client,
-                              active_account.uses_account_store(),
+                              mocktail::runtime::IsAccountStoreSlot(paths),
                               &composition);
     }
     if (!composition) {

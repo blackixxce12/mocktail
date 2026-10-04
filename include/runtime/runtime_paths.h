@@ -190,6 +190,11 @@ struct ActiveAccountResolution {
   }
 };
 
+// True when paths' auth root is a slot of the account store under its own
+// data root, as ResolveActiveAccountAuthRoot exports it. Also true in a
+// re-executed child, which inherits the slot as MOCKTAIL_AUTH_ROOT.
+bool IsAccountStoreSlot(const RuntimePaths& paths);
+
 // Resolves the auth root of the selected saved account. base_paths must be
 // built without an account-store MOCKTAIL_AUTH_ROOT. Reads only; the caller
 // exports MOCKTAIL_AUTH_ROOT and rebuilds its paths when uses_account_store().

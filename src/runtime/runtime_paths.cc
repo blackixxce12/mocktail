@@ -810,6 +810,18 @@ std::string FormatActiveAccountPointer(const ActiveAccountPointer& pointer) {
   return std::to_string(pointer.user_id) + "\n";
 }
 
+bool IsAccountStoreSlot(const RuntimePaths& paths) {
+  const std::filesystem::path root = paths.auth_root().lexically_normal();
+  const std::filesystem::path accounts =
+      (paths.data_root() / "auth" / std::string(kAccountStoreDirectoryName))
+          .lexically_normal();
+  if (!root.has_filename() || root.parent_path() != accounts) {
+    return false;
+  }
+  const std::string slot = root.filename().string();
+  return slot == kGuestAccountSlotName || ParseAccountUserId(slot, nullptr);
+}
+
 ActiveAccountResolution ResolveActiveAccountAuthRoot(
     const RuntimePaths& base_paths, const Environment& environment) {
   ActiveAccountResolution result;

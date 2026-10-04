@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -845,6 +846,34 @@ TEST(ActiveAccountTest, AnUnusableSelectionStartsSignedOut) {
     EXPECT_EQ(resolution.auth_root, store.accounts() / "guest")
         << test_case.name;
   }
+}
+
+TEST(ActiveAccountTest, RecognisesStoreSlotsAfterAReexec) {
+  const auto slot = [](std::map<std::string, std::string> extra) {
+    std::unordered_map<std::string, std::string> values = {
+        {"HOME", "/home/player"}};
+    for (auto& [name, value] : extra) {
+      values[name] = value;
+    }
+    const MapEnvironment environment(std::move(values));
+    return IsAccountStoreSlot(RuntimePaths::FromEnvironment(environment, "/"));
+  };
+  EXPECT_FALSE(slot({}));
+  constexpr char kAccounts[] =
+      "/home/player/.local/share/mocktail/auth/accounts";
+  EXPECT_TRUE(slot({{"MOCKTAIL_AUTH_ROOT", std::string(kAccounts) + "/42"}}));
+  EXPECT_TRUE(
+      slot({{"MOCKTAIL_AUTH_ROOT", std::string(kAccounts) + "/guest"}}));
+  EXPECT_TRUE(
+      slot({{"MOCKTAIL_AUTH_ROOT", std::string(kAccounts) + "/./42"}}));
+  EXPECT_TRUE(slot({{"MOCKTAIL_DATA_ROOT", "/data"},
+                    {"MOCKTAIL_AUTH_ROOT", "/data/auth/accounts/7"}}));
+  EXPECT_FALSE(slot({{"MOCKTAIL_AUTH_ROOT", std::string(kAccounts) + "/x"}}));
+  EXPECT_FALSE(slot({{"MOCKTAIL_AUTH_ROOT", std::string(kAccounts) + "/042"}}));
+  EXPECT_FALSE(slot({{"MOCKTAIL_AUTH_ROOT", std::string(kAccounts)}}));
+  EXPECT_FALSE(slot({{"MOCKTAIL_AUTH_ROOT", "/elsewhere/accounts/42"}}));
+  EXPECT_FALSE(slot({{"MOCKTAIL_DATA_ROOT", "/data"},
+                     {"MOCKTAIL_AUTH_ROOT", std::string(kAccounts) + "/42"}}));
 }
 
 TEST(ActiveAccountTest, ASymlinkedPointerIsNotFollowed) {
