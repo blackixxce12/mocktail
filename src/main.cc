@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
-#include <future>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -25,6 +24,7 @@
 #include "mocktail/audio/webrtc_jni_audio_bridge.h"
 #include "mocktail/audio/roblox_output_device_bridge.h"
 #include "runtime/auth_runtime_composition.h"
+#include "runtime/browser_sign_in.h"
 #include "runtime/command_line.h"
 #include "runtime/crash_report_policy.h"
 #include "runtime/environment.h"
@@ -122,6 +122,7 @@ void PromptFirstLaunchSignIn(
     const mocktail::runtime::RuntimePaths& paths,
     mocktail::services::AuthService& auth_service,
     const std::shared_ptr<mocktail::services::HttpClient>& http_client,
+    bool clear_browser_session,
     mocktail::runtime::AuthRuntimeComposition* composition) {
   if (composition == nullptr ||
       composition->status != mocktail::runtime::AuthRuntimeStatus::kGuest ||
@@ -134,19 +135,9 @@ void PromptFirstLaunchSignIn(
     return;
   }
 
-  std::filesystem::path helper;
-  const char* helper_override = std::getenv("MOCKTAIL_WEBVIEW_HELPER");
-  if (helper_override != nullptr && helper_override[0] != '\0') {
-    helper = helper_override;
-  } else {
-    std::error_code error;
-    const std::filesystem::path executable =
-        std::filesystem::read_symlink("/proc/self/exe", error);
-    if (!error && !executable.empty()) {
-      helper = executable.parent_path() / "mocktail_webview_helper";
-    }
-  }
-  if (helper.empty() || !std::filesystem::exists(helper)) {
+  const std::filesystem::path helper =
+      mocktail::runtime::ResolveWebViewHelperPath();
+  if (helper.empty()) {
     return;
   }
 
@@ -157,118 +148,47 @@ void PromptFirstLaunchSignIn(
             << "  [auth] tip: you can use Quick Log In (QR code) or username/password\n"
             << "  [auth] (close the sign-in window to play as guest)\n\n";
 
-  struct FirstLaunchContext {
-    std::mutex mutex;
-    bool finished = false;
-  };
-  auto context = std::make_shared<FirstLaunchContext>();
-
-  mocktail::runtime::WebViewHelperExitObserver exit_observer;
-  exit_observer.context = context;
-  exit_observer.on_exit = [](void* ctx) {
-    auto* c = static_cast<FirstLaunchContext*>(ctx);
-    std::lock_guard<std::mutex> lock(c->mutex);
-    c->finished = true;
-  };
-
-  constexpr std::string_view kBrowserLoginUrl = "https://www.roblox.com/login";
-  const auto launched = mocktail::runtime::LaunchWebViewHelper(
-      helper, kBrowserLoginUrl, exit_observer);
-  if (!launched || launched.process == nullptr) {
+  const std::filesystem::path cookie_file = paths.cookie_file();
+  mocktail::runtime::BrowserSignInSession sign_in(
+      auth_service,
+      [cookie_file](const mocktail::services::AuthIdentity&,
+                    std::string_view cookie_value) {
+        return mocktail::runtime::PersistRobloxCookie(cookie_file,
+                                                      cookie_value);
+      });
+  std::string error;
+  if (!sign_in.Start(helper, mocktail::runtime::kBrowserSignInUrl,
+                     "Roblox sign in", clear_browser_session, &error)) {
     return;
   }
-  if (!launched.process->WaitUntilReady(std::chrono::milliseconds(5000))) {
-    (void)launched.process->RequestClose();
-    return;
-  }
-  (void)launched.process->SetRobloxCookie("");
-  (void)launched.process->SetTitle("Roblox sign in");
-  (void)launched.process->SetVisible(true);
-
-  // WebKit reports a session left from an earlier sign-in as soon as the page
-  // opens. Roblox must accept a session before it is saved and the window
-  // closes; a rejected one is cleared so the user can sign in again. The check
-  // runs on a worker so helper events keep draining meanwhile.
-  using BrowserSignInStatus = mocktail::runtime::BrowserSignInStatus;
-  constexpr auto kRecheckDelay = std::chrono::seconds(5);
-  std::string captured_cookie;
-  std::string checked_cookie;
-  std::future<BrowserSignInStatus> check;
-  auto next_check = std::chrono::steady_clock::now();
-  bool accepted = false;
-  std::vector<mocktail::runtime::WebViewHelperEvent> events;
-  while (true) {
-    {
-      std::lock_guard<std::mutex> lock(context->mutex);
-      if (context->finished) {
-        break;
-      }
-    }
-    if (launched.process->DrainEvents(&events)) {
-      for (auto& event : events) {
-        if (event.type ==
-                mocktail::runtime::WebViewHelperEventType::kRobloxCookie &&
-            !accepted) {
-          mocktail::runtime::SecurelyClearString(&captured_cookie);
-          captured_cookie = event.payload;
-          next_check = std::chrono::steady_clock::now();
-        }
-        mocktail::runtime::SecurelyClearString(&event.payload);
-      }
-      events.clear();
-    }
-    if (check.valid() && check.wait_for(std::chrono::seconds(0)) ==
-                             std::future_status::ready) {
-      switch (check.get()) {
-        case BrowserSignInStatus::kAccepted:
-          accepted = true;
-          (void)launched.process->RequestClose();
+  bool closed = false;
+  while (!closed) {
+    for (const mocktail::runtime::BrowserSignInEvent& event : sign_in.Poll()) {
+      switch (event.type) {
+        case mocktail::runtime::BrowserSignInEventType::kAccepted:
           break;
-        case BrowserSignInStatus::kRejected:
+        case mocktail::runtime::BrowserSignInEventType::kRejected:
           std::cout << "  [auth] Roblox rejected the browser session; "
                        "clearing it\n";
-          // Roblox serves a revoked session as signed out, so the page
-          // already offers sign-in. Only drop the session from WebKit: a
-          // reload could throw away a sign-in, captcha or two-step check in
-          // progress. A session reported meanwhile replaced the rejected one.
-          if (captured_cookie.empty()) {
-            (void)launched.process->ClearRobloxCookie();
-          }
           break;
-        case BrowserSignInStatus::kUnverified:
+        case mocktail::runtime::BrowserSignInEventType::kUnverified:
           std::cout << "  [auth] browser session could not be verified; "
                        "retrying\n";
-          if (captured_cookie.empty()) {
-            captured_cookie = checked_cookie;
-            next_check = std::chrono::steady_clock::now() + kRecheckDelay;
-          }
           break;
-        case BrowserSignInStatus::kStoreFailed:
-          std::cerr << "  [auth] could not save the browser sign-in session\n";
-          (void)launched.process->RequestClose();
+        case mocktail::runtime::BrowserSignInEventType::kFailed:
+          std::cerr << "  [auth] " << event.message << '\n';
+          break;
+        case mocktail::runtime::BrowserSignInEventType::kClosed:
+          closed = true;
           break;
       }
-      mocktail::runtime::SecurelyClearString(&checked_cookie);
     }
-    if (!accepted && !check.valid() && !captured_cookie.empty() &&
-        std::chrono::steady_clock::now() >= next_check) {
-      checked_cookie = std::move(captured_cookie);
-      captured_cookie.clear();
-      check = std::async(std::launch::async, [&paths, &auth_service,
-                                              &checked_cookie]() {
-        return mocktail::runtime::PersistValidatedRobloxCookie(
-            paths.cookie_file(), auth_service, checked_cookie);
-      });
+    if (!closed) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(30));
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(30));
   }
-  if (check.valid() && check.get() == BrowserSignInStatus::kAccepted) {
-    accepted = true;
-  }
-  mocktail::runtime::SecurelyClearString(&captured_cookie);
-  mocktail::runtime::SecurelyClearString(&checked_cookie);
 
-  if (accepted) {
+  if (sign_in.accepted()) {
     mocktail::runtime::AuthRuntimeComposition new_comp =
         mocktail::runtime::ComposeAuthRuntime(environment, paths, auth_service,
                                               http_client);
@@ -1086,7 +1006,10 @@ int main(int argc, char* argv[]) {
     if (!external_launch_request.has_value() &&
         command_line.options.window_mode !=
             mocktail::runtime::WindowMode::kHeadless) {
+      // Inside the account store WebKit's jar never decides the account: a
+      // session it kept may belong to another saved account.
       PromptFirstLaunchSignIn(environment, paths, auth_service, http_client,
+                              active_account.uses_account_store(),
                               &composition);
     }
     if (!composition) {

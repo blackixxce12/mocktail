@@ -445,6 +445,22 @@ target_link_libraries(mocktail_credential_store PUBLIC
 )
 mocktail_apply_compile_options(mocktail_credential_store)
 
+# Saved-account store and browser sign-in, shared by mocktail and the
+# launcher. GTK-free and without jnivm.
+add_library(mocktail_account_store STATIC
+  src/runtime/browser_sign_in.cc
+)
+add_library(Mocktail::AccountStore ALIAS mocktail_account_store)
+target_include_directories(mocktail_account_store PUBLIC include)
+target_link_libraries(mocktail_account_store PUBLIC
+  mocktail_credential_store
+  mocktail_runtime
+  mocktail_services
+  mocktail_webview_launcher
+  Threads::Threads
+)
+mocktail_apply_compile_options(mocktail_account_store)
+
 add_library(mocktail_auth_runtime_composition STATIC
   src/runtime/auth_runtime_composition.cc
   src/runtime/webview_roblox_cookie.cc
@@ -715,6 +731,7 @@ target_compile_definitions(mocktail PRIVATE
 )
 target_link_libraries(mocktail PRIVATE
   mocktail_legacy_runtime
+  mocktail_account_store
   mocktail_auth_runtime_composition
   mocktail_failure_dialog_runtime
   mocktail_fmod_jni_audio_bridge
