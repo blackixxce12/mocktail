@@ -617,12 +617,16 @@ int main(int argc, char* argv[]) {
                       ? " (EGL/OpenGL ES)"
                       : "")
               << '\n';
+    const mocktail::runtime::DisplayServer display_server =
+        runtime_config.config.display().server;
     std::cout << "  [runtime] display server="
-              << mocktail::runtime::DisplayServerName(
-                     runtime_config.config.display().server)
+              << mocktail::runtime::DisplayServerName(display_server)
               << (mocktail::runtime::UserSelectsVideoDriver(
                       user_managed_environment)
                       ? " (video driver chosen by the environment)"
+                  : mocktail::runtime::AvailableDisplayServer(
+                        display_server) != display_server
+                      ? " (not available in this session; automatic)"
                       : "")
               << '\n';
   }

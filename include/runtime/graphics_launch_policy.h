@@ -33,6 +33,13 @@ inline constexpr std::string_view kUserVideoDriverVariables[] = {
 // settings window is told to ignore the environment, no longer counts.
 bool UserSelectsVideoDriver(const std::vector<std::string>& user_environment);
 
+// The display server ApplyGraphicsLaunchPolicy publishes for `configured`.
+// Wayland needs a Wayland session (WAYLAND_DISPLAY and XDG_RUNTIME_DIR) and
+// x11 an X display (DISPLAY), the same tests the window policy makes;
+// without one the setting falls back to auto, so a value saved in one
+// session cannot keep the game from starting in another.
+DisplayServer AvailableDisplayServer(DisplayServer configured);
+
 // Publishes the resolved graphics backend before the managed payload updater
 // starts. OpenGL is a strict system EGL/GLES path; it never silently retries
 // through ANGLE/Vulkan or accepts a window without a real graphics context.
@@ -41,8 +48,9 @@ bool UserSelectsVideoDriver(const std::vector<std::string>& user_environment);
 // inherit only the video-driver variables, open their windows the same way:
 // wayland sets MOCKTAIL_FORCE_WAYLAND=1 and clears both X11 switches, x11
 // sets MOCKTAIL_FORCE_X11=1 and clears MOCKTAIL_FORCE_WAYLAND, and auto
-// leaves the window policy alone. Nothing is touched while the user selects
-// the video driver (see UserSelectsVideoDriver).
+// (or a server this session lacks, see AvailableDisplayServer) leaves the
+// window policy alone. Nothing is touched while the user selects the video
+// driver (see UserSelectsVideoDriver).
 bool ApplyGraphicsLaunchPolicy(const RuntimeConfig& config,
                                const std::vector<std::string>& user_environment,
                                std::string* error = nullptr);

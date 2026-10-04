@@ -1501,6 +1501,13 @@ class DisplayServerPolicyTest : public ::testing::Test {
     return applied;
   }
 
+  void SetUp() override {
+    // A desktop session that offers both display servers.
+    ASSERT_EQ(setenv("WAYLAND_DISPLAY", "wayland-1", 1), 0);
+    ASSERT_EQ(setenv("XDG_RUNTIME_DIR", "/run/user/1000", 1), 0);
+    ASSERT_EQ(setenv("DISPLAY", ":0", 1), 0);
+  }
+
   TemporaryDirectory temporary_;
   const ScopedEnvironment scoped_{{
       "MOCKTAIL_GRAPHICS_BACKEND",
@@ -1513,6 +1520,9 @@ class DisplayServerPolicyTest : public ::testing::Test {
       "MOCKTAIL_FORCE_WAYLAND",
       "MOCKTAIL_FORCE_X11",
       "MOCKTAIL_ANGLE_FORCE_X11",
+      "WAYLAND_DISPLAY",
+      "XDG_RUNTIME_DIR",
+      "DISPLAY",
   }};
 };
 
@@ -1604,6 +1614,33 @@ TEST_F(DisplayServerPolicyTest, OverloadWithoutCaptureTreatsCurrentAsUsers) {
   ASSERT_EQ(unsetenv("SDL_VIDEO_DRIVER"), 0);
   ASSERT_TRUE(ApplyGraphicsLaunchPolicy(Load("x11"), &error)) << error;
   EXPECT_EQ(GetVariable("MOCKTAIL_FORCE_X11"), "1");
+}
+
+TEST_F(DisplayServerPolicyTest, MissingSessionFallsBackToAutomatic) {
+  // A Wayland setting saved on the desktop, then a start from an X11-only
+  // session: forcing Wayland there would stop SDL from starting at all.
+  ASSERT_EQ(unsetenv("WAYLAND_DISPLAY"), 0);
+  EXPECT_EQ(AvailableDisplayServer(DisplayServer::kWayland),
+            DisplayServer::kAuto);
+  EXPECT_EQ(AvailableDisplayServer(DisplayServer::kX11), DisplayServer::kX11);
+  ASSERT_TRUE(Apply(Load("wayland"), {}));
+  EXPECT_EQ(GetVariable("MOCKTAIL_FORCE_WAYLAND"), std::nullopt);
+  EXPECT_EQ(GetVariable("MOCKTAIL_FORCE_X11"), std::nullopt);
+
+  ASSERT_EQ(setenv("WAYLAND_DISPLAY", "wayland-1", 1), 0);
+  ASSERT_EQ(setenv("XDG_RUNTIME_DIR", "", 1), 0);
+  EXPECT_EQ(AvailableDisplayServer(DisplayServer::kWayland),
+            DisplayServer::kAuto);
+  ASSERT_EQ(setenv("XDG_RUNTIME_DIR", "/run/user/1000", 1), 0);
+  EXPECT_EQ(AvailableDisplayServer(DisplayServer::kWayland),
+            DisplayServer::kWayland);
+
+  // A Wayland compositor without Xwayland has no X display.
+  ASSERT_EQ(unsetenv("DISPLAY"), 0);
+  EXPECT_EQ(AvailableDisplayServer(DisplayServer::kX11), DisplayServer::kAuto);
+  ASSERT_TRUE(Apply(Load("x11"), {}));
+  EXPECT_EQ(GetVariable("MOCKTAIL_FORCE_X11"), std::nullopt);
+  EXPECT_EQ(AvailableDisplayServer(DisplayServer::kAuto), DisplayServer::kAuto);
 }
 
 TEST_F(DisplayServerPolicyTest, RefusesAnInvalidDisplayServer) {

@@ -308,6 +308,21 @@ bool UserSelectsVideoDriver(const std::vector<std::string>& user_environment) {
   return false;
 }
 
+DisplayServer AvailableDisplayServer(DisplayServer configured) {
+  const auto non_empty = [](const char* name) {
+    const char* value = std::getenv(name);
+    return value != nullptr && value[0] != '\0';
+  };
+  if (configured == DisplayServer::kWayland &&
+      !(non_empty("WAYLAND_DISPLAY") && non_empty("XDG_RUNTIME_DIR"))) {
+    return DisplayServer::kAuto;
+  }
+  if (configured == DisplayServer::kX11 && !non_empty("DISPLAY")) {
+    return DisplayServer::kAuto;
+  }
+  return configured;
+}
+
 bool ApplyGraphicsLaunchPolicy(const RuntimeConfig& config,
                                std::string* error) {
   return ApplyGraphicsLaunchPolicy(
@@ -330,7 +345,8 @@ bool ApplyGraphicsLaunchPolicy(const RuntimeConfig& config,
     return false;
   }
   if (!UserSelectsVideoDriver(user_environment) &&
-      !ApplyDisplayServer(config.display().server, error)) {
+      !ApplyDisplayServer(AvailableDisplayServer(config.display().server),
+                          error)) {
     return false;
   }
 
