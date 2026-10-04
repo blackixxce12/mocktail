@@ -520,6 +520,7 @@ target_link_libraries(mocktail_window PUBLIC
 add_library(mocktail_config_editor STATIC
   src/launcher/config_document.cc
   src/launcher/private_file.cc
+  src/launcher/window_state_file.cc
   src/launcher/yaml_layout.cc
 )
 add_library(Mocktail::ConfigEditor ALIAS mocktail_config_editor)
