@@ -256,6 +256,21 @@ bool ApplyCommandLineEnvironment(const CommandLineOptions& options,
   return true;
 }
 
+std::vector<std::string> CommandLineEnvironmentNames(
+    const CommandLineOptions& options) {
+  std::vector<std::string> names;
+  if (!options.roblox_library_path.empty()) {
+    names.emplace_back("ROBLOX_LIB_PATH");
+  }
+  if (!options.graphics_backend.empty()) {
+    names.emplace_back("MOCKTAIL_GRAPHICS_BACKEND");
+  }
+  if (options.window_mode != WindowMode::kUnspecified) {
+    names.emplace_back("MOCKTAIL_HEADLESS");
+  }
+  return names;
+}
+
 std::string CommandLineUsage(const std::string& program_name) {
   std::ostringstream usage;
   usage

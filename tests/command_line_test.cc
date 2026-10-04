@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -381,6 +382,34 @@ TEST(CommandLineTest, LauncherRequestsSurviveTheReexecArguments) {
       result.options, arguments.size(), arguments.data(), &reexec, &error))
       << error;
   EXPECT_EQ(reexec, (std::vector<std::string>{"--play", "--windowed"}));
+}
+
+TEST(CommandLineTest, NamesTheVariablesItSets) {
+  const std::array<const char*, 1> bare = {"mocktail"};
+  CommandLineParseResult result = ParseCommandLine(bare.size(), bare.data());
+  ASSERT_TRUE(result) << result.error;
+  EXPECT_TRUE(CommandLineEnvironmentNames(result.options).empty());
+
+  const std::array<const char*, 7> arguments = {
+      "mocktail", "--graphics", "opengl", "--roblox-lib",
+      "/payload/libroblox.so", "--headless", "--play"};
+  result = ParseCommandLine(arguments.size(), arguments.data());
+  ASSERT_TRUE(result) << result.error;
+  EXPECT_EQ(CommandLineEnvironmentNames(result.options),
+            (std::vector<std::string>{"ROBLOX_LIB_PATH",
+                                      "MOCKTAIL_GRAPHICS_BACKEND",
+                                      "MOCKTAIL_HEADLESS"}));
+
+  // Every name listed is one ApplyCommandLineEnvironment really sets.
+  for (const std::string& name : CommandLineEnvironmentNames(result.options)) {
+    ASSERT_EQ(unsetenv(name.c_str()), 0);
+  }
+  std::string error;
+  ASSERT_TRUE(ApplyCommandLineEnvironment(result.options, &error)) << error;
+  for (const std::string& name : CommandLineEnvironmentNames(result.options)) {
+    EXPECT_NE(getenv(name.c_str()), nullptr) << name;
+    ASSERT_EQ(unsetenv(name.c_str()), 0);
+  }
 }
 
 }  // namespace

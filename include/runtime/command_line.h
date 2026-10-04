@@ -67,6 +67,11 @@ void ScrubCommandLineLaunchArguments(CommandLineOptions* options, int argc,
                                      char* argv[]);
 bool ApplyCommandLineEnvironment(const CommandLineOptions& options,
                                  std::string* error);
+// The variables ApplyCommandLineEnvironment sets for `options`. When the
+// settings window asks main to ignore the user's environment for a launch,
+// these still hold the command line's values and must stay.
+std::vector<std::string> CommandLineEnvironmentNames(
+    const CommandLineOptions& options);
 std::string CommandLineUsage(const std::string& program_name);
 
 }  // namespace runtime
