@@ -11,10 +11,13 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "jnivm/jnivm.h"
@@ -1357,6 +1360,67 @@ while True:
     composition->HandleWebSurfaceExit(process_generation);
   }
 
+  // Opens a WebViewProtocol window as the bridge's sink does.
+  static Status OpenWebView(RobloxExperienceComposition* composition,
+                            const RobloxWebViewOpenRequest& request,
+                            const std::shared_ptr<ExitProbe>& probe) {
+    return RobloxExperienceComposition::DispatchWebViewOpen(
+        composition, request,
+        {probe, &RobloxExperienceCompositionWebSurfaceTest::ObserveExit});
+  }
+
+  static std::shared_ptr<WebViewHelperProcess> CurrentProcess(
+      RobloxExperienceComposition* composition) {
+    std::lock_guard<std::mutex> lock(composition->mutex_);
+    return composition->web_surface_process_;
+  }
+
+  static std::pair<uint64_t, uint64_t> Generations(
+      RobloxExperienceComposition* composition) {
+    std::lock_guard<std::mutex> lock(composition->mutex_);
+    return {composition->web_surface_process_generation_,
+            composition->web_surface_logical_generation_};
+  }
+
+  // Points the composition at the fake helper for one test.
+  class ScopedWebViewHelper final {
+   public:
+    explicit ScopedWebViewHelper(const std::filesystem::path& helper) {
+      const char* previous = std::getenv("MOCKTAIL_WEBVIEW_HELPER");
+      if (previous != nullptr) previous_ = previous;
+      EXPECT_EQ(setenv("MOCKTAIL_WEBVIEW_HELPER", helper.c_str(), 1), 0);
+    }
+    ~ScopedWebViewHelper() {
+      if (previous_.has_value()) {
+        (void)setenv("MOCKTAIL_WEBVIEW_HELPER", previous_->c_str(), 1);
+      } else {
+        (void)unsetenv("MOCKTAIL_WEBVIEW_HELPER");
+      }
+    }
+
+   private:
+    std::optional<std::string> previous_;
+  };
+
+  static bool WaitForExit(const std::shared_ptr<WebViewHelperProcess>& process) {
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (process->running() && std::chrono::steady_clock::now() < deadline) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return !process->running();
+  }
+
+  static RobloxWebViewOpenRequest WebsiteSignInRequest(bool clear_session) {
+    RobloxWebViewOpenRequest request;
+    request.url = "https://www.roblox.com/login";
+    request.title = "Sign in to Roblox";
+    request.is_visible = true;
+    request.show_domain_as_title = false;
+    request.clear_roblox_session = clear_session;
+    return request;
+  }
+
   static void ReplaceWebCheckout(RobloxExperienceComposition* composition,
                                  bool (*open)(), void (*notify)(bool)) {
     composition->open_web_checkout_ = open;
@@ -1699,6 +1763,130 @@ TEST_F(RobloxExperienceCompositionWebSurfaceTest,
   EXPECT_EQ(g_store_reports.size(), 2u);
   EXPECT_EQ(g_web_checkout_opens, 2);
   g_probe = nullptr;
+}
+
+// Website sign-in that replaced a challenge Linux cannot answer must not show
+// a session WebKit kept: the first one the page reports has to be the one the
+// user signs in with. Other surfaces keep the persistent jar as before.
+TEST_F(RobloxExperienceCompositionWebSurfaceTest,
+       WebsiteSignInStartsWithoutAnyRobloxSession) {
+  for (const bool website_sign_in : {true, false}) {
+    SCOPED_TRACE(website_sign_in);
+    Helper helper;
+    ASSERT_FALSE(helper.path.empty());
+    const ScopedWebViewHelper use_helper(helper.path);
+    const SecureRobloxCredential guest{std::string()};
+    auto composition = MakeComposition(&guest);
+    auto probe = std::make_shared<ExitProbe>();
+
+    ASSERT_TRUE(OpenWebView(composition.get(),
+                            WebsiteSignInRequest(website_sign_in), probe)
+                    .ok());
+    helper.process = CurrentProcess(composition.get());
+    ASSERT_NE(helper.process, nullptr);
+    ASSERT_TRUE(Close(composition.get()).ok());
+    ASSERT_TRUE(WaitForExit(helper.process));
+    EXPECT_EQ(probe->calls, 1);
+    // Cookie operation, title, visibility, back navigation, domain title,
+    // close: 9 deletes every Roblox session, 10 keeps the persistent jar.
+    EXPECT_EQ(helper.Operations(),
+              website_sign_in ? "9\n2\n3\n6\n7\n5\n" : "10\n2\n3\n6\n7\n5\n");
+  }
+}
+
+// The account was resolved at startup and the LuaApp signed out since, as in
+// the session that showed the Play Integrity demand. The website sign-in still
+// finishes once its session is saved: its window closes.
+TEST_F(RobloxExperienceCompositionWebSurfaceTest,
+       AcceptedWebsiteSignInFinishesOnAResolvedVm) {
+  Helper helper;
+  ASSERT_FALSE(helper.path.empty());
+  const ScopedWebViewHelper use_helper(helper.path);
+  jnivm::VM vm;
+  jnivm::RobloxAuthIdentity identity;
+  identity.user_id = 42;
+  identity.username = "resolved_at_startup";
+  vm.SetRobloxAuthIdentity(identity);
+  struct Sink {
+    int calls = 0;
+  };
+  auto sink = std::make_shared<Sink>();
+  // Roblox refuses the first session and accepts the second.
+  vm.SetRobloxCredentialSink(
+      sink, jnivm::RobloxCredentialSinkCallbacks{
+                [](void* context, const char*, std::size_t) {
+                  return ++static_cast<Sink*>(context)->calls > 1;
+                }});
+  const SecureRobloxCredential guest{std::string()};
+  RobloxExperienceComposition composition(
+      {vm.GetJavaVM(), &vm, Prepare}, RobloxExperienceMessageBusSymbols{},
+      RobloxWebViewMessageBusSymbols{}, RobloxBrowserServiceSymbols{},
+      RobloxPermissionsMessageBusSymbols{}, RobloxGameSessionSymbols{},
+      RobloxExperienceJniFactory{}, RobloxFreshLaunchPresentBoundary{},
+      RobloxGameSurfaceJniConfig{}, &guest);
+  auto probe = std::make_shared<ExitProbe>();
+  ASSERT_TRUE(
+      OpenWebView(&composition, WebsiteSignInRequest(true), probe).ok());
+  helper.process = CurrentProcess(&composition);
+  ASSERT_NE(helper.process, nullptr);
+  const auto [process_generation, logical_generation] =
+      Generations(&composition);
+
+  EXPECT_TRUE(AcceptCookie(&composition, process_generation,
+                           logical_generation, "refused-session")
+                  .ok());
+  EXPECT_TRUE(HasProcess(&composition));
+  EXPECT_EQ(probe->calls, 0);
+
+  EXPECT_TRUE(AcceptCookie(&composition, process_generation,
+                           logical_generation, "accepted-session")
+                  .ok());
+  EXPECT_EQ(sink->calls, 2);
+  EXPECT_FALSE(HasProcess(&composition));
+  EXPECT_EQ(probe->calls, 1);
+  EXPECT_EQ(CookieValue(&composition), "accepted-session");
+  ASSERT_TRUE(WaitForExit(helper.process));
+  // Opened without a session, cleared and reloaded after the refusal, closed
+  // after the acceptance.
+  EXPECT_EQ(helper.Operations(), "9\n2\n3\n6\n7\n9\n1\n5\n");
+}
+
+// MOCKTAIL_NATIVE_LOGIN=0 keeps its sign-in window tied to Roblox's challenge;
+// on a VM that was already signed in at startup it does not close the window.
+TEST_F(RobloxExperienceCompositionWebSurfaceTest,
+       TiedBrowserSignInStaysOpenOnAResolvedVm) {
+  Helper helper;
+  ASSERT_FALSE(helper.path.empty());
+  const ScopedWebViewHelper use_helper(helper.path);
+  jnivm::VM vm;
+  jnivm::RobloxAuthIdentity identity;
+  identity.user_id = 42;
+  identity.username = "resolved_at_startup";
+  vm.SetRobloxAuthIdentity(identity);
+  vm.SetRobloxCredentialSink(
+      std::make_shared<int>(0),
+      jnivm::RobloxCredentialSinkCallbacks{
+          [](void*, const char*, std::size_t) { return true; }});
+  const SecureRobloxCredential guest{std::string()};
+  RobloxExperienceComposition composition(
+      {vm.GetJavaVM(), &vm, Prepare}, RobloxExperienceMessageBusSymbols{},
+      RobloxWebViewMessageBusSymbols{}, RobloxBrowserServiceSymbols{},
+      RobloxPermissionsMessageBusSymbols{}, RobloxGameSessionSymbols{},
+      RobloxExperienceJniFactory{}, RobloxFreshLaunchPresentBoundary{},
+      RobloxGameSurfaceJniConfig{}, &guest);
+  auto probe = std::make_shared<ExitProbe>();
+  ASSERT_TRUE(
+      OpenWebView(&composition, WebsiteSignInRequest(false), probe).ok());
+  helper.process = CurrentProcess(&composition);
+  const auto [process_generation, logical_generation] =
+      Generations(&composition);
+  EXPECT_TRUE(AcceptCookie(&composition, process_generation,
+                           logical_generation, "accepted-session")
+                  .ok());
+  EXPECT_TRUE(HasProcess(&composition));
+  EXPECT_EQ(probe->calls, 0);
+  ASSERT_TRUE(Close(&composition).ok());
+  ASSERT_TRUE(WaitForExit(helper.process));
 }
 
 namespace {}  // namespace

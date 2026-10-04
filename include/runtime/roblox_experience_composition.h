@@ -167,6 +167,9 @@ class RobloxExperienceComposition final {
     bool visible = true;
     bool back_navigation_disabled = false;
     bool show_domain_as_title = false;
+    // Website sign-in that replaced an unanswerable challenge: WebKit's Roblox
+    // sessions are deleted before navigation instead of installing ours.
+    bool clear_roblox_session = false;
   };
 
   static Status DispatchLaunch(void* context,
@@ -278,6 +281,8 @@ class RobloxExperienceComposition final {
   std::string web_view_cookie_initialization_error_;
   bool web_view_cookie_synchronized_ = false;
   bool clear_persisted_web_view_cookie_ = false;
+  // The current surface is the website sign-in that replaced a challenge.
+  bool web_surface_website_sign_in_ = false;
   std::deque<RobloxExperienceLaunchRequest> pending_launch_requests_;
   struct PendingNativeStorePurchase {
     jlong player_id = 0;

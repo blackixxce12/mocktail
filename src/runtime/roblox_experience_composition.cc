@@ -719,9 +719,12 @@ Status RobloxExperienceComposition::OpenWebSurface(
   }
 
   // Serialize setup so presentation state cannot leak between routes.
+  // Website sign-in starts without any Roblox session: WebKit may still hold
+  // a revoked one, and ours belongs to the account that is signed out.
   const bool cookie_synchronized =
-      clear_persisted_cookie ? current->ClearRobloxCookie()
-                             : current->SetRobloxCookie(cookie.value());
+      clear_persisted_cookie || presentation.clear_roblox_session
+          ? current->ClearRobloxCookie()
+          : current->SetRobloxCookie(cookie.value());
   if (!current->SetTitle(presentation.title) ||
       !current->SetVisible(presentation.visible) ||
       !current->SetBackNavigationDisabled(
@@ -747,6 +750,7 @@ Status RobloxExperienceComposition::OpenWebSurface(
     web_surface_route_ = route;
     web_surface_logical_generation_ = logical_generation;
     web_surface_logical_exit_observer_ = std::move(exit_observer);
+    web_surface_website_sign_in_ = presentation.clear_roblox_session;
   }
   if (superseded_observer.valid()) {
     superseded_observer.on_exit(superseded_observer.context.get());
@@ -772,6 +776,7 @@ Status RobloxExperienceComposition::CloseWebSurface() {
     exit_observer = std::move(web_surface_logical_exit_observer_);
     web_surface_route_ = WebSurfaceRoute::kNone;
     web_surface_logical_generation_ = 0;
+    web_surface_website_sign_in_ = false;
   }
   // A closed challenge must stop executing. Reusing its hidden document lets
   // late callbacks from the old attempt reach the next login attempt. The APK
@@ -812,6 +817,7 @@ void RobloxExperienceComposition::HandleWebSurfaceExit(
     web_surface_process_generation_ = 0;
     web_surface_route_ = WebSurfaceRoute::kNone;
     web_surface_logical_generation_ = 0;
+    web_surface_website_sign_in_ = false;
     exit_observer = std::move(web_surface_logical_exit_observer_);
   }
   if (exit_observer.valid()) {
@@ -837,6 +843,7 @@ Status RobloxExperienceComposition::DispatchWebViewOpen(
   // host back navigation too.
   presentation.back_navigation_disabled =
       request.back_button_visible.has_value() && !*request.back_button_visible;
+  presentation.clear_roblox_session = request.clear_roblox_session;
   return composition->OpenWebSurface(request.url, "webview",
                                      WebSurfaceRoute::kWebView,
                                      std::move(exit_observer), presentation);
@@ -962,14 +969,26 @@ Status RobloxExperienceComposition::AcceptWebViewRobloxCookie(
     (void)source_process->LoadUrl(kBrowserLoginUrl);
     return Status::Ok();
   }
+  bool website_sign_in = false;
   {
     std::lock_guard<std::mutex> lock(mutex_);
     web_view_cookie_ = std::move(prepared.cookie);
     web_view_cookie_synchronized_ = true;
     clear_persisted_web_view_cookie_ = false;
+    website_sign_in =
+        web_surface_website_sign_in_ && source_process != nullptr &&
+        source_process == web_surface_process_ && process_generation != 0 &&
+        process_generation == web_surface_process_generation_ &&
+        logical_generation != 0 &&
+        logical_generation == web_surface_logical_generation_ &&
+        web_surface_route_ != WebSurfaceRoute::kNone;
   }
 
-  if (was_guest && vm->GetRobloxAuthIdentitySnapshot().user_id > 0) {
+  // The website sign-in that replaced a challenge is finished once the
+  // credential sink took its session, even on a VM whose identity was
+  // resolved at startup and whose LuaApp signed out since.
+  if (website_sign_in ||
+      (was_guest && vm->GetRobloxAuthIdentitySnapshot().user_id > 0)) {
     const Status close_status = CloseWebSurface();
     if (!close_status.ok()) {
       std::fprintf(stderr,

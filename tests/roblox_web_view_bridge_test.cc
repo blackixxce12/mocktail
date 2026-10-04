@@ -49,6 +49,7 @@ struct WebViewBridgeProbe {
   int cookie_dispatches = 0;
   int synchronous_subscribe_index = -1;
   int fail_subscribe_index = -1;
+  bool fail_open = false;
   std::string synchronous_payload;
   std::vector<std::string> subscription_ids;
   std::vector<std::string> message_id_protocols;
@@ -311,6 +312,9 @@ Status DispatchOpen(void *context, const RobloxWebViewOpenRequest &request,
   auto *probe = static_cast<WebViewBridgeProbe *>(context);
   ++probe->dispatches;
   probe->request = request;
+  if (probe->fail_open) {
+    return Status::Error(StatusCode::kUnavailable, "helper did not start");
+  }
   probe->exit_observer = std::move(exit_observer);
   return Status::Ok();
 }
@@ -1236,6 +1240,10 @@ std::string GenericChallengeUrl(const std::string& type) {
          type + "&challenge-metadata-json=%7B%7D&";
 }
 
+std::string OpenWindowJson(const std::string& url) {
+  return "{\"url\":\"" + url + "\",\"title\":\"\",\"isVisible\":false}";
+}
+
 TEST(RobloxWebViewParserTest, ReadsGenericChallengeTypeFromLuaAppUrls) {
   EXPECT_EQ(RobloxGenericChallengeType(kDeviceIntegrityChallengeUrl),
             "deviceintegrity");
@@ -1294,6 +1302,204 @@ TEST(RobloxWebViewParserTest, ReadsGenericChallengeTypeFromLuaAppUrls) {
     EXPECT_FALSE(IsUnsatisfiableRobloxChallengeType(type)) << type;
   }
 }
+
+class RobloxDeviceIntegrityTest
+    : public ::testing::TestWithParam<std::optional<bool>> {};
+
+TEST_P(RobloxDeviceIntegrityTest,
+       ReplacesUnanswerableChallengeWithWebsiteSignInAndDeclinesIt) {
+  const ScopedNativeLogin native_login(GetParam());
+  jnivm::VM vm;
+  JNIEnv* env = vm.GetJNIEnv();
+  jclass bus_class =
+      env->FindClass("com/roblox/universalapp/messagebus/MessageBus");
+  jobject bus = env->AllocObject(bus_class);
+  WebViewBridgeProbe probe;
+  g_web_view_probe = &probe;
+  RobloxWebViewBridge bridge = MakeBridge(&vm, bus, &probe);
+  ASSERT_TRUE(bridge.Initialize().ok());
+
+  ASSERT_TRUE(
+      bridge.HandleOwnedMessage(OpenWindowJson(kDeviceIntegrityChallengeUrl))
+          .ok());
+  ASSERT_EQ(probe.dispatches, 1);
+  EXPECT_EQ(probe.request.url, "https://www.roblox.com/login");
+  EXPECT_EQ(probe.request.title, "Sign in to Roblox");
+  EXPECT_EQ(probe.request.is_visible, std::optional<bool>(true));
+  EXPECT_EQ(probe.request.show_domain_as_title, std::optional<bool>(false));
+  EXPECT_TRUE(probe.request.clear_roblox_session);
+  // Roblox hears at once that its challenge closed, so its login screen does
+  // not wait for the timeout.
+  EXPECT_EQ(probe.close_publications, 0);
+  ASSERT_TRUE(bridge.DrainHostWindowEvents().ok());
+  EXPECT_EQ(probe.close_publications, 1);
+  EXPECT_EQ(probe.published_message_id, "WebView.handleWindowClose");
+  EXPECT_EQ(probe.published_payload, "{}");
+  EXPECT_TRUE(probe.data_model_focus_states.empty());
+
+  // Its follow-up close and updates target the challenge, not sign-in.
+  EXPECT_TRUE(bridge.HandleCloseWindow().ok());
+  EXPECT_EQ(probe.close_dispatches, 0);
+  EXPECT_TRUE(bridge
+                  .HandleOwnedMutation(
+                      "{\"url\":\"" + std::string(kDeviceIntegrityChallengeUrl) +
+                      "\",\"isVisible\":false}")
+                  .ok());
+  EXPECT_EQ(probe.mutation_dispatches, 0);
+
+  // Sign In pressed again while the website sign-in is open: the page keeps
+  // what the user typed and the new challenge is declined too.
+  ASSERT_TRUE(
+      bridge.HandleOwnedMessage(OpenWindowJson(kDeviceIntegrityChallengeUrl))
+          .ok());
+  EXPECT_EQ(probe.dispatches, 1);
+  ASSERT_TRUE(bridge.DrainHostWindowEvents().ok());
+  EXPECT_EQ(probe.close_publications, 2);
+
+  // The sign-in window closes (signed in, or closed by the user). Roblox
+  // already heard its challenge close and is not told again.
+  ASSERT_TRUE(probe.exit_observer.valid());
+  const WebViewHelperExitObserver sign_in_exit = probe.exit_observer;
+  sign_in_exit.on_exit(sign_in_exit.context.get());
+  ASSERT_TRUE(bridge.DrainHostWindowEvents().ok());
+  EXPECT_EQ(probe.close_publications, 2);
+  EXPECT_TRUE(bridge.HandleCloseWindow().ok());
+  EXPECT_EQ(probe.close_dispatches, 1);
+
+  // A later attempt opens a fresh sign-in window.
+  ASSERT_TRUE(bridge
+                  .HandleOwnedMessage(
+                      OpenWindowJson(GenericChallengeUrl("privateaccesstoken")))
+                  .ok());
+  EXPECT_EQ(probe.dispatches, 2);
+  EXPECT_EQ(probe.request.url, "https://www.roblox.com/login");
+  ASSERT_TRUE(bridge.DrainHostWindowEvents().ok());
+  EXPECT_EQ(probe.close_publications, 3);
+  sign_in_exit.on_exit(sign_in_exit.context.get());
+  probe.exit_observer.on_exit(probe.exit_observer.context.get());
+  ASSERT_TRUE(bridge.DrainHostWindowEvents().ok());
+  EXPECT_EQ(probe.close_publications, 3);
+
+  EXPECT_TRUE(bridge.Shutdown().ok());
+  g_web_view_probe = nullptr;
+}
+
+TEST_P(RobloxDeviceIntegrityTest, KeepsAnswerableGenericChallengesNative) {
+  const ScopedNativeLogin native_login(GetParam());
+  if (GetParam() == std::optional<bool>(false)) {
+    GTEST_SKIP() << "MOCKTAIL_NATIVE_LOGIN=0 routes every challenge to sign-in";
+  }
+  jnivm::VM vm;
+  JNIEnv* env = vm.GetJNIEnv();
+  jclass bus_class =
+      env->FindClass("com/roblox/universalapp/messagebus/MessageBus");
+  jobject bus = env->AllocObject(bus_class);
+  WebViewBridgeProbe probe;
+  g_web_view_probe = &probe;
+  RobloxWebViewBridge bridge = MakeBridge(&vm, bus, &probe);
+  ASSERT_TRUE(bridge.Initialize().ok());
+
+  int closes = 0;
+  for (const char* type : {"captcha", "proofofwork", "twostepverification",
+                           "reauthentication", ""}) {
+    SCOPED_TRACE(type);
+    const std::string url = GenericChallengeUrl(type);
+    ASSERT_TRUE(bridge.HandleOwnedMessage(OpenWindowJson(url)).ok());
+    EXPECT_EQ(probe.request.url, url);
+    EXPECT_EQ(probe.request.title, "Roblox verification");
+    EXPECT_EQ(probe.request.is_visible, std::optional<bool>(true));
+    EXPECT_FALSE(probe.request.clear_roblox_session);
+    ASSERT_TRUE(bridge.DrainHostWindowEvents().ok());
+    EXPECT_EQ(probe.close_publications, closes);
+    EXPECT_TRUE(bridge
+                    .HandleOwnedMutation(R"({"title":"Verification"})")
+                    .ok());
+    EXPECT_EQ(probe.mutation_dispatches, closes + 1);
+    EXPECT_TRUE(bridge.HandleCloseWindow().ok());
+    EXPECT_EQ(probe.close_dispatches, ++closes);
+    probe.exit_observer.on_exit(probe.exit_observer.context.get());
+    ASSERT_TRUE(bridge.DrainHostWindowEvents().ok());
+    EXPECT_EQ(probe.close_publications, closes);
+  }
+
+  EXPECT_TRUE(bridge.Shutdown().ok());
+  g_web_view_probe = nullptr;
+}
+
+// Only the app's own MessageBus windows are its sign-in. The same demand from
+// an experience or overlay keeps its window and Roblox's control of it.
+TEST_P(RobloxDeviceIntegrityTest, KeepsChallengesFromOtherSourcesOnTheirWindow) {
+  const ScopedNativeLogin native_login(GetParam());
+  jnivm::VM vm;
+  JNIEnv* env = vm.GetJNIEnv();
+  jclass bus_class =
+      env->FindClass("com/roblox/universalapp/messagebus/MessageBus");
+  jobject bus = env->AllocObject(bus_class);
+  WebViewBridgeProbe probe;
+  g_web_view_probe = &probe;
+  RobloxWebViewBridge bridge = MakeBridge(&vm, bus, &probe);
+  ASSERT_TRUE(bridge.Initialize().ok());
+
+  jstring url = env->NewStringUTF(kDeviceIntegrityChallengeUrl);
+  jstring title = env->NewStringUTF("");
+  ASSERT_TRUE(bridge.HandleOpenWebActivity(env, url, title).ok());
+  env->DeleteLocalRef(title);
+  env->DeleteLocalRef(url);
+  ASSERT_EQ(probe.dispatches, 1);
+  EXPECT_FALSE(probe.request.clear_roblox_session);
+  if (GetParam() == std::optional<bool>(false)) {
+    EXPECT_EQ(probe.request.url, "https://www.roblox.com/login");
+    EXPECT_EQ(probe.request.title, "Roblox sign in");
+  } else {
+    EXPECT_EQ(probe.request.url, kDeviceIntegrityChallengeUrl);
+    EXPECT_EQ(probe.request.title, "Roblox verification");
+  }
+  ASSERT_TRUE(bridge.DrainHostWindowEvents().ok());
+  EXPECT_EQ(probe.close_publications, 0);
+  EXPECT_TRUE(bridge.HandleOwnedMutation(R"({"title":"Verification"})").ok());
+  EXPECT_EQ(probe.mutation_dispatches, 1);
+
+  EXPECT_TRUE(bridge.Shutdown().ok());
+  g_web_view_probe = nullptr;
+}
+
+TEST_P(RobloxDeviceIntegrityTest, DeclinesChallengeWhenSignInCannotOpen) {
+  const ScopedNativeLogin native_login(GetParam());
+  jnivm::VM vm;
+  JNIEnv* env = vm.GetJNIEnv();
+  jclass bus_class =
+      env->FindClass("com/roblox/universalapp/messagebus/MessageBus");
+  jobject bus = env->AllocObject(bus_class);
+  WebViewBridgeProbe probe;
+  probe.fail_open = true;
+  g_web_view_probe = &probe;
+  RobloxWebViewBridge bridge = MakeBridge(&vm, bus, &probe);
+  ASSERT_TRUE(bridge.Initialize().ok());
+
+  EXPECT_FALSE(
+      bridge.HandleOwnedMessage(OpenWindowJson(kDeviceIntegrityChallengeUrl))
+          .ok());
+  ASSERT_TRUE(bridge.DrainHostWindowEvents().ok());
+  EXPECT_EQ(probe.close_publications, 1);
+  // Nothing is open, so Roblox's own close reaches the host as usual.
+  EXPECT_TRUE(bridge.HandleCloseWindow().ok());
+  EXPECT_EQ(probe.close_dispatches, 1);
+
+  probe.fail_open = false;
+  ASSERT_TRUE(
+      bridge.HandleOwnedMessage(OpenWindowJson(kDeviceIntegrityChallengeUrl))
+          .ok());
+  EXPECT_EQ(probe.dispatches, 2);
+  EXPECT_TRUE(probe.request.clear_roblox_session);
+
+  EXPECT_TRUE(bridge.Shutdown().ok());
+  g_web_view_probe = nullptr;
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    AnyNativeLoginSetting, RobloxDeviceIntegrityTest,
+    ::testing::Values(std::optional<bool>{}, std::optional<bool>{true},
+                      std::optional<bool>{false}));
 
 } // namespace
 } // namespace runtime

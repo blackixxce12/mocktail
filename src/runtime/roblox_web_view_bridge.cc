@@ -111,6 +111,7 @@ constexpr std::string_view kUnsatisfiableChallengeTypes[] = {
     // Platform token from Xbox, PlayStation or Quest system software.
     "deviceaccesstoken",
 };
+constexpr char kWebsiteSignInTitle[] = "Sign in to Roblox";
 
 int HexDigitValue(char digit) {
   if (digit >= '0' && digit <= '9') return digit - '0';
@@ -317,7 +318,14 @@ struct RobloxWebViewBridge::HostWindowCloseTarget {
   uint64_t active_generation = 0;
   OpenSource active_source = OpenSource::kMessageBus;
   bool close_queued = false;
+  // The window shows website sign-in instead of the challenge Roblox asked
+  // for, so Roblox's closeWindow is not applied to it.
   bool browser_login_fallback = false;
+  // Website sign-in replaced a challenge Linux cannot answer, and Roblox has
+  // been told that challenge closed (kNativeChallengeDeclined). The window no
+  // longer belongs to Roblox: its mutateWindow is ignored too, and its exit
+  // is not reported.
+  bool detached_sign_in = false;
 };
 
 struct RobloxWebViewBridge::HostWindowExitContext {
@@ -1262,7 +1270,24 @@ Status RobloxWebViewBridge::HandleOwnedMutation(std::string message) {
   if (!status.ok()) {
     return status;
   }
-  status = sink_.dispatch_mutate(sink_.context, request);
+  // Roblox was told its challenge closed, but its timers still update it.
+  // Applied to the website sign-in that replaced it, a new URL or
+  // isVisible=false would take sign-in away from the user.
+  bool website_sign_in_open = false;
+  const std::shared_ptr<HostWindowCloseTarget> target =
+      host_window_close_target_;
+  if (target != nullptr) {
+    std::lock_guard<std::mutex> lock(target->mutex);
+    website_sign_in_open =
+        target->active_generation != 0 && target->detached_sign_in;
+  }
+  if (website_sign_in_open) {
+    std::fprintf(stderr,
+                 "  [webview] website sign-in ignores Roblox's update to the "
+                 "challenge it replaced\n");
+  } else {
+    status = sink_.dispatch_mutate(sink_.context, request);
+  }
   EndDispatch();
   return status;
 }
@@ -1310,10 +1335,56 @@ Status RobloxWebViewBridge::DispatchOpenRequest(
   // Native sign-in must keep the original challenge and its return token so
   // Roblox can finish the in-app login instead of starting a browser login.
   const bool login_challenge = IsLoginChallengeUrl(request.url);
+  // Except when the app asks for device attestation such as Play Integrity:
+  // nothing on Linux can answer it, so the page would only wait for Roblox's
+  // timeout. The website sign-in asks a desktop browser for no such proof, so
+  // it replaces the challenge, and Roblox is told at once that its challenge
+  // closed so its login screen does not wait. Only the app's own MessageBus
+  // windows are replaced; a challenge an experience or overlay opens is not a
+  // sign-in and keeps its window.
+  const std::string challenge_type =
+      login_challenge ? RobloxGenericChallengeType(request.url) : std::string();
+  const bool detached_sign_in =
+      source == OpenSource::kMessageBus &&
+      IsUnsatisfiableRobloxChallengeType(challenge_type);
   const bool browser_login_fallback =
-      ProcessEnvironment{}.Get("MOCKTAIL_NATIVE_LOGIN") == "0" &&
-      login_challenge;
-  if (login_challenge) {
+      detached_sign_in ||
+      (login_challenge &&
+       ProcessEnvironment{}.Get("MOCKTAIL_NATIVE_LOGIN") == "0");
+  if (detached_sign_in) {
+    // Pressing Sign In again while the website sign-in is open asks for the
+    // same proof. Reloading the page would lose what the user typed there.
+    uint64_t open_sign_in = 0;
+    const std::shared_ptr<HostWindowCloseTarget> target =
+        host_window_close_target_;
+    if (target != nullptr) {
+      std::lock_guard<std::mutex> lock(target->mutex);
+      if (target->bridge == this && target->active_generation != 0 &&
+          target->detached_sign_in) {
+        open_sign_in = target->active_generation;
+      }
+    }
+    if (open_sign_in != 0) {
+      std::fprintf(stderr,
+                   "  [webview] Roblox asked again for %s verification; "
+                   "website sign-in is already open\n",
+                   challenge_type.c_str());
+      QueueHostWindowEvent(HostWindowEventType::kNativeChallengeDeclined,
+                           open_sign_in);
+      EndDispatch();
+      return Status::Ok();
+    }
+    std::fprintf(stderr,
+                 "  [webview] Roblox asked for %s verification, which Linux "
+                 "cannot provide; opening website sign-in instead\n",
+                 challenge_type.c_str());
+    request = RobloxWebViewOpenRequest{};
+    request.url = kBrowserLoginUrl;
+    request.title = kWebsiteSignInTitle;
+    request.is_visible = true;
+    request.show_domain_as_title = false;
+    request.clear_roblox_session = true;
+  } else if (login_challenge) {
     // Roblox can preload challenges with isVisible=false and ask to reveal
     // them only after the page signals readiness. A failed resource load then
     // leaves the native login waiting behind an inaccessible host window.
@@ -1324,7 +1395,6 @@ Status RobloxWebViewBridge::DispatchOpenRequest(
     }
     // The type tells which challenges reach Linux users; the URL itself
     // carries the challenge id and metadata and is never logged.
-    const std::string challenge_type = RobloxGenericChallengeType(request.url);
     const bool printable_type =
         !challenge_type.empty() &&
         std::all_of(challenge_type.begin(), challenge_type.end(),
@@ -1333,12 +1403,12 @@ Status RobloxWebViewBridge::DispatchOpenRequest(
                  "  [webview] presenting login verification window%s%s\n",
                  printable_type ? " type=" : "",
                  printable_type ? challenge_type.c_str() : "");
-  }
-  if (browser_login_fallback) {
-    request.url = kBrowserLoginUrl;
-    request.title = "Roblox sign in";
-    std::fprintf(stderr,
-                 "  [webview] login challenge routed to browser sign-in\n");
+    if (browser_login_fallback) {
+      request.url = kBrowserLoginUrl;
+      request.title = "Roblox sign in";
+      std::fprintf(stderr,
+                   "  [webview] login challenge routed to browser sign-in\n");
+    }
   }
   if (request.url.empty() ||
       request.url.size() > kMaximumRobloxWebViewUrlBytes) {
@@ -1357,6 +1427,7 @@ Status RobloxWebViewBridge::DispatchOpenRequest(
       OpenSource previous_source = OpenSource::kMessageBus;
       bool previous_close_queued = false;
       bool previous_browser_login_fallback = false;
+      bool previous_detached_sign_in = false;
       {
         std::lock_guard<std::mutex> target_lock(exit_context->target->mutex);
         if (exit_context->target->bridge != this) {
@@ -1368,10 +1439,12 @@ Status RobloxWebViewBridge::DispatchOpenRequest(
           previous_close_queued = exit_context->target->close_queued;
           previous_browser_login_fallback =
               exit_context->target->browser_login_fallback;
+          previous_detached_sign_in = exit_context->target->detached_sign_in;
           exit_context->target->active_generation = generation;
           exit_context->target->active_source = source;
           exit_context->target->close_queued = false;
           exit_context->target->browser_login_fallback = browser_login_fallback;
+          exit_context->target->detached_sign_in = detached_sign_in;
         }
       }
       if (status.ok()) {
@@ -1380,9 +1453,15 @@ Status RobloxWebViewBridge::DispatchOpenRequest(
             WebViewHelperExitObserver{exit_context,
                                       &RobloxWebViewBridge::HostWindowExited});
       }
-      if (status.ok() && (source == OpenSource::kDataModelNotification ||
-                          source == OpenSource::kWebActivity ||
-                          source == OpenSource::kCaptcha)) {
+      if (detached_sign_in) {
+        // Also when sign-in could not open: the challenge cannot be shown
+        // either, and Roblox would otherwise wait for its own timeout.
+        QueueHostWindowEvent(HostWindowEventType::kNativeChallengeDeclined,
+                             generation);
+      } else if (status.ok() &&
+                 (source == OpenSource::kDataModelNotification ||
+                  source == OpenSource::kWebActivity ||
+                  source == OpenSource::kCaptcha)) {
         QueueHostWindowEvent(HostWindowEventType::kDataModelUnfocused,
                              generation);
       }
@@ -1394,6 +1473,7 @@ Status RobloxWebViewBridge::DispatchOpenRequest(
           exit_context->target->close_queued = previous_close_queued;
           exit_context->target->browser_login_fallback =
               previous_browser_login_fallback;
+          exit_context->target->detached_sign_in = previous_detached_sign_in;
         }
       }
     }
@@ -1460,7 +1540,8 @@ Status RobloxWebViewBridge::DrainHostWindowEvents() {
                        "Roblox\n");
         }
         break;
-      case HostWindowEventType::kMessageBusWindowClose: {
+      case HostWindowEventType::kMessageBusWindowClose:
+      case HostWindowEventType::kNativeChallengeDeclined: {
         jstring payload = env->NewStringUTF("{}");
         if (payload == nullptr) {
           status = Unavailable("could not allocate WebView close payload");
@@ -1470,15 +1551,24 @@ Status RobloxWebViewBridge::DrainHostWindowEvents() {
           env->DeleteLocalRef(payload);
           status = CheckJniException(env, "publish WebView.handleWindowClose");
         }
-        if (status.ok()) {
+        if (status.ok() &&
+            event.type == HostWindowEventType::kMessageBusWindowClose) {
           std::fprintf(stderr,
                        "  [webview] MessageBus web surface close delivered "
                        "to Roblox\n");
+        } else if (status.ok()) {
+          // Also sent when website sign-in could not open, so this does not
+          // claim a window is open.
+          std::fprintf(stderr,
+                       "  [webview] verification close delivered to Roblox; "
+                       "Linux cannot answer it\n");
         }
         break;
       }
     }
-    if (status.ok() && event.type != HostWindowEventType::kDataModelUnfocused) {
+    // A declined challenge leaves the sign-in window that replaced it open.
+    if (status.ok() && event.type != HostWindowEventType::kDataModelUnfocused &&
+        event.type != HostWindowEventType::kNativeChallengeDeclined) {
       const std::shared_ptr<HostWindowCloseTarget> target =
           host_window_close_target_;
       if (target != nullptr) {
@@ -1487,6 +1577,7 @@ Status RobloxWebViewBridge::DrainHostWindowEvents() {
           target->active_generation = 0;
           target->close_queued = false;
           target->browser_login_fallback = false;
+          target->detached_sign_in = false;
         }
       }
     }
@@ -1888,6 +1979,13 @@ void RobloxWebViewBridge::HostWindowExited(void *context) {
   if (bridge == nullptr ||
       exit_context->target->active_generation != exit_context->generation ||
       exit_context->target->close_queued) {
+    return;
+  }
+  if (exit_context->target->detached_sign_in) {
+    // Roblox already heard its challenge close when sign-in replaced it.
+    exit_context->target->active_generation = 0;
+    exit_context->target->browser_login_fallback = false;
+    exit_context->target->detached_sign_in = false;
     return;
   }
   HostWindowEventType close_event = HostWindowEventType::kDataModelFocused;

@@ -43,6 +43,11 @@ struct RobloxWebViewOpenRequest {
   std::optional<bool> show_domain_as_title;
   std::optional<bool> back_button_visible;
   std::optional<bool> hide_header;
+  // Never parsed from Roblox JSON. Set only on the bridge's own website
+  // sign-in surface: the host deletes every Roblox session WebKit kept before
+  // it navigates, so the first session the page reports is the one the user
+  // signs in with now.
+  bool clear_roblox_session = false;
 };
 
 // Roblox's LuaApp renders a generic security challenge at
@@ -252,6 +257,9 @@ private:
    kDataModelUnfocused,
    kDataModelFocused,
    kMessageBusWindowClose,
+   // handleWindowClose for a challenge Roblox opened but Mocktail replaced
+   // with website sign-in. The sign-in window it names stays open.
+   kNativeChallengeDeclined,
  };
 
  struct PendingHostWindowEvent {
