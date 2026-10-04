@@ -28,9 +28,6 @@ msgstr "Эти настройки появятся позже. Пока их м�
 msgid "The Roblox accounts saved on this computer and how you sign in"
 msgstr "Аккаунты Roblox, сохранённые на этом компьютере, и способ входа"
 
-msgid "Account for this launch"
-msgstr "Аккаунт для этого запуска"
-
 msgid "Not signed in"
 msgstr "Вход не выполнен"
 
@@ -1615,3 +1612,258 @@ msgstr "Сохранённые аккаунты: %s"
 
 msgid "The account for this launch could not be selected: %s"
 msgstr "Не удалось выбрать аккаунт для этого запуска: %s"
+
+msgid "not used here yet"
+msgstr "здесь ещё не использовался"
+
+msgid "last used just now"
+msgstr "использовался только что"
+
+msgid "last used %d minute ago"
+msgid_plural "last used %d minutes ago"
+msgstr[0] "использовался %d минуту назад"
+msgstr[1] "использовался %d минуты назад"
+msgstr[2] "использовался %d минут назад"
+
+msgid "last used %d hour ago"
+msgid_plural "last used %d hours ago"
+msgstr[0] "использовался %d час назад"
+msgstr[1] "использовался %d часа назад"
+msgstr[2] "использовался %d часов назад"
+
+msgid "last used yesterday"
+msgstr "использовался вчера"
+
+msgid "last used %d day ago"
+msgid_plural "last used %d days ago"
+msgstr[0] "использовался %d день назад"
+msgstr[1] "использовался %d дня назад"
+msgstr[2] "использовался %d дней назад"
+
+msgid "last used on %s"
+msgstr "использовался %s"
+
+msgid "signed out — sign in again"
+msgstr "вход истёк — войдите снова"
+
+msgid "not checked: Roblox could not be reached"
+msgstr "не проверен: Roblox недоступен"
+
+msgid "Selected for Play"
+msgstr "Выбран для игры"
+
+msgid "Sign-in sessions are stored only on this computer, in files only your user can read, and are sent only to Roblox. Mocktail never shows them."
+msgstr "Сеансы входа хранятся только на этом компьютере, в файлах, доступных лишь вашему пользователю, и отправляются только в Roblox. Mocktail никогда их не показывает."
+
+msgid "Saved accounts"
+msgstr "Сохранённые аккаунты"
+
+msgid "Play starts with the selected account. Switching needs no new sign-in."
+msgstr "Игра запускается с выбранным аккаунтом. Чтобы переключиться, входить заново не нужно."
+
+msgid "_Add Account"
+msgstr "_Добавить аккаунт"
+
+msgid "%s is set, so Roblox uses that sign-in and not the saved accounts"
+msgstr "Из-за %s Roblox использует этот вход, а не сохранённые аккаунты"
+
+msgid "A variable in the shortcut or terminal that started Mocktail chooses the Roblox session, so this launch does not use, check or change the saved accounts."
+msgstr "Переменная в ярлыке или терминале, из которого запущен Mocktail, сама выбирает сеанс Roblox, поэтому этот запуск не использует, не проверяет и не меняет сохранённые аккаунты."
+
+msgid "• MOCKTAIL_AUTH_ROOT: a folder with its own saved session"
+msgstr "• MOCKTAIL_AUTH_ROOT: папка со своим сохранённым сеансом"
+
+msgid "• MOCKTAIL_COOKIE_FILE: a session file"
+msgstr "• MOCKTAIL_COOKIE_FILE: файл сеанса"
+
+msgid "• MOCKTAIL_ROBLOX_COOKIES: a session given directly"
+msgstr "• MOCKTAIL_ROBLOX_COOKIES: сеанс, переданный напрямую"
+
+msgid "Start Mocktail without the variable to use the saved accounts again. Its value is not shown here because it can contain a session."
+msgstr "Чтобы снова пользоваться сохранёнными аккаунтами, запустите Mocktail без этой переменной. Её значение здесь не показано: в нём может быть сеанс."
+
+msgid "Play as guest"
+msgstr "Играть как гость"
+
+msgid "Starts signed out; Mocktail's website sign-in window opens first"
+msgstr "Запуск без входа; сначала откроется окно входа на сайте"
+
+msgid "Starts signed out; Roblox opens on its welcome screen, where you can sign in"
+msgstr "Запуск без входа; Roblox откроется на приветственном экране, где можно войти"
+
+msgid "Roblox starts without a saved account. Use it to try an account you do not want to keep, or to sign in inside Roblox."
+msgstr "Roblox запускается без сохранённого аккаунта. Так можно зайти в аккаунт, который не хочется сохранять, или войти прямо в Roblox."
+
+msgid "Before a guest start Mocktail clears the website session and the player data Roblox cached for the last account, so nothing of another account carries over."
+msgstr "Перед гостевым запуском Mocktail очищает сеанс сайта и данные игрока, которые Roblox сохранил для прошлого аккаунта, чтобы от другого аккаунта ничего не осталось."
+
+msgid "If you sign in during a guest start, the account is kept: the next time this window opens, Mocktail asks Roblox whose it is, adds it to this list and selects it for Play."
+msgstr "Если войти во время гостевого запуска, аккаунт сохранится: при следующем открытии этого окна Mocktail спросит у Roblox, чей это вход, добавит аккаунт в этот список и выберет его для игры."
+
+msgid "Sign-in method is Website window, so Mocktail's sign-in window opens before Roblox. Close it to stay signed out."
+msgstr "Способ входа — «Окно сайта», поэтому перед Roblox откроется окно входа Mocktail. Закройте его, чтобы остаться без входа."
+
+msgid "Signing in"
+msgstr "Вход"
+
+msgid "Add accounts here or inside Roblox, and choose which sign-in screen Roblox uses"
+msgstr "Добавляйте аккаунты здесь или в самом Roblox и выберите, какой экран входа показывает Roblox"
+
+msgid "Sign _In…"
+msgstr "_Войти…"
+
+msgid "Sign in on the Roblox website"
+msgstr "Вход на сайте Roblox"
+
+msgid "Opens roblox.com's sign-in page in a Mocktail window and saves the account"
+msgstr "Открывает страницу входа roblox.com в окне Mocktail и сохраняет аккаунт"
+
+msgid "Opens Roblox's own sign-in page (roblox.com/login) in a Mocktail window titled “Add Roblox account”. Sign in there as in a web browser."
+msgstr "Открывает страницу входа Roblox (roblox.com/login) в окне Mocktail с заголовком «Добавить аккаунт Roblox». Войдите там так же, как в браузере."
+
+msgid "Mocktail asks Roblox whether the new session works before saving it. A session Roblox refuses is cleared and the window stays open for another try; when Roblox cannot be reached, Mocktail asks again a few seconds later."
+msgstr "Перед сохранением Mocktail спрашивает у Roblox, действителен ли новый сеанс. Отклонённый сеанс стирается, а окно остаётся открытым для новой попытки; если Roblox недоступен, Mocktail спросит снова через несколько секунд."
+
+msgid "Before the window opens, Mocktail forgets the website session it kept from earlier sign-ins, so the page starts signed out."
+msgstr "Перед открытием окна Mocktail забывает сеанс сайта, оставшийся от прошлых входов, поэтому страница открывается без входа."
+
+msgid "The new account is selected for the next Play, and Save or Play keeps that choice. Close the window to cancel."
+msgstr "Новый аккаунт выбирается для следующего запуска, а «Сохранить» или «Играть» закрепляют этот выбор. Чтобы отменить вход, закройте окно."
+
+msgid "The session goes only to Roblox and is stored in a file only your user can read. It never appears in this window, in logs or on the command line."
+msgstr "Сеанс отправляется только в Roblox и хранится в файле, доступном лишь вашему пользователю. Он никогда не появляется в этом окне, в логах или в командной строке."
+
+msgid "_Start Roblox"
+msgstr "_Запустить"
+
+msgid "Sign in inside Roblox"
+msgstr "Войти в самом Roblox"
+
+msgid "Starts Roblox signed out; with the Website window method Mocktail's sign-in window opens first"
+msgstr "Запускает Roblox без входа; при способе «Окно сайта» сначала откроется окно входа Mocktail"
+
+msgid "Starts Roblox signed out so you can sign in on its welcome screen, for example with Quick Log In"
+msgstr "Запускает Roblox без входа, чтобы войти на его приветственном экране, например через «Быстрый вход»"
+
+msgid "Starts Roblox right away without a saved account, so you sign in on Roblox's own welcome screen, for example with Quick Log In and a device where you are already signed in."
+msgstr "Сразу запускает Roblox без сохранённого аккаунта, и вы входите на приветственном экране самого Roblox — например, через «Быстрый вход» с устройства, где вход уже выполнен."
+
+msgid "When Roblox's own sign-in asks for a Google Play Integrity device check, which nothing on Linux can pass, Mocktail opens the roblox.com sign-in page instead and restarts Roblox signed in once you are done."
+msgstr "Если вход Roblox запросит проверку устройства Google Play Integrity, которую на Linux пройти невозможно, Mocktail вместо неё откроет страницу входа roblox.com, а после входа перезапустит Roblox уже с аккаунтом."
+
+msgid "The account you sign in with is kept: the next time this window opens, Mocktail asks Roblox whose it is, adds it to Saved accounts and selects it for Play."
+msgstr "Аккаунт, в который вы вошли, сохранится: при следующем открытии этого окна Mocktail спросит у Roblox, чей это вход, добавит его в «Сохранённые аккаунты» и выберет для игры."
+
+msgid "Start Roblox saves your changes first, like Play."
+msgstr "«Запустить Roblox», как и «Играть», сначала сохраняет изменения."
+
+msgid "Sign-in method is Website window, so Mocktail's sign-in window opens before the welcome screen. Close it to reach Roblox's own screen."
+msgstr "Способ входа — «Окно сайта», поэтому перед приветственным экраном откроется окно входа Mocktail. Закройте его, чтобы перейти к экрану Roblox."
+
+msgid "Sign-in method"
+msgstr "Способ входа"
+
+msgid "Decides where you sign in when Roblox starts without a working saved session: as a guest, or with a saved account whose sign-in expired. A signed-in account starts directly either way."
+msgstr "Определяет, где вы входите, когда Roblox запускается без действующего сохранённого сеанса: как гость или с сохранённым аккаунтом, вход в который истёк. Аккаунт с действующим входом в любом случае запускается сразу."
+
+msgid "• Roblox app: Roblox's own welcome screen. Its sign-in may ask for a Google Play Integrity device check, which nothing on Linux can pass; Mocktail then opens the roblox.com sign-in page instead and restarts Roblox signed in once you are done."
+msgstr "• Приложение Roblox: приветственный экран самого Roblox. Его вход может запросить проверку устройства Google Play Integrity, которую на Linux пройти невозможно; тогда Mocktail откроет вместо неё страницу входа roblox.com, а после входа перезапустит Roblox уже с аккаунтом."
+
+msgid "• Website window: before Roblox starts, Mocktail opens roblox.com's sign-in page in its own window; close it to continue signed out. Verification pages Roblox opens later use this window too."
+msgstr "• Окно сайта: перед запуском Roblox Mocktail открывает страницу входа roblox.com в своём окне; закройте его, чтобы продолжить без входа. Страницы подтверждения, которые Roblox откроет позже, тоже показываются в этом окне."
+
+msgid "Joining from a link on roblox.com never opens the sign-in window first; it starts with the selected account."
+msgstr "Вход в игру по ссылке с roblox.com не открывает окно входа: игра сразу запускается с выбранным аккаунтом."
+
+msgid "Either way the session is saved for the account Play starts with, or, after a guest start, added to Saved accounts the next time this window opens."
+msgstr "В обоих случаях сеанс сохраняется для аккаунта, с которым запускается игра, а после гостевого запуска добавляется в «Сохранённые аккаунты» при следующем открытии этого окна."
+
+msgid "The sign-in window is not installed (mocktail_webview_helper is missing), so Roblox's welcome screen appears instead."
+msgstr "Окно входа не установлено (нет mocktail_webview_helper), поэтому вместо него появится приветственный экран Roblox."
+
+msgid "Roblox app"
+msgstr "Приложение Roblox"
+
+msgid "Roblox's welcome screen; the website opens when Roblox asks for Play Integrity"
+msgstr "Приветственный экран Roblox; сайт откроется, если Roblox запросит Play Integrity"
+
+msgid "Website window"
+msgstr "Окно сайта"
+
+msgid "Mocktail's roblox.com window opens on start whenever no account is signed in"
+msgstr "Окно roblox.com от Mocktail открывается при запуске, если вход не выполнен"
+
+msgid "Asking Roblox whether the saved sign-ins still work"
+msgstr "Mocktail спрашивает у Roblox, действуют ли сохранённые входы"
+
+msgid "Waiting for you to sign in…"
+msgstr "Ожидание входа…"
+
+msgid "Finish in the Roblox sign-in window, or close it to cancel"
+msgstr "Завершите вход в окне Roblox или закройте его, чтобы отменить"
+
+msgid "Sign-in from an earlier Mocktail version"
+msgstr "Вход из прежней версии Mocktail"
+
+msgid "Roblox keeps using it. It joins this list once Roblox confirms whose it is."
+msgstr "Roblox продолжает им пользоваться. Вход появится в списке, когда Roblox подтвердит, чей он."
+
+msgid "No saved accounts"
+msgstr "Нет сохранённых аккаунтов"
+
+msgid "Sign in once and Mocktail remembers you on this computer"
+msgstr "Войдите один раз, и Mocktail запомнит вас на этом компьютере"
+
+msgid "_Use for Play"
+msgstr "_Играть этим аккаунтом"
+
+msgid "Sign in again as %s"
+msgstr "Войти снова как %s"
+
+msgid "Sign _In Again…"
+msgstr "Войти _снова…"
+
+msgid "Sign Out and _Remove…"
+msgstr "Выйти и _удалить…"
+
+msgid "More"
+msgstr "Ещё"
+
+msgid "Actions for %s"
+msgstr "Действия: %s"
+
+msgid "Signed out"
+msgstr "Вход истёк"
+
+msgid "Guest"
+msgstr "Гость"
+
+msgid "Saved sign-in"
+msgstr "Сохранённый вход"
+
+msgid "Not checked yet"
+msgstr "Ещё не проверен"
+
+msgid "Set by environment"
+msgstr "Задан окружением"
+
+msgid "Accounts unavailable"
+msgstr "Аккаунты недоступны"
+
+msgid "See Accounts"
+msgstr "См. «Аккаунты»"
+
+msgid "Account for this launch: %s"
+msgstr "Аккаунт для этого запуска: %s"
+
+msgid "%s chooses the account for this launch; saved accounts are not used."
+msgstr "Аккаунт для этого запуска выбирает %s; сохранённые аккаунты не используются."
+
+msgid "signed out"
+msgstr "вход истёк"
+
+msgid "Start signed out"
+msgstr "Запуск без входа"
+
+msgid "_Add Account…"
+msgstr "_Добавить аккаунт…"
