@@ -371,6 +371,19 @@ target_compile_definitions(mocktail_failure_dialog_runtime PRIVATE
 )
 mocktail_apply_compile_options(mocktail_failure_dialog_runtime)
 
+# Runs the settings window helper and reads its result, for mocktail; the
+# helper links it for the protocol constants. GTK-free.
+add_library(mocktail_launcher_ui_launch STATIC
+  src/runtime/launcher_ui_launch.cc
+)
+add_library(Mocktail::LauncherUiLaunch ALIAS mocktail_launcher_ui_launch)
+target_include_directories(mocktail_launcher_ui_launch PUBLIC include)
+target_compile_definitions(mocktail_launcher_ui_launch PRIVATE
+  "MOCKTAIL_INSTALL_LIBDIR=\"${CMAKE_INSTALL_LIBDIR}\""
+)
+target_link_libraries(mocktail_launcher_ui_launch PUBLIC mocktail_runtime)
+mocktail_apply_compile_options(mocktail_launcher_ui_launch)
+
 add_executable(mocktail_failure_dialog
   src/ui/mocktail_failure_dialog.cc
 )

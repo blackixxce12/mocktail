@@ -49,17 +49,20 @@ bool ApplyInstalledResourceDefaults(std::string* error) {
   std::filesystem::path helper;
   std::filesystem::path progress_helper;
   std::filesystem::path update_helper;
+  std::filesystem::path launcher_ui_helper;
   if (runtime_directory.filename() == "mocktail" &&
       runtime_directory.parent_path().filename() == "lib") {
     prefix = runtime_directory.parent_path().parent_path();
     helper = runtime_directory / "mocktail_webview_helper";
     progress_helper = runtime_directory / "mocktail_failure_dialog";
     update_helper = runtime_directory / "mocktail_updater";
+    launcher_ui_helper = runtime_directory / "mocktail_launcher_ui";
   } else if (runtime_directory.filename() == "bin") {
     prefix = runtime_directory.parent_path();
     helper = prefix / "lib/mocktail/mocktail_webview_helper";
     progress_helper = prefix / "lib/mocktail/mocktail_failure_dialog";
     update_helper = prefix / "lib/mocktail/mocktail_updater";
+    launcher_ui_helper = prefix / "lib/mocktail/mocktail_launcher_ui";
   } else {
     return true;
   }
@@ -85,6 +88,7 @@ bool ApplyInstalledResourceDefaults(std::string* error) {
       {"MOCKTAIL_RUNTIME_LIBRARY_DIR", helper.parent_path()},
       {"MOCKTAIL_WEBVIEW_HELPER", helper},
       {"MOCKTAIL_UPDATE_PROGRESS_HELPER", progress_helper},
+      {"MOCKTAIL_LAUNCHER_UI_HELPER", launcher_ui_helper},
   };
   for (const auto& [name, value] : defaults) {
     if (!SetDefault(name, value.string(), error)) {

@@ -332,6 +332,13 @@ target_link_libraries(launcher_policy_test PRIVATE
 )
 mocktail_apply_compile_options(launcher_policy_test)
 
+add_executable(launcher_ui_launch_test launcher_ui_launch_test.cc)
+target_link_libraries(launcher_ui_launch_test PRIVATE
+  Mocktail::LauncherUiLaunch
+  GTest::gtest_main
+)
+mocktail_apply_compile_options(launcher_ui_launch_test)
+
 add_executable(roblox_launch_uri_test roblox_launch_uri_test.cc)
 target_link_libraries(roblox_launch_uri_test PRIVATE
   Mocktail::Runtime
@@ -1035,6 +1042,7 @@ gtest_discover_tests(launcher_config_document_test)
 gtest_discover_tests(launcher_window_state_file_test)
 gtest_discover_tests(launcher_fast_flags_document_test)
 gtest_discover_tests(launcher_desktop_entry_cleanup_test)
+gtest_discover_tests(launcher_ui_launch_test)
 gtest_discover_tests(payload_update_preflight_test)
 gtest_discover_tests(apk_provider_test)
 gtest_discover_tests(native_update_test)
