@@ -225,12 +225,48 @@ std::vector<ComboOption> DeviceOptions(LauncherContext& context,
   return options;
 }
 
+// The label that shows a device row's current device, refitted when the
+// window switches between its wide and narrow layouts. Owned by the row.
+struct CurrentDeviceLabel {
+  LauncherContext* context = nullptr;
+  LauncherContext::ListenerId layout = 0;
+  GtkWidget* label = nullptr;  // weak
+
+  // A name of up to 22 characters ("System default", "Системное по
+  // умолчанию") asks for its whole width in the wide layout: GtkBox shares
+  // spare width equally between the title column and the suffixes, so it
+  // was cut even in a wide window. The narrow layout keeps 12 characters,
+  // room for a recognizable name, and leaves the rest to the title.
+  void Fit() const {
+    if (label == nullptr) return;
+    const glong limit = context->narrow() ? 12 : 22;
+    gtk_label_set_width_chars(
+        GTK_LABEL(label),
+        static_cast<int>(std::min(
+            g_utf8_strlen(gtk_label_get_text(GTK_LABEL(label)), -1), limit)));
+  }
+};
+
 // Unlike other rows' short option labels, a device name can be long
 // ("Ryzen HD Audio Controller Analog Stereo (not connected)"): shown in
 // full it would push the row wider than a narrow window. The current device
 // is ellipsized in the middle, keeping both ends, with the full name in the
 // tooltip; the list itself still shows whole names.
-void EllipsizeCurrentDevice(GtkWidget* row) {
+void EllipsizeCurrentDevice(LauncherContext* context, GtkWidget* row) {
+  auto* current = new CurrentDeviceLabel{context};
+  current->layout =
+      context->OnLayoutChanged([current](bool) { current->Fit(); });
+  g_object_set_data_full(
+      G_OBJECT(row), "mocktail-current-device", current, [](gpointer data) {
+        auto* current = static_cast<CurrentDeviceLabel*>(data);
+        current->context->RemoveListener(current->layout);
+        if (current->label != nullptr) {
+          g_object_remove_weak_pointer(
+              G_OBJECT(current->label),
+              reinterpret_cast<gpointer*>(&current->label));
+        }
+        delete current;
+      });
   GtkListItemFactory* factory = gtk_signal_list_item_factory_new();
   g_signal_connect(
       factory, "setup",
@@ -238,15 +274,15 @@ void EllipsizeCurrentDevice(GtkWidget* row) {
         GtkWidget* label = gtk_label_new(nullptr);
         gtk_label_set_xalign(GTK_LABEL(label), 1.0F);
         gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_MIDDLE);
-        // Room for a recognizable name even in a narrow window.
-        gtk_label_set_width_chars(GTK_LABEL(label), 12);
         gtk_label_set_max_width_chars(GTK_LABEL(label), 30);
         gtk_list_item_set_child(GTK_LIST_ITEM(object), label);
       }),
       nullptr);
   g_signal_connect(
       factory, "bind",
-      G_CALLBACK(+[](GtkSignalListItemFactory*, GObject* object, gpointer) {
+      G_CALLBACK(+[](GtkSignalListItemFactory*, GObject* object,
+                     gpointer data) {
+        auto* current = static_cast<CurrentDeviceLabel*>(data);
         GtkListItem* item = GTK_LIST_ITEM(object);
         auto* string = GTK_STRING_OBJECT(gtk_list_item_get_item(item));
         const char* text =
@@ -254,8 +290,19 @@ void EllipsizeCurrentDevice(GtkWidget* row) {
         GtkWidget* label = gtk_list_item_get_child(item);
         gtk_label_set_text(GTK_LABEL(label), text);
         gtk_widget_set_tooltip_text(label, text);
+        if (current->label != label) {
+          if (current->label != nullptr) {
+            g_object_remove_weak_pointer(
+                G_OBJECT(current->label),
+                reinterpret_cast<gpointer*>(&current->label));
+          }
+          current->label = label;
+          g_object_add_weak_pointer(
+              G_OBJECT(label), reinterpret_cast<gpointer*>(&current->label));
+        }
+        current->Fit();
       }),
-      nullptr);
+      current);
   adw_combo_row_set_factory(ADW_COMBO_ROW(row), factory);
   g_object_unref(factory);
 }
@@ -336,7 +383,7 @@ GtkWidget* BuildOutputRow(LauncherContext* context, AudioPageState* state) {
     return DeviceOptions(ctx, *state, false);
   };
   GtkWidget* row = BindComboRow(context, std::move(spec), std::move(combo));
-  EllipsizeCurrentDevice(row);
+  EllipsizeCurrentDevice(context, row);
   return row;
 }
 
@@ -403,7 +450,7 @@ GtkWidget* BuildInputRow(LauncherContext* context, AudioPageState* state) {
     return DeviceOptions(ctx, *state, true);
   };
   GtkWidget* row = BindComboRow(context, std::move(spec), std::move(combo));
-  EllipsizeCurrentDevice(row);
+  EllipsizeCurrentDevice(context, row);
   return row;
 }
 
