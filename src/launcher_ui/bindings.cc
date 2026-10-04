@@ -645,19 +645,31 @@ class ComboBinding final : public RowBinding {
 
   static void SetupSelected(GtkSignalListItemFactory*, GObject* object,
                             gpointer) {
-    // Option labels are short; ellipsizing would hide them whenever the
-    // subtitle is long.
+    // Option labels are short, and the row asks for room to show them in
+    // full: ellipsizing from nothing would hide them whenever the subtitle
+    // is long. Only a longer label ("Mocktail default (level 3)") gives way
+    // in a narrow window, down to kMinimumValueChars, instead of squeezing
+    // the title to a letter per line; see BindSelected.
     GtkWidget* label = gtk_label_new(nullptr);
     gtk_label_set_xalign(GTK_LABEL(label), 1.0F);
+    gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
     gtk_list_item_set_child(GTK_LIST_ITEM(object), label);
   }
 
   static void BindSelected(GtkSignalListItemFactory*, GObject* object,
                            gpointer) {
+    constexpr glong kMinimumValueChars = 12;
     GtkListItem* item = GTK_LIST_ITEM(object);
     GtkStringObject* string = GTK_STRING_OBJECT(gtk_list_item_get_item(item));
-    gtk_label_set_text(GTK_LABEL(gtk_list_item_get_child(item)),
-                       gtk_string_object_get_string(string));
+    GtkWidget* label = gtk_list_item_get_child(item);
+    const char* text = gtk_string_object_get_string(string);
+    gtk_label_set_text(GTK_LABEL(label), text);
+    gtk_widget_set_tooltip_text(label, text);
+    // A short label keeps its whole width; a long one at least
+    // kMinimumValueChars.
+    gtk_label_set_width_chars(
+        GTK_LABEL(label),
+        static_cast<int>(std::min(g_utf8_strlen(text, -1), kMinimumValueChars)));
   }
 
   static void SetupListItem(GtkSignalListItemFactory*, GObject* object,
