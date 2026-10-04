@@ -206,6 +206,15 @@ pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4)
 pkg_check_modules(LIBADWAITA REQUIRED IMPORTED_TARGET "libadwaita-1>=1.6")
 pkg_check_modules(WEBKITGTK6 REQUIRED IMPORTED_TARGET webkitgtk-6.0)
 
+# The updates: section parser alone, for tools that validate config.yaml
+# without linking the payload pipeline (curl, minizip, capstone).
+add_library(mocktail_update_config STATIC
+  src/update/update_config.cc
+)
+target_include_directories(mocktail_update_config PUBLIC include)
+target_link_libraries(mocktail_update_config PRIVATE PkgConfig::LIBYAML)
+mocktail_apply_compile_options(mocktail_update_config)
+
 add_library(mocktail_update STATIC
   src/update/android_manifest.cc
   src/update/apk_bundle.cc
@@ -220,13 +229,13 @@ add_library(mocktail_update STATIC
   src/update/payload_store.cc
   src/update/readiness_canary.cc
   src/update/unsafe_latest_runner.cc
-  src/update/update_config.cc
   src/update/update_coordinator.cc
   src/update/zip_archive.cc
 )
 add_library(Mocktail::Update ALIAS mocktail_update)
 target_include_directories(mocktail_update PUBLIC include)
 target_link_libraries(mocktail_update PUBLIC
+  mocktail_update_config
   Mocktail::Compat
   CURL::libcurl
   OpenSSL::Crypto
