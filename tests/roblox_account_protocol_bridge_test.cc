@@ -37,6 +37,8 @@ struct Probe {
   std::map<std::string, jobject> handlers;
   std::vector<std::string> registered_protocols;
   std::vector<std::string> cleared;
+  // Shutdown steps in order: "unregister:<method>" and "release-handler".
+  std::vector<std::string> events;
   int handlers_created = 0;
   int handlers_cleared = 0;
   int fail_handler_at = 0;
@@ -61,6 +63,7 @@ jobject CreateHandler(void* context, std::shared_ptr<void> target,
 void ClearHandlerObject(void* context, jobject handler) {
   auto* probe = static_cast<Probe*>(context);
   ++probe->handlers_cleared;
+  probe->events.emplace_back("release-handler");
   probe->vm->ClearMessageBusRequestHandler(handler);
 }
 
@@ -74,6 +77,7 @@ void ClearRequestHandler(JNIEnv* env, jobject, jstring protocol,
                          jstring method) {
   EXPECT_EQ(Copy(env, protocol), "Account");
   g_probe->cleared.push_back(Copy(env, method));
+  g_probe->events.push_back("unregister:" + g_probe->cleared.back());
 }
 
 class RobloxAccountProtocolBridgeTest : public testing::Test {
@@ -194,6 +198,12 @@ TEST_F(RobloxAccountProtocolBridgeTest,
   EXPECT_EQ(probe.cleared, (std::vector<std::string>{"deviceIntegrityAvailable",
                                                      "getIntegrityToken"}));
   EXPECT_EQ(probe.handlers_cleared, 2);
+  // Each method leaves the MessageBus before its handler object is released.
+  EXPECT_EQ(probe.events,
+            (std::vector<std::string>{"unregister:deviceIntegrityAvailable",
+                                      "release-handler",
+                                      "unregister:getIntegrityToken",
+                                      "release-handler"}));
   // A stale native call after Shutdown finds no binding and gets null back.
   EXPECT_EQ(vm.DispatchMessageBusRequestHandler(availability, env, nullptr),
             nullptr);
@@ -203,6 +213,26 @@ TEST_F(RobloxAccountProtocolBridgeTest,
   ASSERT_TRUE(bridge->Initialize().ok());
   EXPECT_EQ(Json::parse(Run("deviceIntegrityAvailable", "{}")),
             (Json{{"support", false}}));
+}
+
+TEST_F(RobloxAccountProtocolBridgeTest, LogsMethodAndOutcomeButNoRequestData) {
+  bridge = Make();
+  ASSERT_TRUE(bridge->Initialize().ok());
+  testing::internal::CaptureStderr();
+  (void)Run("getIntegrityToken", kTokenRequest);
+  (void)Run("deviceIntegrityAvailable", kTokenRequest);
+  const std::string log = testing::internal::GetCapturedStderr();
+  EXPECT_NE(log.find("[messagebus] Account method=getIntegrityToken "
+                     "result=no_provider"),
+            std::string::npos)
+      << log;
+  EXPECT_NE(log.find("[messagebus] Account method=deviceIntegrityAvailable "
+                     "result=unsupported"),
+            std::string::npos)
+      << log;
+  EXPECT_EQ(log.find("placeholder-request-hash"), std::string::npos);
+  EXPECT_EQ(log.find("requestHash"), std::string::npos);
+  EXPECT_EQ(log.find("timeoutMillis"), std::string::npos);
 }
 
 TEST_F(RobloxAccountProtocolBridgeTest, SecondInitializeIsRejected) {

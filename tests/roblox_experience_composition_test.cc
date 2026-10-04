@@ -53,6 +53,9 @@ struct Probe {
   int permission_handlers_cleared = 0;
   std::map<std::string, jobject> permission_handlers;
   std::string permission_response;
+  // Synchronous RequestHandlerRaw registrations, keyed "protocol.method".
+  std::map<std::string, jobject> sync_handlers;
+  std::vector<std::string> sync_handlers_cleared;
   int browser_bindings = 0;
   int browser_disconnects = 0;
   int browser_releases = 0;
@@ -267,9 +270,58 @@ nlohmann::json QueryMicrophone(Probe* probe) {
   return nlohmann::json::parse(probe->permission_response);
 }
 
-void SetRequestHandler(JNIEnv*, jobject, jstring, jstring, jobject) {}
+std::string SyncHandlerKey(JNIEnv* env, jstring protocol, jstring method) {
+  std::string key;
+  for (jstring part : {protocol, method}) {
+    const char* chars =
+        part != nullptr ? env->GetStringUTFChars(part, nullptr) : nullptr;
+    key += key.empty() ? "" : ".";
+    key += chars != nullptr ? chars : "";
+    if (chars != nullptr) {
+      env->ReleaseStringUTFChars(part, chars);
+    }
+  }
+  return key;
+}
 
-void ClearNativeRequestHandler(JNIEnv*, jobject, jstring, jstring) {}
+void SetRequestHandler(JNIEnv* env, jobject, jstring protocol, jstring method,
+                       jobject handler) {
+  if (g_probe != nullptr) {
+    g_probe->sync_handlers[SyncHandlerKey(env, protocol, method)] = handler;
+  }
+}
+
+void ClearNativeRequestHandler(JNIEnv* env, jobject, jstring protocol,
+                               jstring method) {
+  if (g_probe != nullptr) {
+    g_probe->sync_handlers_cleared.push_back(
+        SyncHandlerKey(env, protocol, method));
+  }
+}
+
+// Calls RequestHandlerRaw.run(String) the way libroblox does for a
+// synchronous MessageBus request.
+std::string RunSyncHandler(Probe* probe, jobject handler, const char* payload) {
+  JNIEnv* env = probe->vm->GetJNIEnv();
+  jclass cls = env->GetObjectClass(handler);
+  jmethodID run =
+      env->GetMethodID(cls, "run", "(Ljava/lang/String;)Ljava/lang/String;");
+  jstring message = env->NewStringUTF(payload);
+  auto result =
+      static_cast<jstring>(env->CallObjectMethod(handler, run, message));
+  std::string copy;
+  if (result != nullptr) {
+    const char* chars = env->GetStringUTFChars(result, nullptr);
+    copy = chars != nullptr ? chars : "";
+    if (chars != nullptr) {
+      env->ReleaseStringUTFChars(result, chars);
+    }
+    env->DeleteLocalRef(result);
+  }
+  env->DeleteLocalRef(message);
+  env->DeleteLocalRef(cls);
+  return copy;
+}
 
 void PublishRaw(JNIEnv*, jobject, jstring, jstring) {}
 
@@ -933,6 +985,65 @@ TEST(RobloxExperienceCompositionTest,
   EXPECT_EQ(probe.browser_disconnects, 4);
   EXPECT_EQ(probe.browser_releases, 4);
   EXPECT_EQ(probe.browser_callbacks_cleared, 4);
+  g_probe = nullptr;
+}
+
+TEST(RobloxExperienceCompositionTest,
+     AnswersAccountIntegrityRequestsAsUnavailableFromStartupToShutdown) {
+  jnivm::VM vm;
+  Probe probe{&vm};
+  g_probe = &probe;
+  for (const char* class_name : {
+           "com/roblox/protocols/webview/WebViewProtocol",
+           "com/roblox/universalapp/messagebus/MessageBus",
+           "com/roblox/universalapp/messagebus/Connection",
+           "com/roblox/engine/jni/memstorage/MemStorage",
+           "com/roblox/engine/jni/memstorage/Connection",
+           "com/roblox/engine/jni/memstorage/Callback",
+       }) {
+    vm.RegisterClass(class_name);
+  }
+  RobloxExperienceComposition composition(
+      {vm.GetJavaVM(), &vm, Prepare}, {},
+      {GetWebViewOpenId, GetWebViewHandleWindowCloseId, GetWebViewProtocolName,
+       GetWebViewAvailabilityId, GetWebViewMessageId, InitializeWebViewProtocol,
+       Subscribe, Disconnect, SetRequestHandler, ClearNativeRequestHandler,
+       PublishRaw, BroadcastDataModelFocus, GetWebViewMutateId,
+       GetWebViewCloseId, SignalWebViewJavascriptCallback,
+       UpdateCookieSetHandler},
+      BrowserServiceSymbols(), PermissionsSymbols(), {}, JniFactory(&probe),
+      {});
+
+  // Registered with the platform protocols, before native bootstrap and so
+  // before LuaApp can reach a deviceintegrity challenge.
+  ASSERT_TRUE(composition.InitializePlatformProtocols().ok());
+  EXPECT_FALSE(composition.subscribed());
+  EXPECT_EQ(probe.sync_handlers.count("WebView.isAvailable"), 1u);
+  ASSERT_EQ(probe.sync_handlers.count("Account.deviceIntegrityAvailable"), 1u);
+  ASSERT_EQ(probe.sync_handlers.count("Account.getIntegrityToken"), 1u);
+  EXPECT_EQ(probe.sync_handlers.size(), 3u);
+
+  jobject availability =
+      probe.sync_handlers.at("Account.deviceIntegrityAvailable");
+  EXPECT_EQ(nlohmann::json::parse(RunSyncHandler(&probe, availability, "{}")),
+            (nlohmann::json{{"support", false}}));
+  EXPECT_EQ(nlohmann::json::parse(RunSyncHandler(
+                &probe, probe.sync_handlers.at("Account.getIntegrityToken"),
+                R"({"requestHash":"placeholder","timeoutMillis":5000})")),
+            (nlohmann::json{{"token", ""},
+                            {"result", "TOKEN_PROVIDER_UNINITIALIZED"}}));
+
+  EXPECT_TRUE(composition.Shutdown().ok());
+  // Both Account methods are unregistered from the MessageBus first, then the
+  // handler objects stop answering.
+  ASSERT_GE(probe.sync_handlers_cleared.size(), 2u);
+  EXPECT_EQ(std::vector<std::string>(probe.sync_handlers_cleared.begin(),
+                                     probe.sync_handlers_cleared.begin() + 2),
+            (std::vector<std::string>{"Account.deviceIntegrityAvailable",
+                                      "Account.getIntegrityToken"}));
+  EXPECT_EQ(vm.DispatchMessageBusRequestHandler(availability, vm.GetJNIEnv(),
+                                                nullptr),
+            nullptr);
   g_probe = nullptr;
 }
 
