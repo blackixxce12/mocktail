@@ -58,6 +58,16 @@ std::string ReadSmallFile(const std::filesystem::path& path,
   return bytes;
 }
 
+// Plain text as markup in which a word broken across lines gets no hyphen
+// (bindings.h WithoutHyphens(), which this file does not include).
+std::string NoHyphensMarkup(const std::string& text) {
+  gchar* escaped = g_markup_escape_text(text.c_str(), -1);
+  std::string markup = std::string("<span insert_hyphens=\"false\">") +
+                       (escaped != nullptr ? escaped : "") + "</span>";
+  g_free(escaped);
+  return markup;
+}
+
 // The title of the setting a key belongs to, from the rows the pages bound.
 std::string SettingTitle(const std::vector<RowRecord>& rows,
                          std::string_view key) {
@@ -818,11 +828,16 @@ void LauncherContext::ShowEnvironmentDialog() {
       }
     }
     GtkWidget* row = adw_action_row_new();
-    adw_preferences_row_set_use_markup(ADW_PREFERENCES_ROW(row), FALSE);
+    // Markup only to keep Pango from adding a hyphen where it breaks the
+    // assignment or the shortcut's path in a narrow window ("dire-" /
+    // "ct-vulkan"); bindings.h WithoutHyphens(). A zero-width space after
+    // "=" lets a long assignment break between the name and the value.
+    adw_preferences_row_set_use_markup(ADW_PREFERENCES_ROW(row), TRUE);
     adw_preferences_row_set_title(
         ADW_PREFERENCES_ROW(row),
-        (entry.name + "=" +
-         (sensitive ? std::string("***") : RedactEnvironmentValue(entry.value)))
+        NoHyphensMarkup(entry.name + "=\u200b" +
+                        (sensitive ? std::string("***")
+                                   : RedactEnvironmentValue(entry.value)))
             .c_str());
     std::string subtitle = Format(_("Overrides “%s”"),
                                   SettingTitle(rows_, entry.yaml_key).c_str());
@@ -843,7 +858,8 @@ void LauncherContext::ShowEnvironmentDialog() {
           _("This value has no matching setting; it is only left "
             "out of the launch");
     }
-    adw_action_row_set_subtitle(ADW_ACTION_ROW(row), subtitle.c_str());
+    adw_action_row_set_subtitle(ADW_ACTION_ROW(row),
+                                NoHyphensMarkup(subtitle).c_str());
     gtk_list_box_append(GTK_LIST_BOX(list), row);
   }
   adw_alert_dialog_set_extra_child(alert, list);

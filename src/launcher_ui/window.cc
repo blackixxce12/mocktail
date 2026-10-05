@@ -405,7 +405,7 @@ void LauncherWindow::ShowSearchResults(const std::string& query) {
     std::string subtitle = _(GetSectionInfo(section).title);
     if (!entry->subtitle.empty()) subtitle += " · " + entry->subtitle;
     adw_action_row_set_subtitle(ADW_ACTION_ROW(result),
-                                Markup(subtitle).c_str());
+                                WithoutHyphens(Markup(subtitle)).c_str());
     adw_action_row_set_subtitle_lines(ADW_ACTION_ROW(result), 2);
     gtk_list_box_row_set_activatable(GTK_LIST_BOX_ROW(result), TRUE);
     adw_action_row_add_suffix(ADW_ACTION_ROW(result),

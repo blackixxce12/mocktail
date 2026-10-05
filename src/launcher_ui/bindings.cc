@@ -49,6 +49,11 @@ GtkWidget* NewWrappedLabel(const std::string& text, bool selectable) {
   gtk_label_set_width_chars(GTK_LABEL(label), 24);
   gtk_label_set_natural_wrap_mode(GTK_LABEL(label), GTK_NATURAL_WRAP_WORD);
   gtk_label_set_selectable(GTK_LABEL(label), selectable);
+  // No hyphen where a long name has to be broken (WithoutHyphens()).
+  PangoAttrList* attributes = pango_attr_list_new();
+  pango_attr_list_insert(attributes, pango_attr_insert_hyphens_new(FALSE));
+  gtk_label_set_attributes(GTK_LABEL(label), attributes);
+  pango_attr_list_unref(attributes);
   return label;
 }
 
@@ -375,10 +380,11 @@ class RowBinding {
     }
   }
   virtual void SetSubtitle(const std::string& markup) {
+    const std::string shown = markup.empty() ? markup : WithoutHyphens(markup);
     if (ADW_IS_ACTION_ROW(row_)) {
-      adw_action_row_set_subtitle(ADW_ACTION_ROW(row_), markup.c_str());
+      adw_action_row_set_subtitle(ADW_ACTION_ROW(row_), shown.c_str());
     } else if (ADW_IS_EXPANDER_ROW(row_)) {
-      adw_expander_row_set_subtitle(ADW_EXPANDER_ROW(row_), markup.c_str());
+      adw_expander_row_set_subtitle(ADW_EXPANDER_ROW(row_), shown.c_str());
     }
   }
 
@@ -1094,6 +1100,10 @@ std::string Markup(std::string_view text) {
   std::string result(escaped != nullptr ? escaped : "");
   g_free(escaped);
   return result;
+}
+
+std::string WithoutHyphens(std::string_view markup) {
+  return "<span insert_hyphens=\"false\">" + std::string(markup) + "</span>";
 }
 
 GtkWidget* BindSwitchRow(LauncherContext* context, RowSpec spec) {

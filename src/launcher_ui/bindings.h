@@ -215,6 +215,11 @@ void AddRow(GtkWidget* group, GtkWidget* row);
 // Escapes text for AdwPreferencesRow titles and subtitles, which are Pango
 // markup.
 std::string Markup(std::string_view text);
+// Wraps markup so that a word broken across lines gets no hyphen. Rows and
+// hints wrap at any character when a word does not fit, and Pango then
+// adds a hyphen, which inside a variable, a path or a Wayland global reads
+// as part of it ("MOCKTAIL_GRAPHICS_BACKEND=dire-" / "ct-vulkan").
+std::string WithoutHyphens(std::string_view markup);
 // A small pill reading "Recommended" (style class recommended-badge).
 GtkWidget* NewRecommendedBadge();
 // A small pill reading "ENV" (style class env-badge).
