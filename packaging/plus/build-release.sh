@@ -149,6 +149,11 @@ portable_flags() {
 
 cflags=$(portable_flags "$(system_value CFLAGS "${conf_files[@]}")")
 cxxflags=$(portable_flags "$(system_value CXXFLAGS "${conf_files[@]}")")
+# Source paths compiled into the binaries (__FILE__) name the debug source
+# directory, as with makepkg's debug option, instead of this build directory.
+prefix_map="-ffile-prefix-map=${out}/build/mocktail-plus/src=/usr/src/debug/mocktail-plus"
+cflags+=" ${prefix_map}"
+cxxflags+=" ${prefix_map}"
 cflags+=${PLUS_EXTRA_CFLAGS:+ ${PLUS_EXTRA_CFLAGS}}
 cxxflags+=${PLUS_EXTRA_CXXFLAGS:+ ${PLUS_EXTRA_CXXFLAGS}}
 
