@@ -880,8 +880,15 @@ std::vector<ComboOption> DisplayServerOptions(LauncherContext& context) {
            case DisplayServerReason::kWaylandSession:
              return std::string(_("Uses Wayland here"));
            case DisplayServerReason::kNvidiaVulkanWayland:
-             return std::string(
-                 _("Uses Wayland here: NVIDIA with explicit sync"));
+             // NvidiaNativeWaylandBlocker found nothing: explicit sync, and
+             // Hyprland or frames that do not wait for the display, as
+             // window.cc LogNvidiaVideoDriverChoice reports it.
+             return ctx.machine().hyprland_compositor
+                        ? std::string(_("Uses Wayland here: NVIDIA with "
+                                        "explicit sync on Hyprland"))
+                        : std::string(_("Uses Wayland here: NVIDIA with "
+                                        "explicit sync and frames that do "
+                                        "not wait"));
            case DisplayServerReason::kNvidiaVulkanX11: {
              const std::string reason = ShortNvidiaWaylandBlocker(
                  ctx.machine(),
@@ -959,30 +966,33 @@ GtkWidget* BuildDisplayServerRow(LauncherContext* context) {
         "applies the next time Roblox starts, also to the test runs of "
         "automatic updates.") +
       std::string("\n\n") +
-      // video_driver_policy.h ResolveVideoDriverChoice and
-      // NvidiaNativeWaylandBlocker, in its order: the Wayland preference,
-      // the surface-commit guard, driver 555 or newer,
-      // __NV_DISABLE_EXPLICIT_SYNC, no Intel or AMD card, explicit sync
-      // from the compositor, and Hyprland or frames that do not wait.
-      // Without explicit sync NVIDIA's Wayland presentation has hung and
-      // lost the display. With vertical sync a FIFO swapchain sat in
-      // vkAcquireNextImageKHR for most of the time a test window was
-      // minimized on GNOME (sandbox-bench syncrace gnome-min.out);
-      // Hyprland ran 92 sessions clean (commit 275e8f7). Off, or auto with
-      // unlimited, is Presentation::kUnthrottled.
-      // With engine.gpu on another card the rule does not apply
-      // (vulkan_drivers_exclude_nvidia).
+      // video_driver_policy.h ResolveVideoDriverChoice: the NVIDIA rule
+      // applies only beside XWayland (NvidiaDirectVulkanRuleApplies needs
+      // has_x11_display), and with engine.gpu on another card it does not
+      // apply (vulkan_drivers_exclude_nvidia). NvidiaNativeWaylandBlocker
+      // checks, in this order: the Wayland preference (an environment
+      // switch, left out here), the surface-commit guard, driver 555 or
+      // newer, __NV_DISABLE_EXPLICIT_SYNC, no Intel or AMD card, an NVIDIA
+      // card listed (a sanity check), explicit sync from the compositor, and
+      // last Hyprland or frames that do not wait. Without explicit sync
+      // NVIDIA's Wayland presentation has hung and lost the display. With
+      // vertical sync a FIFO swapchain sat in vkAcquireNextImageKHR for most
+      // of the time a test window was minimized on GNOME (sandbox-bench
+      // syncrace gnome-min.out); Hyprland ran 92 sessions clean (commit
+      // 275e8f7). Off, or auto with unlimited, is Presentation::kUnthrottled.
       _("• Automatic: Wayland when the desktop offers it. For NVIDIA's "
-        "driver with the Vulkan backend, Automatic picks native Wayland when "
-        "it is safe and XWayland otherwise. Safe means driver 555 or newer "
-        "with explicit sync left on, a desktop that offers it "
-        "(wp_linux_drm_syncobj_manager_v1), no Intel or AMD card beside the "
-        "NVIDIA one, Mocktail's surface-commit guard on, and either Hyprland "
-        "or frames that do not wait for the display (Vertical sync Off, or "
-        "Automatic with the 240 maximum frame rate). Without explicit sync "
-        "NVIDIA's native Wayland presentation has hung and lost the display, "
-        "and with vertical sync it can stall the game while its window is "
-        "hidden, as a test on GNOME showed.") +
+        "driver with the Vulkan backend on a desktop that also runs "
+        "XWayland, Automatic picks native Wayland when it is safe and "
+        "XWayland otherwise. Safe means, in the order Mocktail checks it: "
+        "the surface-commit guard is on, the driver is 555 or newer with "
+        "explicit sync left on, no Intel or AMD card sits beside the NVIDIA "
+        "one, the desktop offers explicit sync "
+        "(wp_linux_drm_syncobj_manager_v1), and the desktop is Hyprland or "
+        "frames do not wait for the display (Vertical sync Off, or Automatic "
+        "with the 240 maximum frame rate). Without explicit sync NVIDIA's "
+        "native Wayland presentation has hung and lost the display, and with "
+        "vertical sync it can stall the game while its window is hidden, as "
+        "a test on GNOME showed.") +
       "\n\n" +
       // wayland_surface_commit_guard.h; commit 2cb355b ("Missing buffer",
       // #186 on Hyprland with driver 615.71.09).
