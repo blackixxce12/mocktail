@@ -1247,8 +1247,11 @@ msgstr "Масштабирование"
 msgid "Sharpness and pixel count on screens scaled above 100 %"
 msgstr "Чёткость и число пикселей на экранах с масштабом больше 100 %"
 
-msgid "Whether the game window uses Wayland or X11"
-msgstr "Работает ли окно игры через Wayland или через X11"
+msgid "Wayland and X11"
+msgstr "Wayland и X11"
+
+msgid "Which way the game window connects to your desktop"
+msgstr "Через что окно игры работает с рабочим столом"
 
 msgid "Roblox interface"
 msgstr "Интерфейс Roblox"

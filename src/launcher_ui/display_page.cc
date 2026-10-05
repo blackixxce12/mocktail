@@ -1262,9 +1262,11 @@ GtkWidget* BuildDisplayPage(LauncherContext* context) {
   AddRow(scaling, BuildHighDpiRow(context, state));
   AddRow(scaling, BuildResolutionRow(context, state));
 
+  // Not titled "Display server" like its one row: a group and the row in
+  // it with the same title read as a mistake.
   GtkWidget* server =
-      AddGroup(page, _("Display server"),
-               _("Whether the game window uses Wayland or X11"));
+      AddGroup(page, _("Wayland and X11"),
+               _("Which way the game window connects to your desktop"));
   AddRow(server, BuildDisplayServerRow(context));
 
   GtkWidget* interface =
