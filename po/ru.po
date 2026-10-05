@@ -280,8 +280,12 @@ msgid "Worked out from config.yaml; this launch uses %s=%s instead."
 msgstr "Рассчитано по config.yaml, но в этом запуске действует %s=%s."
 
 #, c-format
-msgid "Cannot change %s: %s"
-msgstr "Не удалось изменить %s: %s"
+msgid "“%s” cannot be changed until config.yaml is fixed"
+msgstr "«%s» нельзя изменить, пока не исправлен config.yaml"
+
+#, c-format
+msgid "Cannot change “%s”: %s"
+msgstr "Не удалось изменить «%s»: %s"
 
 msgid "Fix config.yaml to play"
 msgstr "Чтобы играть, исправьте config.yaml"
@@ -340,13 +344,12 @@ msgstr[0] "%d значение перенесено в настройки"
 msgstr[1] "%d значения перенесены в настройки"
 msgstr[2] "%d значений перенесено в настройки"
 
-#, c-format
-msgid "config.yaml has an error on line %d: %s"
-msgstr "Ошибка в config.yaml, строка %d: %s"
+msgid "config.yaml is empty"
+msgstr "Файл config.yaml пуст"
 
 #, c-format
-msgid "config.yaml cannot be loaded: %s"
-msgstr "Не удаётся загрузить config.yaml: %s"
+msgid "config.yaml has an error on line %d"
+msgstr "Ошибка в config.yaml, строка %d"
 
 msgid "Fix…"
 msgstr "Исправить…"
@@ -364,11 +367,21 @@ msgstr "Подробности"
 msgid "config.yaml cannot be loaded"
 msgstr "Не удаётся загрузить config.yaml"
 
+msgid "Roblox cannot start while the file is empty. Fill it with Mocktail's defaults, or restore the copy the settings window kept before it first saved the file."
+msgstr "Пока файл пуст, Roblox не запустится. Заполните его настройками Mocktail по умолчанию или восстановите копию, которую окно настроек сохранило перед первой записью файла."
+
+msgid "Roblox cannot start while the file is empty. Fill it with Mocktail's defaults, or write your settings into it in a text editor and reload it here."
+msgstr "Пока файл пуст, Roblox не запустится. Заполните его настройками Mocktail по умолчанию или впишите в него свои настройки в текстовом редакторе и перечитайте здесь."
+
 msgid "Roblox cannot start until the file loads. Fix it in a text editor, or restore the copy the settings window kept before it first saved the file."
 msgstr "Пока файл не загружается, Roblox не запустится. Исправьте его в текстовом редакторе или восстановите копию, которую окно настроек сохранило перед первой записью файла."
 
 msgid "Roblox cannot start until the file loads. Fix it in a text editor, then reload it here."
 msgstr "Пока файл не загружается, Roblox не запустится. Исправьте его в текстовом редакторе и перечитайте здесь."
+
+#, c-format
+msgid "The loader says: %s"
+msgstr "Сообщение загрузчика: %s"
 
 msgid "_Close"
 msgstr "_Закрыть"
@@ -382,6 +395,9 @@ msgstr "_Восстановить копию"
 msgid "Re_load"
 msgstr "Пе_речитать"
 
+msgid "Use _Defaults"
+msgstr "Настройки по _умолчанию"
+
 #, c-format
 msgid "The backup could not be restored: %s"
 msgstr "Не удалось восстановить копию: %s"
@@ -391,6 +407,13 @@ msgstr "она пуста или не читается"
 
 msgid "config.yaml restored from the backup"
 msgstr "config.yaml восстановлен из копии"
+
+#, c-format
+msgid "config.yaml was not changed: %s"
+msgstr "config.yaml не изменён: %s"
+
+msgid "config.yaml now holds Mocktail's defaults"
+msgstr "В config.yaml записаны настройки Mocktail по умолчанию"
 
 msgid "Variables that override settings"
 msgstr "Переменные, переопределяющие настройки"

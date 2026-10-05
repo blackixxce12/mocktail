@@ -185,6 +185,38 @@ TEST(SettingsDraftTest, BrokenFileIsReadOnlyWithTheLine) {
   EXPECT_GT(draft.load_error_line(), 0) << draft.load_error();
 }
 
+TEST(SettingsDraftTest, TellsAnEmptyFileFromABrokenOne) {
+  SettingsDraft draft;
+  // The loader refuses both: no root mapping.
+  draft.LoadBytes("");
+  EXPECT_TRUE(draft.read_only());
+  EXPECT_TRUE(draft.file_is_blank());
+  draft.LoadBytes(" \n\t\n");
+  EXPECT_TRUE(draft.read_only());
+  EXPECT_TRUE(draft.file_is_blank());
+  // Comments are the user's: not blank.
+  draft.LoadBytes("# my settings\n");
+  EXPECT_TRUE(draft.read_only());
+  EXPECT_FALSE(draft.file_is_blank());
+  draft.LoadBytes("graphics: [\n");
+  EXPECT_FALSE(draft.file_is_blank());
+  draft.LoadBytes(kUserConfig);
+  EXPECT_FALSE(draft.read_only());
+  EXPECT_FALSE(draft.file_is_blank());
+
+  // An empty file on disk can be replaced by the template.
+  TemporaryDirectory temporary;
+  const std::filesystem::path file = temporary.Write("config.yaml", "");
+  ASSERT_TRUE(draft.Load(file));
+  ASSERT_TRUE(draft.file_is_blank());
+  std::string error;
+  ASSERT_TRUE(draft.RestoreBytes(
+      std::string(runtime::DefaultRuntimeConfigYaml()), &error))
+      << error;
+  EXPECT_FALSE(draft.read_only());
+  EXPECT_FALSE(draft.file_is_blank());
+}
+
 TEST(SettingsDraftTest, RestoresABackupOverABrokenFile) {
   TemporaryDirectory temporary;
   const std::filesystem::path file = temporary.Write(

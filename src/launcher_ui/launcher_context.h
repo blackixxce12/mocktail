@@ -280,6 +280,8 @@ class LauncherContext {
   void UpdateConfigBanners();
   void UpdateEnvironmentBanner();
   void ShowConfigErrorDialog();
+  // A change the draft refused, named by its row's title.
+  void ToastRefusedChange(std::string_view key, const std::string& error);
   void ShowCloseDialog();
   bool SaveInternal(bool quiet);
   void Finish(runtime::LauncherUiResult outcome);

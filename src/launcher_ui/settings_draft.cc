@@ -2,6 +2,7 @@
 
 #include <sys/stat.h>
 
+#include <algorithm>
 #include <cctype>
 #include <string>
 #include <utility>
@@ -113,6 +114,14 @@ void SettingsDraft::ClassifyLoadError() {
     load_error_ = error.empty() ? "config.yaml is not valid" : error;
     load_error_line_ = LineNumberFromMessage(load_error_);
   }
+}
+
+bool SettingsDraft::file_is_blank() const {
+  // A file that could not be read at all was replaced by the template.
+  if (!read_only()) return false;
+  const std::string& bytes = saved_.bytes();
+  return std::all_of(bytes.begin(), bytes.end(),
+                     [](unsigned char c) { return std::isspace(c) != 0; });
 }
 
 void SettingsDraft::InvalidateCache() const { working_cache_.clear(); }

@@ -42,6 +42,10 @@ class SettingsDraft {
   // message), or 0.
   int load_error_line() const { return load_error_line_; }
   bool read_only() const { return !load_error_.empty(); }
+  // The file was read but holds nothing except white space (the loader
+  // refuses it: the root is not a mapping). Replacing it with the template
+  // loses nothing.
+  bool file_is_blank() const;
 
   // The value the next start reads from config.yaml after Save().
   std::optional<std::string> Get(std::string_view key) const;

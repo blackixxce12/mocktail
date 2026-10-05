@@ -13,6 +13,7 @@
 #include "launcher_ui/i18n.h"
 #include "launcher_ui/setting_kinds.h"
 #include "runtime/environment.h"
+#include "runtime/runtime_config_bootstrap.h"
 
 namespace mocktail::launcher_ui {
 namespace {
@@ -275,6 +276,19 @@ std::string LauncherContext::UnfollowedOverrideNote(
   return {};
 }
 
+void LauncherContext::ToastRefusedChange(std::string_view key,
+                                         const std::string& error) {
+  // The draft's own message for a broken file is not for the user (and is
+  // English); the rows are insensitive then, so only programmatic changes
+  // get here.
+  const std::string title = SettingTitle(rows_, key);
+  Toast(
+      draft_.read_only()
+          ? Format(_("“%s” cannot be changed until config.yaml is fixed"),
+                   title.c_str())
+          : Format(_("Cannot change “%s”: %s"), title.c_str(), error.c_str()));
+}
+
 bool LauncherContext::SetValue(std::string_view key, std::string_view value,
                                launcher::ScalarKind kind) {
   if (draft_.Get(key) == std::optional<std::string>(std::string(value))) {
@@ -282,8 +296,7 @@ bool LauncherContext::SetValue(std::string_view key, std::string_view value,
   }
   std::string error;
   if (!draft_.Set(key, value, kind, &error)) {
-    Toast(Format(_("Cannot change %s: %s"), std::string(key).c_str(),
-                 error.c_str()));
+    ToastRefusedChange(key, error);
     return false;
   }
   NotifySettingChanged(key);
@@ -298,8 +311,7 @@ bool LauncherContext::UnsetValue(std::string_view key) {
   if (!draft_.Get(key).has_value()) return true;
   std::string error;
   if (!draft_.Unset(key, &error)) {
-    Toast(Format(_("Cannot change %s: %s"), std::string(key).c_str(),
-                 error.c_str()));
+    ToastRefusedChange(key, error);
     return false;
   }
   NotifySettingChanged(key);
@@ -657,13 +669,20 @@ void LauncherContext::UpdateConfigBanners() {
     ClearBanner(BannerKind::kConfigError);
     return;
   }
+  // The loader's messages are English and technical
+  // (runtime_config_file.cc), so the banner says what is wrong in the
+  // user's language and the dialog behind Fix… quotes the loader. A 0-byte
+  // file reached the user as "runtime configuration root must be a
+  // mapping".
   Banner banner;
-  banner.title =
-      draft_.load_error_line() > 0
-          ? Format(_("config.yaml has an error on line %d: %s"),
-                   draft_.load_error_line(), draft_.load_error().c_str())
-          : Format(_("config.yaml cannot be loaded: %s"),
-                   draft_.load_error().c_str());
+  if (draft_.file_is_blank()) {
+    banner.title = _("config.yaml is empty");
+  } else if (draft_.load_error_line() > 0) {
+    banner.title = Format(_("config.yaml has an error on line %d"),
+                          draft_.load_error_line());
+  } else {
+    banner.title = _("config.yaml cannot be loaded");
+  }
   banner.button = _("Fix…");
   banner.on_button = [this] { ShowConfigErrorDialog(); };
   SetBanner(BannerKind::kConfigError, std::move(banner));
@@ -692,27 +711,65 @@ void LauncherContext::ShowConfigErrorDialog() {
   std::error_code filesystem_error;
   const bool has_backup =
       std::filesystem::is_regular_file(backup, filesystem_error);
-  AdwDialog* dialog =
-      adw_alert_dialog_new(_("config.yaml cannot be loaded"), nullptr);
+  const bool blank = draft_.file_is_blank();
+  AdwDialog* dialog = adw_alert_dialog_new(
+      blank ? _("config.yaml is empty") : _("config.yaml cannot be loaded"),
+      nullptr);
   AdwAlertDialog* alert = ADW_ALERT_DIALOG(dialog);
-  adw_alert_dialog_format_body(
-      alert, "%s\n\n%s", draft_.load_error().c_str(),
-      has_backup
-          ? _("Roblox cannot start until the file loads. Fix it in a text "
-              "editor, or restore the copy the settings window kept before "
-              "it first saved the file.")
-          : _("Roblox cannot start until the file loads. Fix it in a text "
-              "editor, then reload it here."));
+  if (blank) {
+    // The runtime refuses an empty file as well (runtime_config_file.cc:
+    // the root must be a mapping), so Play stays blocked; nothing is lost
+    // by writing the first-run template over it.
+    adw_alert_dialog_set_body(
+        alert,
+        has_backup
+            ? _("Roblox cannot start while the file is empty. Fill it with "
+                "Mocktail's defaults, or restore the copy the settings "
+                "window kept before it first saved the file.")
+            : _("Roblox cannot start while the file is empty. Fill it with "
+                "Mocktail's defaults, or write your settings into it in a "
+                "text editor and reload it here."));
+  } else {
+    adw_alert_dialog_format_body(
+        alert, "%s\n\n%s",
+        has_backup
+            ? _("Roblox cannot start until the file loads. Fix it in a text "
+                "editor, or restore the copy the settings window kept before "
+                "it first saved the file.")
+            : _("Roblox cannot start until the file loads. Fix it in a text "
+                "editor, then reload it here."),
+        Format(_("The loader says: %s"), draft_.load_error().c_str()).c_str());
+  }
   adw_alert_dialog_add_responses(alert, "close", _("_Close"), "open",
                                  _("_Open config.yaml"), nullptr);
   if (has_backup) {
     adw_alert_dialog_add_response(alert, "restore", _("_Restore Backup"));
   }
   adw_alert_dialog_add_response(alert, "reload", _("Re_load"));
+  if (blank) {
+    adw_alert_dialog_add_response(alert, "defaults", _("Use _Defaults"));
+    adw_alert_dialog_set_response_appearance(alert, "defaults",
+                                             ADW_RESPONSE_SUGGESTED);
+    adw_alert_dialog_set_default_response(alert, "defaults");
+  }
   adw_alert_dialog_set_close_response(alert, "close");
   ConnectResponses(
       alert, {{"open", [this] { OpenPath(options_.config_file); }},
               {"reload", [this] { Reload(); }},
+              {"defaults",
+               [this] {
+                 std::string error;
+                 if (!draft_.RestoreBytes(
+                         std::string(runtime::DefaultRuntimeConfigYaml()),
+                         &error)) {
+                   Toast(Format(_("config.yaml was not changed: %s"),
+                                error.c_str()));
+                   return;
+                 }
+                 UpdateConfigBanners();
+                 NotifySettingChanged("");
+                 Toast(_("config.yaml now holds Mocktail's defaults"));
+               }},
               {"restore", [this, backup] {
                  std::string error;
                  const std::string bytes = ReadSmallFile(backup, 1024U * 1024U);
