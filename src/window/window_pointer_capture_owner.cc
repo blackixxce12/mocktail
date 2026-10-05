@@ -4,6 +4,9 @@
 #include <SDL3/SDL_video.h>
 
 #include <cstdio>
+#include <optional>
+
+#include "window/wayland_surface_commit_guard.h"
 
 namespace mocktail {
 namespace window {
@@ -195,6 +198,13 @@ bool SdlPointerCaptureBackend::Apply(bool relative_mode, bool cursor_visible) {
     return false;
   }
 
+  // Changing relative mode warps the pointer, and on a compositor without
+  // wp_pointer_warp_v1 SDL commits the game surface to do that. Past the
+  // guard's budget the change goes ahead rather than leave capture stuck.
+  std::optional<ScopedSurfaceCommit> commit;
+  if (relative_mode != relative_mode_) {
+    commit.emplace("pointer capture change went ahead");
+  }
   if (relative_mode && !relative_mode_) {
     SDL_GetMouseState(&capture_anchor_x_, &capture_anchor_y_);
     capture_anchor_valid_ = true;

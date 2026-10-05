@@ -135,6 +135,8 @@ using NoteHostPresentEndFn = void (*)(std::int32_t);
 using NoteVulkanCallBeginFn = std::uint64_t (*)(const char*);
 using NoteVulkanCallEndFn = void (*)(std::uint64_t, std::int32_t);
 using NoteSurfaceOutOfDateFn = void (*)();
+using HostWsiEnterFn = bool (*)();
+using HostWsiLeaveFn = void (*)();
 using WindowDimensionFn = int (*)();
 
 struct AdapterState {
@@ -197,6 +199,8 @@ struct AdapterState {
   std::atomic<NoteVulkanCallBeginFn> note_vulkan_call_begin{nullptr};
   std::atomic<NoteVulkanCallEndFn> note_vulkan_call_end{nullptr};
   std::atomic<NoteSurfaceOutOfDateFn> note_surface_out_of_date{nullptr};
+  std::atomic<HostWsiEnterFn> host_wsi_enter{nullptr};
+  std::atomic<HostWsiLeaveFn> host_wsi_leave{nullptr};
   bool extent_translation_logged = false;
   bool present_policy_logged = false;
   bool initialized = false;
@@ -249,6 +253,14 @@ bool EnsureInitialized() {
       ResolveProcessFunction<NoteSurfaceOutOfDateFn>(
           "mocktail_window_note_vulkan_surface_out_of_date"),
       std::memory_order_release);
+  const auto wsi_enter =
+      ResolveProcessFunction<HostWsiEnterFn>("mocktail_window_host_wsi_enter");
+  const auto wsi_leave =
+      ResolveProcessFunction<HostWsiLeaveFn>("mocktail_window_host_wsi_leave");
+  if (wsi_enter != nullptr && wsi_leave != nullptr) {
+    state.host_wsi_enter.store(wsi_enter, std::memory_order_release);
+    state.host_wsi_leave.store(wsi_leave, std::memory_order_release);
+  }
   if (backend_window == nullptr || uses_direct_vulkan == nullptr ||
       !uses_direct_vulkan() || backend_window() == nullptr) {
     std::fprintf(stderr,
@@ -1112,6 +1124,33 @@ FpsWaitTrace& QueueIdleWaitTrace() {
   return trace;
 }
 
+// Holds the window's surface-commit guard around a host WSI call that
+// commits the game surface (the present) or sets up its explicit sync
+// (swapchain creation and destruction), so SDL's main-thread commits cannot
+// land in the middle of it. Both hooks are read once: a shutdown that clears
+// them meanwhile cannot leave the guard held.
+class HostWsiGuardScope final {
+ public:
+  HostWsiGuardScope() {
+    AdapterState& state = State();
+    const HostWsiEnterFn enter =
+        state.host_wsi_enter.load(std::memory_order_acquire);
+    leave_ = state.host_wsi_leave.load(std::memory_order_acquire);
+    held_ = enter != nullptr && leave_ != nullptr && enter();
+  }
+  ~HostWsiGuardScope() {
+    if (held_) {
+      leave_();
+    }
+  }
+  HostWsiGuardScope(const HostWsiGuardScope&) = delete;
+  HostWsiGuardScope& operator=(const HostWsiGuardScope&) = delete;
+
+ private:
+  HostWsiLeaveFn leave_ = nullptr;
+  bool held_ = false;
+};
+
 VkResult VKAPI_CALL
 ObservedHostQueuePresent(VkQueue queue, const VkPresentInfoKHR* present_info) {
   AdapterState& state = State();
@@ -1120,20 +1159,26 @@ ObservedHostQueuePresent(VkQueue queue, const VkPresentInfoKHR* present_info) {
   if (host_present == nullptr) {
     return VK_ERROR_INITIALIZATION_FAILED;
   }
+  // Read both hooks once, so the end always pairs with a begin that ran.
   const NoteHostPresentBeginFn note_begin =
       state.note_host_present_begin.load(std::memory_order_acquire);
-  if (note_begin != nullptr) {
+  const NoteHostPresentEndFn note_end =
+      state.note_host_present_end.load(std::memory_order_acquire);
+  const bool noted = note_begin != nullptr && note_end != nullptr;
+  if (noted) {
     note_begin();
   }
   const bool fps_trace = FpsTraceEnabled();
   const std::uint64_t present_start_ns = fps_trace ? MonotonicNanos() : 0;
-  const VkResult result = host_present(queue, present_info);
+  VkResult result = VK_SUCCESS;
+  {
+    HostWsiGuardScope guard;
+    result = host_present(queue, present_info);
+  }
   if (fps_trace) {
     PresentWaitTrace().Record(present_start_ns);
   }
-  const NoteHostPresentEndFn note_end =
-      state.note_host_present_end.load(std::memory_order_acquire);
-  if (note_end != nullptr) {
+  if (noted) {
     note_end(static_cast<std::int32_t>(result));
   }
   return result;
@@ -1302,6 +1347,8 @@ vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks* allocator) {
     state.note_vulkan_call_end.store(nullptr, std::memory_order_release);
     g_vulkan_call_observation_active.store(false, std::memory_order_release);
     state.note_surface_out_of_date.store(nullptr, std::memory_order_release);
+    state.host_wsi_enter.store(nullptr, std::memory_order_release);
+    state.host_wsi_leave.store(nullptr, std::memory_order_release);
     state.extent_translation_logged = false;
     state.present_policy_logged = false;
     state.initialized = false;
@@ -1704,8 +1751,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateSwapchainKHR(
       }
     }
   }
-  const VkResult result =
-      host_create(device, &host_info, allocator, swapchain);
+  VkResult result = VK_SUCCESS;
+  {
+    HostWsiGuardScope guard;
+    result = host_create(device, &host_info, allocator, swapchain);
+  }
   if (result != VK_SUCCESS) {
     return result;
   }
@@ -1736,6 +1786,7 @@ vkDestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
       HostDeviceProc(device, "vkDestroySwapchainKHR"));
   State().text_overlay.DestroySwapchain(device, swapchain);
   if (host_destroy != nullptr) {
+    HostWsiGuardScope guard;
     host_destroy(device, swapchain, allocator);
   }
 }

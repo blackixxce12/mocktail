@@ -32,6 +32,7 @@
 #include "window/video_driver_policy.h"
 #include "window/vulkan_present_progress_gate.h"
 #include "window/vulkan_surface_recovery_gate.h"
+#include "window/wayland_surface_commit_guard.h"
 #include "window/web_surface_fullscreen_guard.h"
 #include "window/window_fullscreen_request_gate.h"
 #include "window/window_fullscreen_state_sync.h"
@@ -172,6 +173,14 @@ static std::unique_ptr<WindowPointerCaptureOwner> g_pointer_capture_owner;
 static std::unique_ptr<graphics::GlesTextOverlayCompositor> g_gles_text_overlay;
 static bool g_auto_angle_retry_attempted = false;
 static std::filesystem::path g_window_state_path;
+
+// A fullscreen change that waited out the surface-commit guard's budget; the
+// next tick retries it. Main thread only.
+struct DeferredFullscreenRequest {
+  bool fullscreen = false;
+  const char* reason = nullptr;
+};
+static std::optional<DeferredFullscreenRequest> g_deferred_fullscreen;
 
 WindowStartupPresentationPlan RestoredWindowPresentationPlan() {
   if (!g_state.state_persistence_active) {
@@ -1092,6 +1101,22 @@ Status ConfigureWindowStatePersistence(const std::filesystem::path& path) {
   return Status::Ok();
 }
 
+// Direct Vulkan on Wayland: the host present and SDL's main-thread surface
+// commits take turns (see SurfaceCommitGuard). No present runs before Init
+// returns, so the guard starts here.
+void ActivateSurfaceCommitGuard() {
+  if (!IsWaylandVideoDriver()) {
+    return;
+  }
+  const bool allowed = SurfaceCommitGuardAllowed();
+  GameSurfaceCommitGuard().SetActive(allowed);
+  fprintf(stderr,
+          allowed ? "  [window] Wayland surface-commit guard on: SDL's "
+                    "surface changes wait for the host present\n"
+                  : "  [window] Wayland surface-commit guard off "
+                    "(MOCKTAIL_WAYLAND_COMMIT_GUARD=0)\n");
+}
+
 bool Init(int width, int height, const char* title) {
   if (g_state.initialised) {
     return true;
@@ -1143,6 +1168,7 @@ bool Init(int width, int height, const char* title) {
   g_fullscreen_request_gate.Reset();
   g_fullscreen_menu_request_gate.Reset();
   g_web_surface_fullscreen_guard.ResetWindow();
+  g_deferred_fullscreen.reset();
   g_real_swap_count.store(0, std::memory_order_relaxed);
 
   if (!ConfigureGraphicsBackendBeforeSDL()) {
@@ -1274,6 +1300,7 @@ bool Init(int width, int height, const char* title) {
       g_state.initialised = false;
       return false;
     }
+    ActivateSurfaceCommitGuard();
     return true;
   }
 
@@ -1904,6 +1931,31 @@ extern "C" void mocktail_window_note_vulkan_host_present_end(
   g_vulkan_host_present_sequence = 0;
 }
 
+// The Vulkan adapter holds the surface-commit guard around the host present
+// and swapchain creation and destruction. False: no guard to release.
+extern "C" bool mocktail_window_host_wsi_enter() {
+  SurfaceCommitGuard& guard = GameSurfaceCommitGuard();
+  if (guard.EnterHostWsi(kHostWsiGuardTimeout)) {
+    return true;
+  }
+  static std::atomic<std::uint64_t> reported{0};
+  const std::uint64_t unguarded = guard.unguarded_host_calls();
+  if (unguarded > reported.exchange(unguarded, std::memory_order_relaxed) &&
+      (unguarded <= 4 || unguarded % 256 == 0)) {
+    fprintf(stderr,
+            "  [window] surface commit guard: a main-thread surface change "
+            "held the game surface over %lld ms; host WSI call went ahead "
+            "(%llu so far)\n",
+            static_cast<long long>(kHostWsiGuardTimeout.count()),
+            static_cast<unsigned long long>(unguarded));
+  }
+  return false;
+}
+
+extern "C" void mocktail_window_host_wsi_leave() {
+  GameSurfaceCommitGuard().LeaveHostWsi();
+}
+
 extern "C" std::uint64_t mocktail_window_note_vulkan_call_begin(
     const char* call_name) {
   return g_vulkan_present_progress_gate.NotifyCallBegin(
@@ -2004,6 +2056,10 @@ void MaybeRequestResizeReadiness() {
   if (g_resize_readiness_gate == nullptr || g_state.sdl_window == nullptr) {
     return;
   }
+  ScopedSurfaceCommit commit("readiness resize deferred to the next tick");
+  if (!commit.ready()) {
+    return;
+  }
   WindowResizeRequest request;
   if (!g_resize_readiness_gate->TakeResizeRequest(&request)) {
     return;
@@ -2036,10 +2092,18 @@ bool RequestFullscreenState(bool fullscreen, const char* reason) {
   if (g_state.sdl_window == nullptr) {
     return false;
   }
+  // The newest request wins over one still waiting for the next tick.
+  g_deferred_fullscreen.reset();
   g_web_surface_fullscreen_guard.NoteGameRequest(fullscreen);
   const bool current_fullscreen =
       (SDL_GetWindowFlags(g_state.sdl_window) & SDL_WINDOW_FULLSCREEN) != 0;
   if (current_fullscreen != fullscreen) {
+    // SDL commits the game surface when it enters fullscreen.
+    ScopedSurfaceCommit commit("fullscreen change deferred to the next tick");
+    if (!commit.ready()) {
+      g_deferred_fullscreen = DeferredFullscreenRequest{fullscreen, reason};
+      return true;
+    }
     // Save the restore rectangle before SDL replaces it with monitor bounds.
     CaptureWindowState();
     if (!SDL_SetWindowFullscreen(g_state.sdl_window, fullscreen)) {
@@ -2076,9 +2140,23 @@ bool RequestFullscreenToggle(const char* reason) {
   if (g_state.sdl_window == nullptr) {
     return false;
   }
+  // A deferred change counts as made: a second toggle undoes it.
   const bool fullscreen =
-      (SDL_GetWindowFlags(g_state.sdl_window) & SDL_WINDOW_FULLSCREEN) != 0;
+      g_deferred_fullscreen.has_value()
+          ? g_deferred_fullscreen->fullscreen
+          : (SDL_GetWindowFlags(g_state.sdl_window) & SDL_WINDOW_FULLSCREEN) !=
+                0;
   return RequestFullscreenState(!fullscreen, reason);
+}
+
+void MaybeApplyDeferredFullscreenRequest() {
+  if (!g_deferred_fullscreen.has_value()) {
+    return;
+  }
+  const DeferredFullscreenRequest request = *g_deferred_fullscreen;
+  if (!RequestFullscreenState(request.fullscreen, request.reason)) {
+    fprintf(stderr, "  [fullscreen] deferred request failed\n");
+  }
 }
 
 void MaybeApplyAndroidFullscreenRequest() {
@@ -2252,6 +2330,7 @@ void MaybeReportVulkanPresentStall() {
 }
 
 bool PumpEvents() {
+  MaybeApplyDeferredFullscreenRequest();
   MaybeSynchronizeRestoredFullscreenState();
   MaybeApplyRobloxFullscreenMenuRequest();
   MaybeApplyAndroidFullscreenRequest();
@@ -2290,6 +2369,11 @@ bool PumpEvents() {
   const uint64_t now_ns = SDL_GetTicksNS();
   if (!UnthrottledPresentationRequested() || last_os_pump_ns == 0 ||
       now_ns - last_os_pump_ns >= kUnthrottledPumpIntervalNs) {
+    // Events SDL dispatches can commit the game surface: a focus change in
+    // relative mouse mode warps the pointer, and a compositor that forces
+    // client-side decorations remaps the window. Input never waits behind a
+    // stalled present, though: past the budget the pump goes ahead.
+    ScopedSurfaceCommit commit("event pump went ahead");
     SDL_PumpEvents();
     last_os_pump_ns = now_ns;
   }
@@ -2510,6 +2594,8 @@ uint64_t PaceInputPump() {
 }
 
 void Shutdown() {
+  GameSurfaceCommitGuard().SetActive(false);
+  g_deferred_fullscreen.reset();
   g_input_pump_pacer.Reset();
   g_pre_text_input_pump_gate.Deactivate();
   g_platform_event_observer.Deactivate();
