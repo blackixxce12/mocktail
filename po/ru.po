@@ -1069,14 +1069,8 @@ msgstr "Здесь используется Wayland"
 msgid "Uses Wayland here: NVIDIA with explicit sync"
 msgstr "Здесь используется Wayland: NVIDIA с явной синхронизацией"
 
-msgid "Uses X11 (XWayland) here: NVIDIA with Vulkan"
-msgstr "Здесь используется X11 (XWayland): NVIDIA с Vulkan"
-
 msgid "Uses X11 here: there is no Wayland session"
 msgstr "Здесь используется X11: сеанса Wayland нет"
-
-msgid "Wayland when available; for NVIDIA with Vulkan only with explicit sync"
-msgstr "Wayland, если он есть; для NVIDIA с Vulkan — только с явной синхронизацией"
 
 msgid "Native Wayland; risky for NVIDIA with Vulkan here"
 msgstr "Нативный Wayland; для NVIDIA с Vulkan здесь рискованно"
@@ -1101,9 +1095,6 @@ msgstr "Графический сервер"
 
 msgid "Whether the game window talks to your desktop through Wayland or through X11, which on a Wayland desktop means XWayland. The change applies the next time Roblox starts, also to the test runs of automatic updates."
 msgstr "Через что окно игры работает с рабочим столом: через Wayland или через X11, то есть на рабочем столе Wayland через XWayland. Изменение вступит в силу при следующем запуске Roblox и коснётся также тестовых запусков автоматического обновления."
-
-msgid "• Automatic: Wayland when the desktop offers it. NVIDIA's driver with the Vulkan backend gets it only with driver 555 or newer, a desktop that offers explicit sync, no Intel or AMD card beside it and, on desktops other than Hyprland, frames that do not wait for the display (Vertical sync Off, or Automatic with the 240 maximum frame rate); otherwise XWayland. Without explicit sync NVIDIA's native Wayland presentation has hung and lost the display, and with vertical sync it can stall the game while its window is hidden, as a test on GNOME showed."
-msgstr "• Автоматически: Wayland, если рабочий стол его предлагает. Драйвер NVIDIA с движком Vulkan получает его, только если версия драйвера 555 или новее, рабочий стол предлагает явную синхронизацию (explicit sync), рядом нет видеокарты Intel или AMD, а вне Hyprland ещё и кадры не ждут экран (вертикальная синхронизация «Выкл.» или «Автоматически» при ограничении FPS «240 (максимум)»); иначе — XWayland. Без явной синхронизации драйвер NVIDIA в нативном Wayland зависал и терял связь с экраном, а с вертикальной синхронизацией он может останавливать игру, пока её окно скрыто, — это показала проверка в GNOME."
 
 msgid "• Wayland: the native path, sharp on scaled screens with native resolution. Where Automatic keeps NVIDIA's Vulkan on XWayland it is the riskier choice, but worth a try when the mouse or camera misbehaves through XWayland."
 msgstr "• Wayland: нативный путь, чёткий на масштабированных экранах с чётким изображением. Там, где «Автоматически» оставляет Vulkan на NVIDIA в XWayland, это более рискованный выбор, но его стоит попробовать, если через XWayland капризничают мышь или камера."
@@ -3575,3 +3566,60 @@ msgstr "Другие настройки отрисовки"
 
 msgid "Shader loading on NVIDIA"
 msgstr "Загрузка шейдеров на NVIDIA"
+
+
+msgid "Uses X11 (XWayland) here"
+msgstr "Здесь используется X11 (XWayland)"
+
+#, c-format
+msgid "Uses X11 (XWayland) here: %s"
+msgstr "Здесь используется X11 (XWayland): %s"
+
+msgid "Wayland when available; native Wayland for NVIDIA's Vulkan when it is safe, otherwise XWayland"
+msgstr "Wayland, если он есть; Vulkan на NVIDIA получает нативный Wayland, когда это безопасно, иначе XWayland"
+
+msgid "• Automatic: Wayland when the desktop offers it. For NVIDIA's driver with the Vulkan backend, Automatic picks native Wayland when it is safe and XWayland otherwise. Safe means driver 555 or newer with explicit sync left on, a desktop that offers it (wp_linux_drm_syncobj_manager_v1), no Intel or AMD card beside the NVIDIA one, Mocktail's surface-commit guard on, and either Hyprland or frames that do not wait for the display (Vertical sync Off, or Automatic with the 240 maximum frame rate). Without explicit sync NVIDIA's native Wayland presentation has hung and lost the display, and with vertical sync it can stall the game while its window is hidden, as a test on GNOME showed."
+msgstr "• Автоматически: Wayland, если рабочий стол его предлагает. Для драйвера NVIDIA с движком Vulkan «Автоматически» выбирает нативный Wayland, когда это безопасно, а иначе — XWayland. Безопасно — значит драйвер 555 или новее с невыключенной явной синхронизацией (explicit sync), рабочий стол, который её предлагает (wp_linux_drm_syncobj_manager_v1), никакой видеокарты Intel или AMD рядом с NVIDIA, включённая защита вывода кадров Mocktail и либо Hyprland, либо кадры, которые не ждут экран (вертикальная синхронизация «Выкл.» или «Автоматически» при ограничении FPS «240 (максимум)»). Без явной синхронизации драйвер NVIDIA в нативном Wayland зависал и терял связь с экраном, а с вертикальной синхронизацией он может останавливать игру, пока её окно скрыто, — это показала проверка в GNOME."
+
+msgid "The surface-commit guard keeps the game window's own updates (fullscreen changes, showing the window, pointer warps) out of the middle of a frame NVIDIA presents with explicit sync. Such an update made the desktop close the game's connection, the “Missing buffer” disconnect of upstream issue #186. The guard is on for Vulkan windows on Wayland unless MOCKTAIL_WAYLAND_COMMIT_GUARD=0 turns it off."
+msgstr "Защита вывода кадров (surface-commit guard) не даёт собственным обновлениям окна игры (переключению полноэкранного режима, показу окна, переносу указателя) попасть в середину кадра, который NVIDIA выводит с явной синхронизацией. Из-за такого обновления рабочий стол закрывал соединение игры — это отключение «Missing buffer» из issue #186 в основном репозитории. Защита включена для окон Vulkan в Wayland, если её не отключает MOCKTAIL_WAYLAND_COMMIT_GUARD=0."
+
+msgid "Automatic picks Wayland on this computer."
+msgstr "На этом компьютере «Автоматически» выбирает Wayland."
+
+msgid "Automatic picks X11 (XWayland) on this computer."
+msgstr "На этом компьютере «Автоматически» выбирает X11 (XWayland)."
+
+msgid "Automatic picks X11 on this computer."
+msgstr "На этом компьютере «Автоматически» выбирает X11."
+
+msgid "MOCKTAIL_PREFER_WAYLAND is off"
+msgstr "MOCKTAIL_PREFER_WAYLAND отключён"
+
+msgid "the surface-commit guard is off"
+msgstr "защита вывода кадров отключена"
+
+msgid "NVIDIA's driver version is unknown"
+msgstr "версия драйвера NVIDIA неизвестна"
+
+#, c-format
+msgid "driver %s lacks explicit sync"
+msgstr "в драйвере %s нет явной синхронизации"
+
+msgid "__NV_DISABLE_EXPLICIT_SYNC is set"
+msgstr "задана __NV_DISABLE_EXPLICIT_SYNC"
+
+msgid "a second graphics card"
+msgstr "есть вторая видеокарта"
+
+msgid "no NVIDIA card is listed"
+msgstr "видеокарта NVIDIA не найдена"
+
+msgid "explicit sync could not be checked"
+msgstr "не удалось проверить явную синхронизацию"
+
+msgid "the desktop lacks explicit sync"
+msgstr "рабочий стол не поддерживает явную синхронизацию"
+
+msgid "frames wait for the display outside Hyprland"
+msgstr "кадры ждут экран, а это не Hyprland"

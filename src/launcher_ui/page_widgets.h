@@ -75,6 +75,10 @@ inline constexpr char kRobloxStatusKey[] = "@roblox-status";
 // empty for kNone.
 std::string DescribeNvidiaWaylandBlocker(const MachineProfile& machine,
                                          window::NvidiaWaylandBlocker blocker);
+// The same reason in a few words, for "Uses X11 (XWayland) here: …";
+// empty for kNone.
+std::string ShortNvidiaWaylandBlocker(const MachineProfile& machine,
+                                      window::NvidiaWaylandBlocker blocker);
 
 }  // namespace mocktail::launcher_ui
 

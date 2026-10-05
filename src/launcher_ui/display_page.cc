@@ -882,9 +882,15 @@ std::vector<ComboOption> DisplayServerOptions(LauncherContext& context) {
            case DisplayServerReason::kNvidiaVulkanWayland:
              return std::string(
                  _("Uses Wayland here: NVIDIA with explicit sync"));
-           case DisplayServerReason::kNvidiaVulkanX11:
-             return std::string(
-                 _("Uses X11 (XWayland) here: NVIDIA with Vulkan"));
+           case DisplayServerReason::kNvidiaVulkanX11: {
+             const std::string reason = ShortNvidiaWaylandBlocker(
+                 ctx.machine(),
+                 ctx.machine().NvidiaNativeWaylandBlocker(Unthrottled(ctx)));
+             return reason.empty()
+                        ? std::string(_("Uses X11 (XWayland) here"))
+                        : Format(_("Uses X11 (XWayland) here: %s"),
+                                 reason.c_str());
+           }
            case DisplayServerReason::kX11Only:
              return std::string(
                  _("Uses X11 here: there is no Wayland session"));
@@ -894,8 +900,8 @@ std::vector<ComboOption> DisplayServerOptions(LauncherContext& context) {
              break;
          }
          return std::string(
-             _("Wayland when available; for NVIDIA with Vulkan only with "
-               "explicit sync"));
+             _("Wayland when available; native Wayland for NVIDIA's Vulkan "
+               "when it is safe, otherwise XWayland"));
        },
        nullptr,
        false,
@@ -954,25 +960,39 @@ GtkWidget* BuildDisplayServerRow(LauncherContext* context) {
         "automatic updates.") +
       std::string("\n\n") +
       // video_driver_policy.h ResolveVideoDriverChoice and
-      // NvidiaNativeWaylandBlocker: without explicit sync NVIDIA's Wayland
-      // presentation has hung and lost the display; SDL's own surface
-      // commits broke it too (upstream issue #186), which the surface-commit
-      // guard now prevents. With vertical sync a FIFO swapchain sat in
+      // NvidiaNativeWaylandBlocker, in its order: the Wayland preference,
+      // the surface-commit guard, driver 555 or newer,
+      // __NV_DISABLE_EXPLICIT_SYNC, no Intel or AMD card, explicit sync
+      // from the compositor, and Hyprland or frames that do not wait.
+      // Without explicit sync NVIDIA's Wayland presentation has hung and
+      // lost the display. With vertical sync a FIFO swapchain sat in
       // vkAcquireNextImageKHR for most of the time a test window was
       // minimized on GNOME (sandbox-bench syncrace gnome-min.out);
       // Hyprland ran 92 sessions clean (commit 275e8f7). Off, or auto with
       // unlimited, is Presentation::kUnthrottled.
       // With engine.gpu on another card the rule does not apply
       // (vulkan_drivers_exclude_nvidia).
-      _("• Automatic: Wayland when the desktop offers it. NVIDIA's driver "
-        "with the Vulkan backend gets it only with driver 555 or newer, a "
-        "desktop that offers explicit sync, no Intel or AMD card beside it "
-        "and, on desktops other than Hyprland, frames that do not wait for "
-        "the display (Vertical sync Off, or Automatic with the 240 maximum "
-        "frame rate); otherwise XWayland. Without explicit sync NVIDIA's "
-        "native Wayland presentation has hung and lost the display, and with "
-        "vertical sync it can stall the game while its window is hidden, as "
-        "a test on GNOME showed.") +
+      _("• Automatic: Wayland when the desktop offers it. For NVIDIA's "
+        "driver with the Vulkan backend, Automatic picks native Wayland when "
+        "it is safe and XWayland otherwise. Safe means driver 555 or newer "
+        "with explicit sync left on, a desktop that offers it "
+        "(wp_linux_drm_syncobj_manager_v1), no Intel or AMD card beside the "
+        "NVIDIA one, Mocktail's surface-commit guard on, and either Hyprland "
+        "or frames that do not wait for the display (Vertical sync Off, or "
+        "Automatic with the 240 maximum frame rate). Without explicit sync "
+        "NVIDIA's native Wayland presentation has hung and lost the display, "
+        "and with vertical sync it can stall the game while its window is "
+        "hidden, as a test on GNOME showed.") +
+      "\n\n" +
+      // wayland_surface_commit_guard.h; commit 2cb355b ("Missing buffer",
+      // #186 on Hyprland with driver 615.71.09).
+      _("The surface-commit guard keeps the game window's own updates "
+        "(fullscreen changes, showing the window, pointer warps) out of the "
+        "middle of a frame NVIDIA presents with explicit sync. Such an "
+        "update made the desktop close the game's connection, the “Missing "
+        "buffer” disconnect of upstream issue #186. The guard is on for "
+        "Vulkan windows on Wayland unless MOCKTAIL_WAYLAND_COMMIT_GUARD=0 "
+        "turns it off.") +
       "\n\n" +
       // research/graphics.md 3.3: pointer capture problems through XWayland
       // (upstream issue #135).
@@ -995,14 +1015,26 @@ GtkWidget* BuildDisplayServerRow(LauncherContext* context) {
     const MachineProfile& machine = ctx.machine();
     if (!machine.detected) return std::string();
     std::string text;
+    // The runtime's own ResolveVideoDriverChoice on what window.cc reads
+    // (MachineProfile::AutomaticDisplayServer).
+    const DisplayServerChoice automatic = ServerChoice(ctx, "auto");
+    if (automatic.server == "wayland") {
+      text = _("Automatic picks Wayland on this computer.");
+    } else if (automatic.server == "x11") {
+      text = machine.wayland_available
+                 ? std::string(
+                       _("Automatic picks X11 (XWayland) on this computer."))
+                 : std::string(_("Automatic picks X11 on this computer."));
+    }
+    if (!text.empty()) text += " ";
     if (machine.wayland_available && machine.x11_available) {
-      text = _("This session offers Wayland and X11 (XWayland).");
+      text += _("This session offers Wayland and X11 (XWayland).");
     } else if (machine.wayland_available) {
-      text = _("This session offers Wayland only, without an X server.");
+      text += _("This session offers Wayland only, without an X server.");
     } else if (machine.x11_available) {
-      text = _("This session offers X11 only.");
+      text += _("This session offers X11 only.");
     } else {
-      text = _("This session offers no display server to the game.");
+      text += _("This session offers no display server to the game.");
     }
     if (machine.gpu.nvidia_kernel_driver) {
       text += " ";

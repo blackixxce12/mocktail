@@ -441,4 +441,34 @@ std::string DescribeNvidiaWaylandBlocker(const MachineProfile& machine,
   return {};
 }
 
+std::string ShortNvidiaWaylandBlocker(const MachineProfile& machine,
+                                      window::NvidiaWaylandBlocker blocker) {
+  switch (blocker) {
+    case window::NvidiaWaylandBlocker::kWaylandNotPreferred:
+      return _("MOCKTAIL_PREFER_WAYLAND is off");
+    case window::NvidiaWaylandBlocker::kCommitGuardOff:
+      return _("the surface-commit guard is off");
+    case window::NvidiaWaylandBlocker::kDriverVersionUnknown:
+      return _("NVIDIA's driver version is unknown");
+    case window::NvidiaWaylandBlocker::kDriverWithoutExplicitSync:
+      return Format(_("driver %s lacks explicit sync"),
+                    machine.gpu.nvidia_driver_version.c_str());
+    case window::NvidiaWaylandBlocker::kExplicitSyncDisabled:
+      return _("__NV_DISABLE_EXPLICIT_SYNC is set");
+    case window::NvidiaWaylandBlocker::kOtherGpu:
+      return _("a second graphics card");
+    case window::NvidiaWaylandBlocker::kNoNvidiaGpuListed:
+      return _("no NVIDIA card is listed");
+    case window::NvidiaWaylandBlocker::kExplicitSyncUnknown:
+      return _("explicit sync could not be checked");
+    case window::NvidiaWaylandBlocker::kCompositorWithoutExplicitSync:
+      return _("the desktop lacks explicit sync");
+    case window::NvidiaWaylandBlocker::kVsyncOutsideHyprland:
+      return _("frames wait for the display outside Hyprland");
+    case window::NvidiaWaylandBlocker::kNone:
+      break;
+  }
+  return {};
+}
+
 }  // namespace mocktail::launcher_ui
