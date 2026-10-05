@@ -197,6 +197,10 @@ int main(int argc, char** argv) {
   setlocale(LC_NUMERIC, "C");
   g_object_set(gtk_settings_get_default(), "gtk-application-prefer-dark-theme",
                FALSE, nullptr);
+  // The hints' paragraphs are selectable for copying; focusing one (Tab,
+  // or a popover opening) must not select all of it.
+  g_object_set(gtk_settings_get_default(), "gtk-label-select-on-focus", FALSE,
+               nullptr);
   g_set_application_name("Mocktail");
   gtk_window_set_default_icon_name("space.bigrat.mocktail");
 

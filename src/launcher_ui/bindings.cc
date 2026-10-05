@@ -89,26 +89,16 @@ GtkWidget* FindTitleBox(GtkWidget* widget) {
   return nullptr;
 }
 
-// Selectable labels select all their text when the popover focuses them;
-// start with nothing selected.
-void ClearSelections(GtkWidget* widget) {
-  for (GtkWidget* child = gtk_widget_get_first_child(widget); child != nullptr;
-       child = gtk_widget_get_next_sibling(child)) {
-    if (GTK_IS_LABEL(child) && gtk_label_get_selectable(GTK_LABEL(child))) {
-      gtk_label_select_region(GTK_LABEL(child), 0, 0);
-    }
-    ClearSelections(child);
-  }
-}
-
-void OnHintPopoverShown(GtkWidget* popover, gpointer) {
-  g_idle_add(
-      [](gpointer data) -> gboolean {
-        ClearSelections(GTK_WIDGET(data));
-        g_object_unref(data);
-        return G_SOURCE_REMOVE;
-      },
-      g_object_ref(popover));
+// A popover gives keyboard focus to its first focusable child, here the
+// first selectable paragraph, which then showed a text cursor (and, until
+// main.cc turned gtk-label-select-on-focus off, all of its text selected;
+// clearing the selection from an idle did not help on X11). Hand the focus
+// to the scrolled window instead: nothing is selected or shows a cursor,
+// Page Up and Page Down scroll the text, and Tab still reaches the
+// paragraphs for copying.
+void OnHintPopoverMapped(GtkWidget* popover, gpointer) {
+  GtkWidget* scroller = gtk_popover_get_child(GTK_POPOVER(popover));
+  if (scroller != nullptr) gtk_widget_grab_focus(scroller);
 }
 
 // How tall the hint text of the popover opening at `anchor` may be.
@@ -429,7 +419,8 @@ class RowBinding {
         Format(_("Learn more about %s"), spec_.title.c_str()).c_str(), -1);
     GtkWidget* popover = gtk_popover_new();
     gtk_widget_add_css_class(popover, "hint-popover");
-    g_signal_connect(popover, "show", G_CALLBACK(OnHintPopoverShown), nullptr);
+    g_signal_connect_after(popover, "map", G_CALLBACK(OnHintPopoverMapped),
+                           nullptr);
     gtk_menu_button_set_popover(GTK_MENU_BUTTON(button), popover);
     gtk_menu_button_set_create_popup_func(
         GTK_MENU_BUTTON(button),
@@ -550,6 +541,7 @@ class RowBinding {
     }
 
     GtkWidget* scroller = gtk_scrolled_window_new();
+    gtk_widget_set_focusable(scroller, TRUE);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroller),
                                    GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
     gtk_scrolled_window_set_propagate_natural_height(
