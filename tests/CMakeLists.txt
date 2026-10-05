@@ -1029,6 +1029,18 @@ target_link_libraries(asset_manager_test PRIVATE
   GTest::gtest_main
 )
 
+add_executable(shader_pack_stream_test
+  shader_pack_stream_test.cc
+)
+target_link_libraries(shader_pack_stream_test PRIVATE
+  stub_android
+  mocktail_bionic_abi_exports
+  Mocktail::BionicStdio
+  GTest::gtest_main
+  Threads::Threads
+)
+mocktail_apply_compile_options(shader_pack_stream_test)
+
 add_executable(android_looper_test
   android_looper_test.cc
 )
@@ -1173,6 +1185,7 @@ gtest_discover_tests(discord_rpc_test)
 gtest_discover_tests(desktop_notification_test)
 gtest_discover_tests(host_launch_environment_test)
 gtest_discover_tests(asset_manager_test)
+gtest_discover_tests(shader_pack_stream_test)
 gtest_discover_tests(android_looper_test)
 gtest_discover_tests(android_native_window_test)
 gtest_discover_tests(headless_graphics_test)
