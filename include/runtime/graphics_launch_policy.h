@@ -59,6 +59,13 @@ HostGpuSelection SelectHostGpu(
     const std::vector<HostGpu>& gpus, GpuPreference preference,
     const std::vector<std::filesystem::path>& icd_directories);
 
+// What the session log says about `selection` for engine.gpu `configured`:
+// a "  [runtime] vulkan GPU=" line naming the card and the drivers pinned
+// for it, then, when engine.gpu names a kind that no card with a Vulkan
+// driver is of, a line saying so. Empty without a card.
+std::string DescribeVulkanGpuSelection(const HostGpuSelection& selection,
+                                       GpuPreference configured);
+
 // Whether direct Vulkan runs on Intel integrated graphics, which get
 // graphics quality level 1 while engine.graphics_quality is default.
 // `selected` is SelectHostGpu's card, or the card VK_LOADER_DEVICE_SELECT
@@ -122,9 +129,14 @@ DisplayServer AvailableDisplayServer(DisplayServer configured);
 // direct Vulkan and engine.nvidia_shader_mt false, the NVIDIA shader loading
 // deny is merged into MOCKTAIL_CLIENT_SETTINGS_OVERRIDES_JSON (see
 // MergeNvidiaShaderLoadingClientSettingsOverrides).
+//
+// The policy runs before the session log starts, so what it has to say for
+// the log (DescribeVulkanGpuSelection) is appended to `*log` for the caller
+// to print once the log runs; without `log` it goes to stderr at once.
 bool ApplyGraphicsLaunchPolicy(const RuntimeConfig& config,
                                const std::vector<std::string>& user_environment,
-                               std::string* error = nullptr);
+                               std::string* error = nullptr,
+                               std::string* log = nullptr);
 
 // As above, treating every variable now in the process environment as the
 // user's own.

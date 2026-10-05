@@ -552,11 +552,14 @@ int main(int argc, char* argv[]) {
         "overrides enabled.");
     return EXIT_FAILURE;
   }
+  // Printed once the session log runs, so the log names the card too.
+  std::string graphics_launch_log;
   if (command_line.options.mode == mocktail::runtime::CommandMode::kRun &&
-      !mocktail::runtime::ApplyGraphicsLaunchPolicy(runtime_config.config,
-                                                     user_managed_environment,
-                                                     &command_line_error)) {
-    std::cerr << "[FATAL] " << command_line_error << '\n';
+      !mocktail::runtime::ApplyGraphicsLaunchPolicy(
+          runtime_config.config, user_managed_environment,
+          &command_line_error, &graphics_launch_log)) {
+    std::cerr << graphics_launch_log << "[FATAL] " << command_line_error
+              << '\n';
     return EXIT_FAILURE;
   }
   mocktail::runtime::FailureDialogMonitor failure_dialog;
@@ -586,6 +589,7 @@ int main(int argc, char* argv[]) {
                 << session_log.error() << '\n';
     }
     std::cout << process_launch_diagnostics << std::flush;
+    std::cerr << graphics_launch_log << std::flush;
     mocktail::runtime::InstallCpuLimitDiagnostics();
     mocktail::runtime::LogProcessDiagnostics(
         mocktail::runtime::ProcessDiagnosticStage::kStartup);

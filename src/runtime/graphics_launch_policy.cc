@@ -364,13 +364,29 @@ std::optional<HostGpu> FindLoaderSelectedGpu(const std::vector<HostGpu>& gpus,
   return std::nullopt;
 }
 
+// Lines for the session log: into `*log` when the caller collects them,
+// else straight to stderr.
+void EmitLogLines(std::string* log, const std::string& lines) {
+  if (log != nullptr) {
+    log->append(lines);
+    return;
+  }
+  std::fputs(lines.c_str(), stderr);
+}
+
+std::string PciIdHex(unsigned int id) {
+  char text[16];
+  std::snprintf(text, sizeof(text), "%04x", id);
+  return text;
+}
+
 // Pins the Vulkan driver of the card engine.gpu (or DRI_PRIME and
 // __NV_PRIME_RENDER_OFFLOAD under auto) asks for. `selected` receives that
 // card, or stays empty while the user pins the drivers or no card has one.
 bool ApplyVulkanIcdPolicy(const std::vector<HostGpu>& gpus,
                           GpuPreference configured,
                           std::optional<HostGpu>* selected,
-                          std::string* error) {
+                          std::string* error, std::string* log) {
   // Drop software/emulation ICDs even when the user already pinned a driver
   // list. Old loaders ignore this variable.
   if (!SetDefault("VK_LOADER_DRIVERS_DISABLE",
@@ -397,19 +413,7 @@ bool ApplyVulkanIcdPolicy(const std::vector<HostGpu>& gpus,
   if (!selection.gpu.has_value()) {
     return true;
   }
-  const HostGpu& gpu = *selection.gpu;
-  std::fprintf(stderr, "  [runtime] vulkan GPU=%s %04x:%04x %s%s%s ICD=%s\n",
-               VendorName(gpu.vendor), gpu.vendor, gpu.device,
-               gpu.integrated ? "integrated" : "discrete",
-               gpu.pci_address.empty() ? "" : " at ", gpu.pci_address.c_str(),
-               selection.icd.c_str());
-  if (!selection.preferred && configured != GpuPreference::kAuto) {
-    std::fprintf(stderr,
-                 "  [runtime] engine.gpu=%s, but no %s graphics card has a "
-                 "Vulkan driver here\n",
-                 std::string(GpuPreferenceName(configured)).c_str(),
-                 std::string(GpuPreferenceName(configured)).c_str());
-  }
+  EmitLogLines(log, DescribeVulkanGpuSelection(selection, configured));
   if (!SetDefault("VK_DRIVER_FILES", selection.icd, error) ||
       !SetDefault("VK_ICD_FILENAMES", selection.icd, error)) {
     return false;
@@ -423,7 +427,7 @@ bool ApplyVulkanIcdPolicy(const std::vector<HostGpu>& gpus,
     return false;
   }
   if (selected != nullptr) {
-    *selected = gpu;
+    *selected = selection.gpu;
   }
   return true;
 }
@@ -645,6 +649,27 @@ DisplayServer AvailableDisplayServer(DisplayServer configured) {
   return configured;
 }
 
+std::string DescribeVulkanGpuSelection(const HostGpuSelection& selection,
+                                       GpuPreference configured) {
+  if (!selection.gpu.has_value()) {
+    return {};
+  }
+  const HostGpu& gpu = *selection.gpu;
+  std::string text = "  [runtime] vulkan GPU=" +
+                     std::string(VendorName(gpu.vendor)) + " " +
+                     PciIdHex(gpu.vendor) + ":" + PciIdHex(gpu.device) +
+                     (gpu.integrated ? " integrated" : " discrete") +
+                     (gpu.pci_address.empty() ? std::string()
+                                              : " at " + gpu.pci_address) +
+                     " ICD=" + selection.icd + "\n";
+  if (!selection.preferred && configured != GpuPreference::kAuto) {
+    const std::string kind(GpuPreferenceName(configured));
+    text += "  [runtime] engine.gpu=" + kind + ", but no " + kind +
+            " graphics card has a Vulkan driver here\n";
+  }
+  return text;
+}
+
 bool ApplyGraphicsLaunchPolicy(const RuntimeConfig& config,
                                std::string* error) {
   return ApplyGraphicsLaunchPolicy(
@@ -653,7 +678,7 @@ bool ApplyGraphicsLaunchPolicy(const RuntimeConfig& config,
 
 bool ApplyGraphicsLaunchPolicy(const RuntimeConfig& config,
                                const std::vector<std::string>& user_environment,
-                               std::string* error) {
+                               std::string* error, std::string* log) {
   if (config.graphics_backend() == GraphicsBackend::kUnknown) {
     if (error != nullptr) {
       *error = "cannot apply an unknown graphics backend";
@@ -711,7 +736,8 @@ bool ApplyGraphicsLaunchPolicy(const RuntimeConfig& config,
         // Move GEM_EXECBUFFER2 off the application thread onto Mesa's submit
         // worker so the render thread is not stuck in i915 ioctl.
         !SetDefault("MESA_VK_ENABLE_SUBMIT_THREAD", "1", error) ||
-        !ApplyVulkanIcdPolicy(gpus, config.engine().gpu, &selected, error)) {
+        !ApplyVulkanIcdPolicy(gpus, config.engine().gpu, &selected, error,
+                              log)) {
       return false;
     }
     // Low FRM only when the game renders on Intel integrated graphics. A

@@ -1716,6 +1716,70 @@ TEST_F(DisplayServerPolicyTest, MissingSessionFallsBackToAutomatic) {
   EXPECT_EQ(AvailableDisplayServer(DisplayServer::kAuto), DisplayServer::kAuto);
 }
 
+// ApplyGraphicsLaunchPolicy runs before the session log starts. Given
+// `log`, it leaves the Vulkan card it pins there for main to print once
+// the log runs, and writes nothing to stderr early.
+TEST(GraphicsLaunchLogTest, KeepsTheVulkanCardForTheSessionLog) {
+  const ScopedEnvironment scoped({
+      "MOCKTAIL_GRAPHICS_BACKEND",
+      "MOCKTAIL_NVIDIA_SHADER_MT",
+      "MOCKTAIL_PRELOAD_VULKAN_SHIM",
+      "MOCKTAIL_REQUIRE_REAL_GRAPHICS",
+      "MOCKTAIL_DISABLE_AUTO_ANGLE_FALLBACK",
+      "MOCKTAIL_SOFTWARE_WINDOW_FALLBACK",
+      "MOCKTAIL_CLIENT_SETTINGS_OVERRIDES_JSON",
+      "MOCKTAIL_GRAPHICS_QUALITY",
+      "MOCKTAIL_VSYNC",
+      "MOCKTAIL_FRAME_RATE_LIMIT",
+      "ANV_SYS_MEM_LIMIT",
+      "MESA_VK_WSI_PRESENT_MODE",
+      "MESA_VK_ENABLE_SUBMIT_THREAD",
+      "VK_LOADER_DRIVERS_DISABLE",
+      "VK_DRIVER_FILES",
+      "VK_ICD_FILENAMES",
+      "VK_LOADER_DEVICE_SELECT",
+      "DRI_PRIME",
+      "__NV_PRIME_RENDER_OFFLOAD",
+      "SDL_VIDEODRIVER",
+      "SDL_VIDEO_DRIVER",
+      "MOCKTAIL_FORCE_WAYLAND",
+      "MOCKTAIL_FORCE_X11",
+      "MOCKTAIL_ANGLE_FORCE_X11",
+  });
+  TemporaryDirectory temporary;
+  const RuntimeConfigLoadResult loaded = LoadRuntimeConfig(
+      MapEnvironment(),
+      temporary.Write("version: 1\ngraphics:\n  backend: direct-vulkan\n"));
+  ASSERT_TRUE(loaded) << loaded.error;
+
+  std::string error;
+  std::string log;
+  testing::internal::CaptureStderr();
+  const bool applied =
+      ApplyGraphicsLaunchPolicy(loaded.config, {}, &error, &log);
+  const std::string early = testing::internal::GetCapturedStderr();
+  ASSERT_TRUE(applied) << error;
+  EXPECT_EQ(early, "");
+  // The lines exist exactly when a card was found and its drivers pinned,
+  // which depends on this computer.
+  const bool pinned = GetVariable("VK_DRIVER_FILES").has_value();
+  EXPECT_EQ(log.empty(), !pinned) << log;
+  if (pinned) {
+    EXPECT_EQ(log.rfind("  [runtime] vulkan GPU=", 0), 0U) << log;
+  }
+
+  // Without `log` the same lines go to stderr at once.
+  ASSERT_EQ(unsetenv("VK_DRIVER_FILES"), 0);
+  ASSERT_EQ(unsetenv("VK_ICD_FILENAMES"), 0);
+  ASSERT_EQ(unsetenv("VK_LOADER_DEVICE_SELECT"), 0);
+  testing::internal::CaptureStderr();
+  const bool applied_again =
+      ApplyGraphicsLaunchPolicy(loaded.config, {}, &error);
+  const std::string direct = testing::internal::GetCapturedStderr();
+  ASSERT_TRUE(applied_again) << error;
+  EXPECT_EQ(direct, log);
+}
+
 TEST_F(DisplayServerPolicyTest, RefusesAnInvalidDisplayServer) {
   const RuntimeConfig invalid = RuntimeConfig::FromEnvironment(MapEnvironment(
       {{"MOCKTAIL_GRAPHICS_BACKEND", "system"},

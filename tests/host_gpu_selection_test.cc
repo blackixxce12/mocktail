@@ -395,6 +395,41 @@ TEST(HostGpuSelectionTest, LowersQualityOnlyOnIntelIntegratedGraphics) {
   EXPECT_FALSE(RendersOnIntelIntegratedGraphics({}, std::nullopt));
 }
 
+// The session log names the card and its drivers; the caller decides when
+// the lines are written (ApplyGraphicsLaunchPolicy runs before the log).
+TEST(HostGpuSelectionTest, DescribesTheSelectionForTheSessionLog) {
+  EXPECT_EQ(DescribeVulkanGpuSelection({}, GpuPreference::kAuto), "");
+
+  HostGpuSelection selection;
+  selection.gpu = kNvidiaDgpu;
+  selection.gpu->pci_address = "0000:01:00.0";
+  selection.icd = "/usr/share/vulkan/icd.d/nvidia_icd.json";
+  selection.preferred = true;
+  EXPECT_EQ(DescribeVulkanGpuSelection(selection, GpuPreference::kAuto),
+            "  [runtime] vulkan GPU=NVIDIA 10de:2520 discrete at 0000:01:00.0 "
+            "ICD=/usr/share/vulkan/icd.d/nvidia_icd.json\n");
+
+  // engine.gpu: integrated on a computer without integrated graphics that
+  // have a driver: the discrete card stands in, and the log says so.
+  selection.preferred = false;
+  EXPECT_EQ(DescribeVulkanGpuSelection(selection, GpuPreference::kIntegrated),
+            "  [runtime] vulkan GPU=NVIDIA 10de:2520 discrete at 0000:01:00.0 "
+            "ICD=/usr/share/vulkan/icd.d/nvidia_icd.json\n"
+            "  [runtime] engine.gpu=integrated, but no integrated graphics "
+            "card has a Vulkan driver here\n");
+  // Under auto any card is what was asked for.
+  EXPECT_EQ(DescribeVulkanGpuSelection(selection, GpuPreference::kAuto).find(
+                "engine.gpu"),
+            std::string::npos);
+
+  selection.gpu = kIntelGraphics;
+  selection.icd = "/usr/share/vulkan/icd.d/intel_icd.x86_64.json";
+  selection.preferred = true;
+  EXPECT_EQ(DescribeVulkanGpuSelection(selection, GpuPreference::kIntegrated),
+            "  [runtime] vulkan GPU=Intel 8086:9a49 integrated "
+            "ICD=/usr/share/vulkan/icd.d/intel_icd.x86_64.json\n");
+}
+
 }  // namespace
 }  // namespace runtime
 }  // namespace mocktail
