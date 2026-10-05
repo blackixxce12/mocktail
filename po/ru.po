@@ -3108,7 +3108,7 @@ msgid "To give Roblox control back: %s"
 msgstr "Чтобы вернуть управление Roblox: %s"
 
 msgid "Overrides Roblox setting"
-msgstr "Перекрывает настройку игры"
+msgstr "Перекрывает настройку Roblox"
 
 msgid "Roblox's own settings"
 msgstr "Собственные настройки Roblox"
