@@ -49,9 +49,15 @@ msgstr "Для этого компьютера рекомендуется: %s"
 msgid "This launch uses %s=%s instead"
 msgstr "В этом запуске вместо настройки действует %s=%s"
 
+msgid "This launch uses %s %s instead"
+msgstr "В этом запуске вместо настройки действует %s %s"
+
 #, c-format
 msgid "Set by %s=%s: this launch uses that value instead of config.yaml"
 msgstr "Задано через %s=%s: этот запуск использует это значение вместо config.yaml"
+
+msgid "Set by %s %s on the command line: this launch uses that value instead of config.yaml"
+msgstr "Задано через %s %s в командной строке: этот запуск использует это значение вместо config.yaml"
 
 #, c-format
 msgid "Reset to default (%s)"
@@ -78,6 +84,9 @@ msgstr "Для этого компьютера: %s."
 #, c-format
 msgid "%s=%s is set in the shortcut or terminal that started Mocktail, so this launch uses it instead of the setting. Use Details in the banner to move it into settings."
 msgstr "%s=%s задана в ярлыке или терминале, из которого запущен Mocktail, поэтому этот запуск использует её вместо настройки. Кнопка «Подробности» на панели вверху окна позволяет перенести её в настройки."
+
+msgid "%s %s is on the command line that started Mocktail, so this launch uses it instead of the setting. The next start without it uses the setting again."
+msgstr "%s %s указан в командной строке, которой запущен Mocktail, поэтому этот запуск использует его вместо настройки. Следующий запуск без него снова возьмёт настройку."
 
 #, c-format
 msgid "config.yaml: %s · default: %s"
@@ -427,6 +436,9 @@ msgstr "Переменные, переопределяющие настройк�
 msgid "These environment variables win over config.yaml, so the rows marked ENV do not show what this launch uses. Moving them into settings saves their values in config.yaml and leaves the variables out of this launch."
 msgstr "Эти переменные окружения важнее config.yaml, поэтому строки с пометкой ENV не показывают, что будет в этом запуске. При переносе в настройки их значения сохранятся в config.yaml, а сами переменные в этом запуске учитываться не будут."
 
+msgid "These values win over config.yaml, so the rows marked ENV do not show what this launch uses."
+msgstr "Эти значения важнее config.yaml, поэтому строки с пометкой ENV не показывают, что будет в этом запуске."
+
 #, c-format
 msgid "Overrides “%s”"
 msgstr "Переопределяет «%s»"
@@ -437,6 +449,9 @@ msgstr "Задана в вашем ярлыке %s"
 
 msgid "Set by the terminal or session that started Mocktail"
 msgstr "Задана в терминале или сеансе, из которого запущен Mocktail"
+
+msgid "Set by %s on the command line, for this launch only; Move into Settings leaves it alone"
+msgstr "Задано через %s в командной строке и действует только в этом запуске; перенос в настройки его не затрагивает"
 
 msgid "Has no effect: another variable for the same setting wins"
 msgstr "Не действует: для этой настройки важнее другая переменная"

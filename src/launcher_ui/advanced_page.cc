@@ -264,8 +264,10 @@ GtkWidget* BuildMoveRow(LauncherContext* context) {
                             NewRowButton(_("Move"), [context] {
                               context->MoveEnvironmentIntoSettings();
                             }));
+  // The command line's options cannot be moved (ImportEnvOverrides).
   const auto visible = [context] {
-    return !context->env().empty() && !context->ignoring_environment();
+    return context->env().HasEnvironment() &&
+           !context->ignoring_environment();
   };
   gtk_widget_set_visible(row, visible());
   FollowContext(context, row,

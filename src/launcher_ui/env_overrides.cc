@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "launcher_ui/setting_kinds.h"
 #include "launcher_ui/settings_draft.h"
@@ -21,6 +23,42 @@ constexpr std::string_view kDisplayServerPrecedence[] = {
     "MOCKTAIL_FORCE_X11", "MOCKTAIL_ANGLE_FORCE_X11", "MOCKTAIL_DISPLAY_SERVER",
 };
 
+// The options that set a managed variable for one launch
+// (command_line.cc ApplyCommandLineEnvironment).
+constexpr std::pair<std::string_view, std::string_view>
+    kCommandLineOptions[] = {
+        {"MOCKTAIL_GRAPHICS_BACKEND", "--graphics"},
+};
+
+std::string CommandLineOption(std::string_view name) {
+  for (const auto& [variable, option] : kCommandLineOptions) {
+    if (variable == name) return std::string(option);
+  }
+  return std::string(name);
+}
+
+bool Lists(std::string_view names, std::string_view name) {
+  while (!names.empty()) {
+    const std::size_t comma = names.find(',');
+    if (names.substr(0, comma) == name) return true;
+    names = comma == std::string_view::npos ? std::string_view()
+                                            : names.substr(comma + 1);
+  }
+  return false;
+}
+
+int CountSettings(const std::vector<EnvOverride>& overrides,
+                  bool with_command_line) {
+  std::vector<std::string_view> keys;
+  for (const EnvOverride& entry : overrides) {
+    if (entry.command_line && !with_command_line) continue;
+    if (std::find(keys.begin(), keys.end(), entry.yaml_key) == keys.end()) {
+      keys.push_back(entry.yaml_key);
+    }
+  }
+  return static_cast<int>(keys.size());
+}
+
 int Precedence(std::string_view name) {
   const auto found = std::find(std::begin(kDisplayServerPrecedence),
                                std::end(kDisplayServerPrecedence), name);
@@ -35,12 +73,17 @@ EnvOverrides EnvOverrides::FromEnvironment(
     const runtime::Environment& environment) {
   return FromNames(
       environment.GetOr(runtime::kLauncherUiEnvOverridesVariable, ""),
-      environment);
+      environment,
+      environment.GetOr(runtime::kLauncherUiCommandLineOverridesVariable, ""));
 }
 
-EnvOverrides EnvOverrides::FromNames(std::string_view names,
-                                     const runtime::Environment& environment) {
+EnvOverrides EnvOverrides::FromNames(std::string_view user_names,
+                                     const runtime::Environment& environment,
+                                     std::string_view command_line_names) {
   EnvOverrides result;
+  const std::string joined = std::string(user_names) + "," +
+                             std::string(command_line_names);
+  std::string_view names = joined;
   while (!names.empty()) {
     const std::size_t comma = names.find(',');
     const std::string_view name = names.substr(0, comma);
@@ -63,6 +106,8 @@ EnvOverrides EnvOverrides::FromNames(std::string_view names,
     entry.value = *value;
     entry.yaml_key = std::string(variable->yaml_key);
     entry.imported = runtime::ImportManagedEnvironmentValue(name, *value);
+    entry.command_line = Lists(command_line_names, name);
+    if (entry.command_line) entry.option = CommandLineOption(name);
     result.overrides_.push_back(std::move(entry));
   }
   // Mark everything but the first variable of each key in startup order.
@@ -94,13 +139,11 @@ const EnvOverride* EnvOverrides::Effective(std::string_view key) const {
 }
 
 int EnvOverrides::SettingCount() const {
-  std::vector<std::string_view> keys;
-  for (const EnvOverride& entry : overrides_) {
-    if (std::find(keys.begin(), keys.end(), entry.yaml_key) == keys.end()) {
-      keys.push_back(entry.yaml_key);
-    }
-  }
-  return static_cast<int>(keys.size());
+  return CountSettings(overrides_, true);
+}
+
+int EnvOverrides::EnvironmentSettingCount() const {
+  return CountSettings(overrides_, false);
 }
 
 std::string RedactEnvironmentValue(std::string_view value) {
@@ -123,7 +166,7 @@ EnvImportReport ImportEnvOverrides(const EnvOverrides& overrides,
                                    SettingsDraft* draft) {
   EnvImportReport report;
   for (const EnvOverride& entry : overrides.all()) {
-    if (entry.shadowed || !entry.imported.has_value()) {
+    if (entry.shadowed || entry.command_line || !entry.imported.has_value()) {
       report.skipped.push_back(&entry);
       continue;
     }
@@ -145,7 +188,8 @@ bool DraftHoldsEnvOverrides(const EnvOverrides& overrides,
   return std::all_of(
       overrides.all().begin(), overrides.all().end(),
       [&draft](const EnvOverride& entry) {
-        return entry.shadowed || !entry.imported.has_value() ||
+        return entry.shadowed || entry.command_line ||
+               !entry.imported.has_value() ||
                draft.Get(entry.yaml_key) == entry.imported;
       });
 }

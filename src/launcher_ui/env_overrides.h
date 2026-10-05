@@ -26,18 +26,27 @@ struct EnvOverride {
   // Another variable for the same key wins at startup, so this one has no
   // effect of its own (SDL_VIDEODRIVER beats MOCKTAIL_DISPLAY_SERVER).
   bool shadowed = false;
+  // A command-line option set it for this launch only (`option`, such as
+  // --graphics): it is not the user's environment, Move into Settings
+  // leaves it alone, and it stays on "play ignore-env".
+  bool command_line = false;
+  std::string option;
 };
 
 // The overrides the window was started with: the names mocktail passed in
 // MOCKTAIL_LAUNCHER_ENV_OVERRIDES (the user's managed variables, captured
-// before mocktail set anything itself), with their current values.
+// before mocktail set anything itself) and MOCKTAIL_LAUNCHER_CLI_OVERRIDES
+// (the ones its command line set), with their current values.
 class EnvOverrides {
  public:
   static EnvOverrides FromEnvironment(const runtime::Environment& environment);
-  // `names` as in MOCKTAIL_LAUNCHER_ENV_OVERRIDES; names that are not
-  // managed variables, or not set in `environment`, are dropped.
+  // `names` as in MOCKTAIL_LAUNCHER_ENV_OVERRIDES and `command_line_names`
+  // as in MOCKTAIL_LAUNCHER_CLI_OVERRIDES; names that are not managed
+  // variables, or not set in `environment`, are dropped. A name in both is
+  // the command line's: its value replaced the user's.
   static EnvOverrides FromNames(std::string_view comma_separated_names,
-                                const runtime::Environment& environment);
+                                const runtime::Environment& environment,
+                                std::string_view command_line_names = {});
 
   const std::vector<EnvOverride>& all() const { return overrides_; }
   bool empty() const { return overrides_.empty(); }
@@ -47,6 +56,12 @@ class EnvOverrides {
   const EnvOverride* Effective(std::string_view key) const;
   // Distinct settings overridden.
   int SettingCount() const;
+  // Distinct settings the user's environment overrides; the command line's
+  // options are left out.
+  int EnvironmentSettingCount() const;
+  // Some override comes from the user's environment, and can be moved into
+  // the settings.
+  bool HasEnvironment() const { return EnvironmentSettingCount() > 0; }
 
  private:
   std::vector<EnvOverride> overrides_;
@@ -64,9 +79,10 @@ struct EnvImportReport {
   std::vector<std::string> errors;
 };
 
-// Writes the effective override of every overridden key into the draft
-// ("Move into settings"). The caller then asks mocktail to leave the
-// variables out of this launch.
+// Writes the effective override of every key the user's environment
+// overrides into the draft ("Move into settings"); the command line's are
+// skipped. The caller then asks mocktail to leave the variables out of
+// this launch.
 EnvImportReport ImportEnvOverrides(const EnvOverrides& overrides,
                                    SettingsDraft* draft);
 

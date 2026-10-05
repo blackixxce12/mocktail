@@ -482,6 +482,52 @@ TEST(EnvOverridesTest, MovesTheEngineVariablesIntoTheDraft) {
   EXPECT_TRUE(draft.Validate(&error)) << error;
 }
 
+// `mocktail --graphics opengl` sets MOCKTAIL_GRAPHICS_BACKEND after the
+// user's variables were captured. The window is told apart: the row shows
+// the option, and Move into Settings never saves the one-off value.
+TEST(EnvOverridesTest, TellsTheCommandLineFromTheEnvironment) {
+  const MapEnvironment environment({
+      {"MOCKTAIL_LAUNCHER_ENV_OVERRIDES", "MOCKTAIL_GAMEMODE"},
+      {"MOCKTAIL_LAUNCHER_CLI_OVERRIDES", "MOCKTAIL_GRAPHICS_BACKEND"},
+      {"MOCKTAIL_GAMEMODE", "off"},
+      {"MOCKTAIL_GRAPHICS_BACKEND", "opengl"},
+  });
+  const EnvOverrides overrides = EnvOverrides::FromEnvironment(environment);
+  ASSERT_EQ(overrides.all().size(), 2U);
+  const EnvOverride* backend = overrides.Effective("graphics.backend");
+  ASSERT_NE(backend, nullptr);
+  EXPECT_TRUE(backend->command_line);
+  EXPECT_EQ(backend->option, "--graphics");
+  EXPECT_EQ(backend->imported, "opengl");
+  const EnvOverride* gamemode = overrides.Effective("performance.gamemode");
+  ASSERT_NE(gamemode, nullptr);
+  EXPECT_FALSE(gamemode->command_line);
+  EXPECT_EQ(overrides.SettingCount(), 2);
+  EXPECT_EQ(overrides.EnvironmentSettingCount(), 1);
+  EXPECT_TRUE(overrides.HasEnvironment());
+
+  SettingsDraft draft;
+  draft.LoadBytes(kUserConfig);
+  const EnvImportReport report = ImportEnvOverrides(overrides, &draft);
+  ASSERT_EQ(report.imported.size(), 1U);
+  EXPECT_EQ(report.imported.front()->name, "MOCKTAIL_GAMEMODE");
+  EXPECT_EQ(draft.Get("graphics.backend"), "direct-vulkan");
+  EXPECT_TRUE(DraftHoldsEnvOverrides(overrides, draft));
+
+  // The user's own MOCKTAIL_GRAPHICS_BACKEND, replaced by --graphics: the
+  // value is the command line's, so it is not the user's to move.
+  const EnvOverrides both = EnvOverrides::FromNames(
+      "MOCKTAIL_GRAPHICS_BACKEND", environment, "MOCKTAIL_GRAPHICS_BACKEND");
+  ASSERT_EQ(both.all().size(), 1U);
+  EXPECT_TRUE(both.all().front().command_line);
+  EXPECT_FALSE(both.HasEnvironment());
+
+  // Only the command line: nothing to move.
+  EXPECT_FALSE(EnvOverrides::FromNames("", environment,
+                                       "MOCKTAIL_GRAPHICS_BACKEND")
+                   .HasEnvironment());
+}
+
 // After "Move into settings", Discard and Reload drop the moved values
 // again; only while the draft still holds them may mocktail leave the
 // variables out of the launch.

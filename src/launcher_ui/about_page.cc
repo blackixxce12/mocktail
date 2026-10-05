@@ -178,6 +178,7 @@ std::string DiagnosticText(LauncherContext& context) {
   for (const EnvOverride& entry : context.env().all()) {
     if (!variables.empty()) variables += ", ";
     variables += entry.name;
+    if (entry.command_line) variables += " (" + entry.option + ")";
   }
   if (!variables.empty() && context.ignoring_environment()) {
     variables += " (moved into settings)";
@@ -192,7 +193,8 @@ std::string DiagnosticText(LauncherContext& context) {
     std::string value = context.EffectiveValue(key);
     if (value.empty()) value = "(default)";
     if (const EnvOverride* env = context.EffectiveOverride(key)) {
-      value += " [overridden by " + env->name + "]";
+      value += " [overridden by " +
+               (env->command_line ? env->option : env->name) + "]";
     }
     settings.emplace_back(std::string(key), value);
   }

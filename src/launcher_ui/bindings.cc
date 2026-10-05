@@ -297,7 +297,12 @@ class RowBinding {
     if (!base.empty()) lines.push_back(base);
     if (!recommendation_line.empty()) lines.push_back(recommendation_line);
     const EnvOverride* env = context_->EffectiveOverride(spec_.key);
-    if (env != nullptr) {
+    if (env != nullptr && env->command_line) {
+      // command_line.cc: --graphics sets MOCKTAIL_GRAPHICS_BACKEND.
+      lines.push_back(Format(_("This launch uses %s %s instead"),
+                             env->option.c_str(),
+                             RedactEnvironmentValue(env->value).c_str()));
+    } else if (env != nullptr) {
       // A zero-width space after "=" lets a narrow row break between the
       // name and the value instead of inside the value ("dire" / "ct-
       // vulkan"). Subtitles cannot be selected, so it is never copied.
@@ -335,7 +340,15 @@ class RowBinding {
       SetRobloxOverrideBadgeSummary(override_badge_, takeover->summary);
     }
     gtk_widget_set_visible(env_badge_, env != nullptr);
-    if (env != nullptr) {
+    if (env != nullptr && env->command_line) {
+      gtk_widget_set_tooltip_text(
+          env_badge_,
+          Format(_("Set by %s %s on the command line: this launch uses that "
+                   "value instead of config.yaml"),
+                 env->option.c_str(),
+                 RedactEnvironmentValue(env->value).c_str())
+              .c_str());
+    } else if (env != nullptr) {
       gtk_widget_set_tooltip_text(
           env_badge_,
           Format(_("Set by %s=%s: this launch uses that value instead of "
@@ -580,7 +593,19 @@ class RowBinding {
     if (!warning.empty()) {
       gtk_box_append(GTK_BOX(box), NewWarningLabel(warning));
     }
-    if (const EnvOverride* env = context_->EffectiveOverride(spec_.key)) {
+    if (const EnvOverride* env = context_->EffectiveOverride(spec_.key);
+        env != nullptr && env->command_line) {
+      // main.cc keeps it on "play ignore-env"; ImportEnvOverrides skips it.
+      gtk_box_append(
+          GTK_BOX(box),
+          NewWrappedLabel(
+              Format(_("%s %s is on the command line that started Mocktail, "
+                       "so this launch uses it instead of the setting. The "
+                       "next start without it uses the setting again."),
+                     env->option.c_str(),
+                     RedactEnvironmentValue(env->value).c_str()),
+              true));
+    } else if (env != nullptr) {
       gtk_box_append(
           GTK_BOX(box),
           NewWrappedLabel(

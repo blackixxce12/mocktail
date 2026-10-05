@@ -164,6 +164,7 @@ std::vector<std::string> BuildLauncherUiEnvironment(
   const std::string_view replaced[] = {
       kLauncherUiConfigFileVariable,
       kLauncherUiEnvOverridesVariable,
+      kLauncherUiCommandLineOverridesVariable,
       kLauncherUiConfigCreatedVariable,
       kLauncherUiResultFdVariable,
       // Only mocktail's own re-executions must see it. A program the window
@@ -200,6 +201,8 @@ std::vector<std::string> BuildLauncherUiEnvironment(
                         options.config_file.string());
   environment.push_back(std::string(kLauncherUiEnvOverridesVariable) + "=" +
                         JoinNames(options.user_managed_environment));
+  environment.push_back(std::string(kLauncherUiCommandLineOverridesVariable) +
+                        "=" + JoinNames(options.command_line_environment));
   environment.push_back(std::string(kLauncherUiConfigCreatedVariable) + "=" +
                         (options.config_created ? "1" : "0"));
   environment.push_back(std::string(kLauncherUiResultFdVariable) + "=" +

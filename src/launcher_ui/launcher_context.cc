@@ -238,7 +238,12 @@ std::filesystem::path LauncherContext::fast_flags_file() const {
 
 const EnvOverride* LauncherContext::EffectiveOverride(
     std::string_view key) const {
-  return ignore_environment_ ? nullptr : env_.Effective(key);
+  if (!ignore_environment_) return env_.Effective(key);
+  // main.cc RemoveUserManagedEnvironment keeps what the command line set.
+  for (const EnvOverride* entry : env_.ForKey(key)) {
+    if (entry->command_line) return entry;
+  }
+  return nullptr;
 }
 
 bool LauncherContext::narrow() const { return narrow_; }
@@ -722,11 +727,13 @@ void LauncherContext::UpdateConfigBanners() {
 }
 
 void LauncherContext::UpdateEnvironmentBanner() {
-  if (env_.empty() || ignore_environment_) {
+  // A command-line option is for this launch only, and nothing can be
+  // moved; its rows say so themselves.
+  if (!env_.HasEnvironment() || ignore_environment_) {
     ClearBanner(BannerKind::kEnvironmentOverrides);
     return;
   }
-  const int count = env_.SettingCount();
+  const int count = env_.EnvironmentSettingCount();
   SetBanner(BannerKind::kEnvironmentOverrides,
             {Format(ngettext("Shortcut or terminal variables override %d "
                              "setting",
@@ -844,12 +851,15 @@ void LauncherContext::ShowEnvironmentDialog() {
       launcher::DefaultDesktopEntryPaths(runtime::ProcessEnvironment()),
       inspection.get(), &inspect_error);
 
+  const bool movable = env_.HasEnvironment();
   AdwDialog* dialog = adw_alert_dialog_new(
       _("Variables that override settings"),
-      _("These environment variables win over config.yaml, so the rows "
-        "marked ENV do not show what this launch uses. Moving them into "
-        "settings saves their values in config.yaml and leaves the "
-        "variables out of this launch."));
+      movable ? _("These environment variables win over config.yaml, so the "
+                  "rows marked ENV do not show what this launch uses. Moving "
+                  "them into settings saves their values in config.yaml and "
+                  "leaves the variables out of this launch.")
+              : _("These values win over config.yaml, so the rows marked ENV "
+                  "do not show what this launch uses."));
   AdwAlertDialog* alert = ADW_ALERT_DIALOG(dialog);
   GtkWidget* list = gtk_list_box_new();
   gtk_list_box_set_selection_mode(GTK_LIST_BOX(list), GTK_SELECTION_NONE);
@@ -879,12 +889,22 @@ void LauncherContext::ShowEnvironmentDialog() {
     std::string subtitle = Format(_("Overrides “%s”"),
                                   SettingTitle(rows_, entry.yaml_key).c_str());
     subtitle += "\n";
-    subtitle += from_shortcut
-                    ? Format(_("Set by your desktop shortcut %s"),
-                             inspection->path.c_str())
-                    : std::string(_("Set by the terminal or session that "
-                                    "started Mocktail"));
-    if (entry.shadowed) {
+    if (entry.command_line) {
+      // command_line.cc ApplyCommandLineEnvironment; main.cc keeps it on
+      // "play ignore-env".
+      subtitle += Format(_("Set by %s on the command line, for this launch "
+                           "only; Move into Settings leaves it alone"),
+                         entry.option.c_str());
+    } else {
+      subtitle += from_shortcut
+                      ? Format(_("Set by your desktop shortcut %s"),
+                               inspection->path.c_str())
+                      : std::string(_("Set by the terminal or session that "
+                                      "started Mocktail"));
+    }
+    if (entry.command_line) {
+      // Neither moved nor left out: nothing more to say.
+    } else if (entry.shadowed) {
       subtitle += "\n";
       subtitle +=
           _("Has no effect: another variable for the same setting "
@@ -900,10 +920,12 @@ void LauncherContext::ShowEnvironmentDialog() {
     gtk_list_box_append(GTK_LIST_BOX(list), row);
   }
   adw_alert_dialog_set_extra_child(alert, list);
-  adw_alert_dialog_add_responses(alert, "close", _("_Close"), "move",
-                                 _("_Move into Settings"), nullptr);
-  adw_alert_dialog_set_response_appearance(alert, "move",
-                                           ADW_RESPONSE_SUGGESTED);
+  adw_alert_dialog_add_response(alert, "close", _("_Close"));
+  if (movable) {
+    adw_alert_dialog_add_response(alert, "move", _("_Move into Settings"));
+    adw_alert_dialog_set_response_appearance(alert, "move",
+                                             ADW_RESPONSE_SUGGESTED);
+  }
   const bool can_clean =
       inspection->found &&
       inspection->plan != launcher::DesktopEntryCleanupPlan::kNone;

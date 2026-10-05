@@ -41,6 +41,13 @@ inline constexpr std::string_view kLauncherUiEnvOverridesVariable =
 // "1" when mocktail created config.yaml on this start.
 inline constexpr std::string_view kLauncherUiConfigCreatedVariable =
     "MOCKTAIL_LAUNCHER_CONFIG_CREATED";
+// Comma-separated names of the variables the command line set for this
+// launch (CommandLineEnvironmentNames: --graphics sets
+// MOCKTAIL_GRAPHICS_BACKEND). They win over the user's own value and
+// config.yaml, are not the user's to move into the settings, and stay on
+// "play ignore-env".
+inline constexpr std::string_view kLauncherUiCommandLineOverridesVariable =
+    "MOCKTAIL_LAUNCHER_CLI_OVERRIDES";
 
 enum class LauncherUiResult {
   kPlay,
@@ -70,6 +77,8 @@ struct LauncherUiLaunchOptions {
   std::filesystem::path config_file;
   // The user's managed variables, from CaptureUserManagedEnvironment().
   std::vector<std::string> user_managed_environment;
+  // The variables the command line set (CommandLineEnvironmentNames()).
+  std::vector<std::string> command_line_environment;
   bool config_created = false;
   // "NAME=value" entries mocktail started with (ProcessStartState).
   std::vector<std::string> original_environment;
@@ -80,7 +89,8 @@ struct LauncherUiLaunchOptions {
 // (the video driver and GPU variables that host_launch_environment lists,
 // when the original environment did not already hold the same value), plus
 // the MOCKTAIL_CONFIG_FILE, MOCKTAIL_LAUNCHER_ENV_OVERRIDES,
-// MOCKTAIL_LAUNCHER_CONFIG_CREATED and MOCKTAIL_LAUNCHER_RESULT_FD entries.
+// MOCKTAIL_LAUNCHER_CLI_OVERRIDES, MOCKTAIL_LAUNCHER_CONFIG_CREATED and
+// MOCKTAIL_LAUNCHER_RESULT_FD entries.
 // MOCKTAIL_* paths and the user's own variables stay: the window needs them
 // to find helpers and to show what overrides a setting. Two never reach it:
 // MOCKTAIL_LAUNCHER_DONE (launcher_policy.h), which only mocktail's own

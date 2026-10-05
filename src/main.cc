@@ -418,6 +418,10 @@ int main(int argc, char* argv[]) {
       launcher_options.helper = launcher_helper;
       launcher_options.config_file = paths.config_file();
       launcher_options.user_managed_environment = user_managed_environment;
+      // Captured before the command line was applied, so --graphics is not
+      // among the user's variables; the window shows it on its own.
+      launcher_options.command_line_environment =
+          mocktail::runtime::CommandLineEnvironmentNames(command_line.options);
       launcher_options.config_created = config_bootstrap.created();
       launcher_options.original_environment = process_start.environment;
       const mocktail::runtime::LauncherUiRun launcher_run =

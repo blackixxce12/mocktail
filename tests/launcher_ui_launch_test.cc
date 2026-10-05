@@ -265,11 +265,15 @@ TEST(LauncherUiLaunchTest, BuildsTheHelperEnvironment) {
       // Stale protocol variables are replaced.
       "MOCKTAIL_LAUNCHER_RESULT_FD=7",
       "MOCKTAIL_CONFIG_FILE=/elsewhere/config.yaml",
+      "MOCKTAIL_LAUNCHER_CLI_OVERRIDES=MOCKTAIL_THEME",
+      // Set by --graphics.
+      "MOCKTAIL_GRAPHICS_BACKEND=opengl",
       nullptr,
   };
   LauncherUiLaunchOptions options;
   options.config_file = "/home/player/.config/mocktail/config.yaml";
   options.user_managed_environment = {"MOCKTAIL_VSYNC", "SDL_VIDEODRIVER"};
+  options.command_line_environment = {"MOCKTAIL_GRAPHICS_BACKEND"};
   options.config_created = true;
   options.original_environment = {
       "PATH=/usr/bin",
@@ -301,6 +305,13 @@ TEST(LauncherUiLaunchTest, BuildsTheHelperEnvironment) {
                        "MOCKTAIL_LAUNCHER_ENV_OVERRIDES=MOCKTAIL_VSYNC,"
                        "SDL_VIDEODRIVER"));
   EXPECT_TRUE(Contains(environment, "MOCKTAIL_LAUNCHER_CONFIG_CREATED=1"));
+  // The command line's variables are named apart from the user's.
+  EXPECT_TRUE(Contains(environment, "MOCKTAIL_GRAPHICS_BACKEND=opengl"));
+  EXPECT_TRUE(Contains(environment,
+                       "MOCKTAIL_LAUNCHER_CLI_OVERRIDES="
+                       "MOCKTAIL_GRAPHICS_BACKEND"));
+  EXPECT_FALSE(
+      Contains(environment, "MOCKTAIL_LAUNCHER_CLI_OVERRIDES=MOCKTAIL_THEME"));
   EXPECT_TRUE(Contains(environment, "MOCKTAIL_LAUNCHER_RESULT_FD=3"));
   EXPECT_FALSE(Contains(environment, "MOCKTAIL_LAUNCHER_RESULT_FD=7"));
   EXPECT_EQ(std::count_if(environment.begin(), environment.end(),
@@ -311,10 +322,12 @@ TEST(LauncherUiLaunchTest, BuildsTheHelperEnvironment) {
             1);
 
   options.user_managed_environment.clear();
+  options.command_line_environment.clear();
   options.config_created = false;
   const std::vector<std::string> plain =
       BuildLauncherUiEnvironment(current, options);
   EXPECT_TRUE(Contains(plain, "MOCKTAIL_LAUNCHER_ENV_OVERRIDES="));
+  EXPECT_TRUE(Contains(plain, "MOCKTAIL_LAUNCHER_CLI_OVERRIDES="));
   EXPECT_TRUE(Contains(plain, "MOCKTAIL_LAUNCHER_CONFIG_CREATED=0"));
 }
 
