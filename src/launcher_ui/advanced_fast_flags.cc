@@ -560,6 +560,23 @@ class FastFlagsEditor {
       AddRow(group_, row);
       return;
     }
+    if (document.has_comments()) {
+      // FastFlagsDocument::Save writes the entries only and keeps the file
+      // with its comments next to it.
+      GtkWidget* row = adw_action_row_new();
+      adw_preferences_row_set_title(
+          ADW_PREFERENCES_ROW(row),
+          Markup(_("fflags.json has comments")).c_str());
+      adw_action_row_set_subtitle(
+          ADW_ACTION_ROW(row),
+          Markup(_("Saving here writes the file without them, flags turned "
+                   "off in a comment included. The file as it is now stays "
+                   "next to it as fflags.json.with-comments- with the date "
+                   "and time added."))
+              .c_str());
+      adw_action_row_set_subtitle_lines(ADW_ACTION_ROW(row), 0);
+      AddRow(group_, row);
+    }
     if (count == 0) {
       GtkWidget* row = adw_action_row_new();
       adw_preferences_row_set_title(ADW_PREFERENCES_ROW(row),

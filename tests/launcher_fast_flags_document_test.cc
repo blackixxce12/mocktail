@@ -172,6 +172,59 @@ TEST_F(LauncherFastFlagsDocumentTest, SavesWhatMocktailLoads) {
   EXPECT_EQ(ReadFile(file_), document.Serialize());
 }
 
+// Saving rewrites fflags.json from its entries. Comments, which the game
+// accepts (client_settings_service.cc), and flags switched off by putting
+// them in a comment would be gone for good; the file is kept whole next to
+// it first.
+TEST_F(LauncherFastFlagsDocumentTest, KeepsACommentedFileItRewrites) {
+  const std::string commented =
+      "{\n"
+      "  // keep 60 fps on the laptop, see issue 12\n"
+      "  \"DFIntTaskSchedulerTargetFps\": 60,\n"
+      "  /* \"FFlagDebugDisplayFPS\": true, */\n"
+      "  \"FIntBar\": 0\n"
+      "}\n";
+  WriteFile(file_, commented);
+  FastFlagsDocument document;
+  std::string error;
+  ASSERT_TRUE(FastFlagsDocument::Load(file_, &document, &error)) << error;
+  EXPECT_TRUE(document.has_comments());
+  ASSERT_TRUE(document.Set("FIntBar", FastFlagValueKind::kInteger, "1",
+                           &error));
+  std::filesystem::path copy;
+  ASSERT_TRUE(document.Save(file_, &error, &copy)) << error;
+  EXPECT_EQ(ReadFile(file_), document.Serialize());
+  EXPECT_FALSE(document.has_comments());
+  std::vector<std::filesystem::path> kept;
+  for (const auto& entry :
+       std::filesystem::directory_iterator(temporary_.path())) {
+    if (entry.path().filename().string().rfind("fflags.json.", 0) == 0) {
+      kept.push_back(entry.path());
+    }
+  }
+  ASSERT_EQ(kept.size(), 1U);
+  EXPECT_EQ(kept.front(), copy);
+  EXPECT_EQ(kept.front().filename().string().rfind(
+                "fflags.json.with-comments-", 0),
+            0U)
+      << kept.front();
+  EXPECT_EQ(ReadFile(kept.front()), commented);
+  EXPECT_EQ(FileMode(kept.front()), 0600);
+
+  // The rewritten file has none left: later saves keep nothing more.
+  ASSERT_TRUE(document.Set("FIntBar", FastFlagValueKind::kInteger, "2",
+                           &error));
+  ASSERT_TRUE(document.Save(file_, &error, &copy)) << error;
+  EXPECT_TRUE(copy.empty());
+  std::size_t files = 0;
+  for (const auto& entry :
+       std::filesystem::directory_iterator(temporary_.path())) {
+    (void)entry;
+    ++files;
+  }
+  EXPECT_EQ(files, 2U);
+}
+
 TEST_F(LauncherFastFlagsDocumentTest, RejectsWhatTheRuntimeRejects) {
   FastFlagsDocument document;
   std::string error;

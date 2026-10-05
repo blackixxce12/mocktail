@@ -19,6 +19,8 @@ namespace {
 
 constexpr mode_t kPrivateFileMode = S_IRUSR | S_IWUSR;
 constexpr std::size_t kMaximumNameBytes = 256;
+// The name of the copy Save() keeps of a file with comments.
+constexpr char kCommentedCopyLabel[] = "with-comments";
 
 bool SameEntries(const std::vector<FastFlagEntry>& left,
                  const std::vector<FastFlagEntry>& right) {
@@ -186,6 +188,12 @@ bool FastFlagsDocument::FromBytes(std::string_view bytes,
     return false;
   }
   FastFlagsDocument document;
+  // Parsed with comments ignored, as the runtime reads the file
+  // (client_settings_service.cc); without that it only parses when it has
+  // none.
+  document.has_comments_ =
+      nlohmann::ordered_json::parse(bytes, nullptr, false, false)
+          .is_discarded();
   for (const auto& [name, value] : parsed.items()) {
     FastFlagEntry entry;
     if (name.empty()) {
@@ -305,7 +313,8 @@ std::string FastFlagsDocument::Serialize() const {
 }
 
 bool FastFlagsDocument::Save(const std::filesystem::path& path,
-                             std::string* error) {
+                             std::string* error, std::filesystem::path* kept) {
+  if (kept != nullptr) kept->clear();
   const std::string bytes = Serialize();
   if (bytes.size() > kMaximumBytes) {
     *error = "fflags.json would exceed the 64 KiB limit Mocktail reads";
@@ -313,6 +322,13 @@ bool FastFlagsDocument::Save(const std::filesystem::path& path,
   }
   if (!internal::VerifyUnchanged(path, identity_, disk_bytes_, kMaximumBytes,
                                  error)) {
+    return false;
+  }
+  // Notes and flags switched off in comments would be gone for good.
+  std::filesystem::path copy;
+  if (identity_.exists && has_comments_ &&
+      !internal::KeepCopyBeside(path, kCommentedCopyLabel, disk_bytes_, &copy,
+                                error)) {
     return false;
   }
   FileIdentity published;
@@ -323,6 +339,8 @@ bool FastFlagsDocument::Save(const std::filesystem::path& path,
   identity_ = published;
   disk_bytes_ = bytes;
   saved_entries_ = entries_;
+  has_comments_ = false;
+  if (kept != nullptr) *kept = std::move(copy);
   return true;
 }
 

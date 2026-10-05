@@ -2696,6 +2696,12 @@ msgstr[0] "%d флаг"
 msgstr[1] "%d флага"
 msgstr[2] "%d флагов"
 
+msgid "fflags.json has comments"
+msgstr "В fflags.json есть комментарии"
+
+msgid "Saving here writes the file without them, flags turned off in a comment included. The file as it is now stays next to it as fflags.json.with-comments- with the date and time added."
+msgstr "При сохранении отсюда файл запишется без них — и без флагов, отключённых комментарием. Нынешний файл останется рядом под именем fflags.json.with-comments- с датой и временем."
+
 msgid "fflags.json cannot be read"
 msgstr "fflags.json не читается"
 

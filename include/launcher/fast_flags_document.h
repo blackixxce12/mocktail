@@ -45,7 +45,8 @@ struct FastFlagConflict {
 // values are strings, booleans or integers. Mocktail adds these entries
 // under its own client-settings policy at startup. Entries keep their file
 // order; new ones are appended. Saving rewrites the file as indented JSON,
-// so comments in it (which the runtime tolerates) are not kept.
+// so comments in it (which the runtime tolerates) are not kept there; a
+// file with comments is first kept whole next to it (Save()).
 class FastFlagsDocument {
  public:
   static constexpr std::size_t kMaximumBytes = 64U * 1024U;
@@ -70,8 +71,15 @@ class FastFlagsDocument {
   std::string Serialize() const;
 
   // Atomic, mode 0600; refuses symlinks, a file that changed (or appeared)
-  // since Load(), and content above 64 KiB.
-  bool Save(const std::filesystem::path& path, std::string* error);
+  // since Load(), and content above 64 KiB. When the file on disk has
+  // comments, it is first kept as "<path>.with-comments-<YYYYMMDD-HHMMSS>"
+  // (mode 0600, never over an existing file), and *kept (when given) names
+  // it; otherwise *kept is left empty.
+  bool Save(const std::filesystem::path& path, std::string* error,
+            std::filesystem::path* kept = nullptr);
+
+  // The file as loaded has comments, which Save() does not write back.
+  bool has_comments() const { return has_comments_; }
 
   // Entries that collide with values Mocktail sets itself for the given
   // settings (frame-rate target, performance preset incl. the FRM quality
@@ -94,6 +102,7 @@ class FastFlagsDocument {
   std::vector<FastFlagEntry> saved_entries_;
   std::string disk_bytes_;
   FileIdentity identity_;
+  bool has_comments_ = false;
 };
 
 }  // namespace mocktail::launcher
