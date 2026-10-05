@@ -172,9 +172,9 @@ struct FastFlagSettings {
   std::string gamemode = "auto";
   // engine.graphics_quality: default, manual or 1..21.
   std::string graphics_quality = "default";
-  // Direct Vulkan on Intel-only graphics: the default quality is level 1
-  // there (graphics_launch_policy.cc).
-  bool intel_only_direct_vulkan = false;
+  // Direct Vulkan renders on Intel integrated graphics: the default
+  // quality is level 1 there (graphics_launch_policy.cc).
+  bool intel_integrated_vulkan = false;
 };
 
 // The level the preset forces through FIntDebugFRMQualityLevelOverride,

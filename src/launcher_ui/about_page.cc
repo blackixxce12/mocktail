@@ -135,9 +135,18 @@ std::string DiagnosticText(LauncherContext& context) {
   lines.emplace_back("GPU vendors", machine.GpuVendorsLabel());
   lines.emplace_back("NVIDIA kernel driver",
                      machine.gpu.nvidia_kernel_driver ? "yes" : "no");
-  lines.emplace_back(
-      "Vulkan driver",
-      std::filesystem::path(machine.vulkan_icd).filename().string());
+  const VulkanDriverSelection driver =
+      machine.VulkanDriver(context.GameValue("engine.gpu", "auto"));
+  lines.emplace_back("Vulkan driver", driver.FileNames());
+  std::string vulkan_gpu;
+  if (driver.gpu.has_value()) {
+    vulkan_gpu = GpuCardName(*driver.gpu) +
+                 (driver.gpu->integrated ? " integrated" : " discrete");
+    if (!driver.gpu->pci_address.empty()) {
+      vulkan_gpu += " at " + driver.gpu->pci_address;
+    }
+  }
+  lines.emplace_back("Vulkan GPU", vulkan_gpu);
   lines.emplace_back("ANGLE", machine.angle.has_value()
                                   ? machine.angle->label
                                   : std::string("none found"));
@@ -296,9 +305,11 @@ GtkWidget* BuildGraphicsRow(LauncherContext* context) {
     if (machine.detected) {
       text += "\n";
       if (machine.has_vulkan_driver()) {
-        text += Format(
-            _("Vulkan driver: %s"),
-            std::filesystem::path(machine.vulkan_icd).filename().c_str());
+        text +=
+            Format(_("Vulkan driver: %s"),
+                   machine.VulkanDriver(context.GameValue("engine.gpu", "auto"))
+                       .FileNames()
+                       .c_str());
       } else if (machine.vulkan_source == VulkanDriverSource::kUnknown) {
         text += _("Vulkan driver: from the Flatpak runtime");
       } else {
@@ -308,11 +319,13 @@ GtkWidget* BuildGraphicsRow(LauncherContext* context) {
     return text;
   };
   spec.hint.details =
-      // session_log.cc DetectGraphicsHardware; machine_profile.cc.
+      // session_log.cc DetectGraphicsHardware; machine_profile.cc;
+      // graphics_launch_policy.cc ApplyVulkanIcdPolicy (engine.gpu, and
+      // VK_DRIVER_FILES first).
       _("The graphics cards in /sys/class/drm with their kernel drivers, "
         "named as in Mocktail's session log, and the Vulkan driver Mocktail "
-        "would choose for the game (a VK_DRIVER_FILES you set yourself "
-        "wins).") +
+        "would choose for the game: that of the card engine.gpu in "
+        "config.yaml asks for, unless you set VK_DRIVER_FILES yourself.") +
       std::string("\n\n") +
       _("The Graphics page recommends a graphics backend from this.");
   return DecorateRow(context, row, std::move(spec));

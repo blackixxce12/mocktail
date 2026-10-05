@@ -10,6 +10,8 @@
 #include <vector>
 
 #include "runtime/environment.h"
+#include "runtime/graphics_launch_policy.h"
+#include "runtime/runtime_config.h"
 
 namespace mocktail::launcher_ui {
 
@@ -21,9 +23,21 @@ namespace mocktail::launcher_ui {
 
 enum class SessionType { kUnknown, kWayland, kX11 };
 
+// PCI vendor IDs (graphics_launch_policy.cc).
+inline constexpr unsigned int kIntelPciVendor = 0x8086;
+inline constexpr unsigned int kNvidiaPciVendor = 0x10de;
+inline constexpr unsigned int kAmdPciVendor = 0x1002;
+
 struct GpuSummary {
-  // PCI vendors of /sys/class/drm/card0..15/device/vendor, the same scan
-  // graphics_launch_policy.cc makes (DetectHostGpus).
+  // The Intel, NVIDIA and AMD cards under /sys/class/drm, listed and
+  // classified as the game's Vulkan driver choice does
+  // (graphics_launch_policy.h DetectHostGpus): NVIDIA cards are discrete,
+  // a card on the PCI root bus is integrated (Intel's iGPU, older AMD
+  // APUs), and so is an AMD card right behind the root bus's device-8
+  // bridge (Zen APUs).
+  std::vector<runtime::HostGpu> cards;
+  // The vendors among `cards`; `other` is a card of another vendor
+  // (virtio, ...), which the game never picks.
   bool nvidia = false;
   bool amd = false;
   bool intel = false;
@@ -32,18 +46,11 @@ struct GpuSummary {
   // video_driver_policy.cc checks (HasNvidiaKernelDriver): the proprietary
   // or open NVIDIA kernel module, not nouveau.
   bool nvidia_kernel_driver = false;
-  // Discrete AMD and Intel cards. An AMD GPU counts when amdgpu reports at
-  // least 2 GiB of its own memory (mem_info_vram_total; an APU's carve-out
-  // is smaller) or reports nothing; an Intel GPU when it is not at PCI
-  // address 0000:00:02.0, where Intel always puts integrated graphics
-  // (Arc cards sit behind a PCIe port).
+  // Discrete AMD and Intel cards among `cards`: a Radeon dGPU, an Arc card.
   bool amd_discrete = false;
   bool intel_discrete = false;
 
   bool any() const { return nvidia || amd || intel || other; }
-  // Only an Intel GPU: Mocktail then lowers Roblox's graphics quality by
-  // default (graphics_launch_policy.cc, MOCKTAIL_GRAPHICS_QUALITY=1).
-  bool intel_only() const { return intel && !nvidia && !amd; }
   // A graphics card with its own memory (every NVIDIA GPU counts).
   bool discrete() const { return nvidia || amd_discrete || intel_discrete; }
   // Only integrated AMD or Intel graphics: an APU, Intel UHD, Iris or Xe.
@@ -82,21 +89,39 @@ struct AngleLibraries {
   bool looks_like_angle = false;
 };
 
-// Where the Vulkan driver the game would use comes from.
+// Where the Vulkan driver the game would use comes from. The same for every
+// engine.gpu value: SelectHostGpu falls back to any card with a driver.
 enum class VulkanDriverSource {
   // No hardware driver manifest anywhere the Vulkan loader looks.
   kNone,
   // None of the manifests Mocktail recognizes, inside Flatpak: the
   // runtime's GL extensions hold the drivers, out of the launcher's sight.
   kUnknown,
-  // The manifest Mocktail pins for this GPU (graphics_launch_policy.cc
-  // SelectHardwareIcd).
+  // The manifests Mocktail pins for the card it picks
+  // (graphics_launch_policy.cc ApplyVulkanIcdPolicy, SelectHostGpu).
   kPinned,
   // VK_DRIVER_FILES or VK_ICD_FILENAMES, which Mocktail keeps as they are.
   kUser,
   // Mocktail pins nothing, and the loader finds a hardware driver itself
   // (AMDVLK's amd_icd64.json, an unknown GPU's driver, ...).
   kLoader,
+};
+
+// The Vulkan driver the game would use with one engine.gpu value.
+struct VulkanDriverSelection {
+  // The manifests Mocktail pins (every one of the card's vendor,
+  // colon-separated), the user's list, or the manifest the loader finds
+  // itself; empty for kNone and kUnknown.
+  std::string icd;
+  // The card the game renders on: the one Mocktail picks, or the one
+  // VK_LOADER_DEVICE_SELECT names beside the user's list; empty otherwise.
+  std::optional<runtime::HostGpu> gpu;
+  // `gpu` is of the kind engine.gpu asks for. False when the computer has
+  // no card of that kind with a Vulkan driver and another one stands in.
+  bool preferred = false;
+
+  // The manifests' file names, comma-separated: "nvidia_icd.json".
+  std::string FileNames() const;
 };
 
 struct MachineProfile {
@@ -127,11 +152,19 @@ struct MachineProfile {
   // set, else the first pair in window.cc's search order that looks like
   // ANGLE (the game skips pairs that do not load).
   std::optional<AngleLibraries> angle;
-  // The Vulkan driver the game would use: the manifest Mocktail pins, the
-  // user's VK_DRIVER_FILES, or a manifest the loader finds itself; empty
-  // for kNone and kUnknown.
-  std::string vulkan_icd;
   VulkanDriverSource vulkan_source = VulkanDriverSource::kNone;
+  // What graphics_launch_policy.cc ApplyVulkanIcdPolicy works from, so
+  // VulkanDriver() can answer for any engine.gpu value: the user's
+  // VK_DRIVER_FILES (else VK_ICD_FILENAMES), VK_LOADER_DEVICE_SELECT, what
+  // engine.gpu: auto means through DRI_PRIME and __NV_PRIME_RENDER_OFFLOAD,
+  // the card SelectHostGpu picks for each kind, and the manifest the loader
+  // finds when Mocktail pins none.
+  std::string user_vulkan_drivers;
+  std::string loader_device_select;
+  runtime::GpuPreference automatic_gpu = runtime::GpuPreference::kDiscrete;
+  runtime::HostGpuSelection discrete_selection;
+  runtime::HostGpuSelection integrated_selection;
+  std::string loader_icd;
 
   MonitorInfo monitor;
 
@@ -140,6 +173,18 @@ struct MachineProfile {
            vulkan_source == VulkanDriverSource::kUser ||
            vulkan_source == VulkanDriverSource::kLoader;
   }
+  // engine.gpu as graphics_launch_policy.cc applies `gpu_preference` (a
+  // config.yaml value): discrete or integrated, auto resolved through
+  // DRI_PRIME and __NV_PRIME_RENDER_OFFLOAD. Anything else reads as auto;
+  // the loader refuses it before the game starts.
+  runtime::GpuPreference ResolvedGpuPreference(
+      std::string_view gpu_preference) const;
+  // The Vulkan driver and card for direct Vulkan with `gpu_preference`.
+  VulkanDriverSelection VulkanDriver(std::string_view gpu_preference) const;
+  // Direct Vulkan with `gpu_preference` renders on Intel integrated
+  // graphics, which then get graphics quality level 1 by default
+  // (graphics_launch_policy.h RendersOnIntelIntegratedGraphics).
+  bool RendersOnIntelIntegratedGraphics(std::string_view gpu_preference) const;
   // What display.server: auto picks for the game window with `backend`
   // (a config.yaml graphics.backend value): "wayland" or "x11", or empty
   // when this session has neither. Mirrors ResolveVideoDriverChoice.
@@ -152,6 +197,10 @@ struct MachineProfile {
   // The vendors of the discrete cards only: "NVIDIA", "Intel Arc".
   std::string DiscreteGpuLabel() const;
 };
+
+// "NVIDIA", "AMD" or "Intel" ("Intel Arc" for a discrete card), as the
+// Graphics page and the About page name a card; empty for another vendor.
+std::string GpuCardName(const runtime::HostGpu& card);
 
 // Where detection looks; tests point everything at a fake tree.
 struct MachineProbe {

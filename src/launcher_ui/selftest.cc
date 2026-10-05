@@ -348,7 +348,8 @@ guint Selftest::RecordWindow() {
       {"physical_cores", machine.physical_cores},
       {"memory_mib", machine.memory_bytes / (1024U * 1024U)},
       {"gamemode_library", machine.gamemode_library},
-      {"vulkan_icd", machine.vulkan_icd},
+      {"vulkan_icd",
+       machine.VulkanDriver(context_->GameValue("engine.gpu", "auto")).icd},
       {"angle", machine.angle.has_value() ? machine.angle->directory.string()
                                           : std::string()},
   };

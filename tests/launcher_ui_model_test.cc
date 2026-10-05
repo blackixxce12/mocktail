@@ -389,6 +389,21 @@ class MachineProfileTest : public ::testing::Test {
                 std::string(vendor) + "\n");
   }
 
+  // A card whose device links into a PCI tree under sys/devices, as
+  // /sys/class/drm/cardN/device does; the topology tells integrated
+  // graphics from discrete cards (graphics_launch_policy.cc).
+  void AddPciGpu(int card, const std::string& pci_path, std::string_view vendor,
+                 std::string_view device) {
+    const std::string function = "sys/devices/" + pci_path;
+    root_.Write(function + "/vendor", std::string(vendor) + "\n");
+    root_.Write(function + "/device", std::string(device) + "\n");
+    const std::filesystem::path card_directory =
+        root_.path() / ("sys/class/drm/card" + std::to_string(card));
+    std::filesystem::create_directories(card_directory);
+    std::filesystem::create_directory_symlink(root_.path() / function,
+                                              card_directory / "device");
+  }
+
   TemporaryDirectory root_;
 };
 
@@ -431,7 +446,9 @@ TEST_F(MachineProfileTest, DetectsAnNvidiaWaylandLaptop) {
   EXPECT_EQ(profile.angle->label, "Electron 43");
   EXPECT_TRUE(profile.angle->looks_like_angle);
   EXPECT_FALSE(profile.angle->bundled);
-  EXPECT_NE(profile.vulkan_icd.find("nvidia_icd.json"), std::string::npos);
+  EXPECT_NE(profile.VulkanDriver("auto").icd.find("nvidia_icd.json"),
+            std::string::npos);
+  EXPECT_EQ(profile.VulkanDriver("auto").FileNames(), "nvidia_icd.json");
   EXPECT_TRUE(profile.has_vulkan_driver());
   // NVIDIA + direct Vulkan + both displays: automatic means XWayland.
   EXPECT_TRUE(profile.NvidiaDirectVulkanUsesX11());
@@ -449,7 +466,11 @@ TEST_F(MachineProfileTest, DetectsAMachineWithoutVulkan) {
   const MachineProfile profile = DetectMachineProfile(
       MapEnvironment({{"DISPLAY", ":1"}, {"XDG_CURRENT_DESKTOP", "XFCE"}}),
       Probe());
-  EXPECT_TRUE(profile.gpu.intel_only());
+  EXPECT_TRUE(profile.gpu.intel);
+  EXPECT_TRUE(profile.gpu.integrated_only());
+  // Without a Vulkan driver no card is picked, and an Intel-only computer
+  // counts as Intel integrated graphics.
+  EXPECT_TRUE(profile.RendersOnIntelIntegratedGraphics("auto"));
   EXPECT_FALSE(profile.gpu.nvidia_kernel_driver);
   EXPECT_EQ(profile.session, SessionType::kX11);
   EXPECT_FALSE(profile.wayland_available);
@@ -466,30 +487,34 @@ TEST_F(MachineProfileTest, DetectsAMachineWithoutVulkan) {
             BackendRecommendationReason::kUnknown);
 }
 
-TEST_F(MachineProfileTest, TellsIntegratedFromDiscreteGraphics) {
-  // An AMD APU: amdgpu reports a small carve-out as VRAM.
-  AddGpu(0, "0x1002");
-  root_.Write("sys/class/drm/card0/device/mem_info_vram_total", "536870912\n");
-  // Intel's integrated graphics at 00:02.0.
-  AddGpu(1, "0x8086");
-  root_.Write("sys/class/drm/card1/device/uevent",
-              "DRIVER=i915\nPCI_SLOT_NAME=0000:00:02.0\n");
+TEST_F(MachineProfileTest, TellsIntegratedGraphicsByTheirPciPlace) {
+  // A Zen APU behind the root bus's device-8 bridge and Intel's integrated
+  // graphics at 00:02.0.
+  AddPciGpu(0, "pci0000:00/0000:00:08.1/0000:05:00.0", "0x1002", "0x1681");
+  AddPciGpu(1, "pci0000:00/0000:00:02.0", "0x8086", "0x9a49");
   MachineProfile profile = DetectMachineProfile(MapEnvironment(), Probe());
+  ASSERT_EQ(profile.gpu.cards.size(), 2U);
+  EXPECT_TRUE(profile.gpu.cards[0].integrated);
+  EXPECT_EQ(profile.gpu.cards[0].pci_address, "0000:05:00.0");
   EXPECT_FALSE(profile.gpu.amd_discrete);
   EXPECT_FALSE(profile.gpu.intel_discrete);
   EXPECT_TRUE(profile.gpu.integrated_only());
-  EXPECT_FALSE(profile.gpu.intel_only());
+  EXPECT_EQ(GpuCardName(profile.gpu.cards[1]), "Intel");
+}
 
-  // An 8 GiB Radeon and an Arc card behind a PCIe port are discrete.
-  root_.Write("sys/class/drm/card0/device/mem_info_vram_total",
-              "8589934592\n");
-  root_.Write("sys/class/drm/card1/device/uevent",
-              "DRIVER=xe\nPCI_SLOT_NAME=0000:03:00.0\n");
-  profile = DetectMachineProfile(MapEnvironment(), Probe());
+TEST_F(MachineProfileTest, TellsDiscreteCardsByTheirPciPlace) {
+  // A Radeon behind a PCIe switch and an Arc card behind a PCIe port.
+  AddPciGpu(0, "pci0000:00/0000:00:01.1/0000:0a:00.0/0000:0b:00.0/0000:0c:00.0",
+            "0x1002", "0x73df");
+  AddPciGpu(1, "pci0000:00/0000:00:01.0/0000:01:00.0/0000:02:01.0/0000:03:00.0",
+            "0x8086", "0x56a0");
+  const MachineProfile profile =
+      DetectMachineProfile(MapEnvironment(), Probe());
   EXPECT_TRUE(profile.gpu.amd_discrete);
   EXPECT_TRUE(profile.gpu.intel_discrete);
   EXPECT_FALSE(profile.gpu.integrated_only());
   EXPECT_EQ(profile.DiscreteGpuLabel(), "AMD + Intel Arc");
+  EXPECT_EQ(GpuCardName(profile.gpu.cards[1]), "Intel Arc");
 }
 
 TEST_F(MachineProfileTest, FollowsTheVulkanLoader) {
@@ -499,7 +524,9 @@ TEST_F(MachineProfileTest, FollowsTheVulkanLoader) {
   root_.Write("usr/share/vulkan/icd.d/lvp_icd.x86_64.json", "{}");
   MachineProfile profile = DetectMachineProfile(MapEnvironment(), Probe());
   EXPECT_EQ(profile.vulkan_source, VulkanDriverSource::kLoader);
-  EXPECT_NE(profile.vulkan_icd.find("amd_icd64.json"), std::string::npos);
+  EXPECT_NE(profile.VulkanDriver("auto").icd.find("amd_icd64.json"),
+            std::string::npos);
+  EXPECT_FALSE(profile.VulkanDriver("auto").gpu.has_value());
   EXPECT_TRUE(profile.has_vulkan_driver());
   EXPECT_EQ(RecommendGraphicsBackend(profile).value, "direct-vulkan");
 
@@ -507,17 +534,77 @@ TEST_F(MachineProfileTest, FollowsTheVulkanLoader) {
   profile = DetectMachineProfile(
       MapEnvironment({{"VK_DRIVER_FILES", "/opt/vk/my_icd.json"}}), Probe());
   EXPECT_EQ(profile.vulkan_source, VulkanDriverSource::kUser);
-  EXPECT_EQ(profile.vulkan_icd, "/opt/vk/my_icd.json");
+  EXPECT_EQ(profile.VulkanDriver("integrated").icd, "/opt/vk/my_icd.json");
 
-  // With PRIME offloading off, Mocktail pins the integrated GPU's driver.
+  // Without a PCI path an AMD card counts as discrete and an Intel one as
+  // integrated. With PRIME offloading off, Mocktail pins the integrated
+  // GPU's driver, unless engine.gpu names a kind.
   AddGpu(1, "0x8086");
   root_.Write("usr/share/vulkan/icd.d/radeon_icd.x86_64.json", "{}");
   root_.Write("usr/share/vulkan/icd.d/intel_icd.x86_64.json", "{}");
   profile = DetectMachineProfile(MapEnvironment(), Probe());
-  EXPECT_NE(profile.vulkan_icd.find("radeon_icd"), std::string::npos);
+  EXPECT_NE(profile.VulkanDriver("auto").icd.find("radeon_icd"),
+            std::string::npos);
   profile = DetectMachineProfile(MapEnvironment({{"DRI_PRIME", "0"}}), Probe());
   EXPECT_EQ(profile.vulkan_source, VulkanDriverSource::kPinned);
-  EXPECT_NE(profile.vulkan_icd.find("intel_icd"), std::string::npos);
+  EXPECT_NE(profile.VulkanDriver("auto").icd.find("intel_icd"),
+            std::string::npos);
+  EXPECT_NE(profile.VulkanDriver("discrete").icd.find("radeon_icd"),
+            std::string::npos);
+}
+
+// A hybrid laptop: engine.gpu (or PRIME offloading under auto) picks the
+// card, and with it graphics quality level 1 for Intel integrated graphics
+// (graphics_launch_policy.cc ApplyVulkanIcdPolicy).
+TEST_F(MachineProfileTest, FollowsEngineGpuOnAHybridLaptop) {
+  AddPciGpu(0, "pci0000:00/0000:00:02.0", "0x8086", "0x9a49");
+  AddPciGpu(1, "pci0000:00/0000:00:01.0/0000:01:00.0", "0x10de", "0x2520");
+  root_.Write("usr/share/vulkan/icd.d/intel_icd.x86_64.json", "{}");
+  root_.Write("usr/share/vulkan/icd.d/nvidia_icd.json", "{}");
+  MachineProfile profile = DetectMachineProfile(MapEnvironment(), Probe());
+  EXPECT_TRUE(profile.gpu.nvidia);
+  EXPECT_TRUE(profile.gpu.intel);
+  EXPECT_FALSE(profile.gpu.intel_discrete);
+
+  VulkanDriverSelection driver = profile.VulkanDriver("auto");
+  ASSERT_TRUE(driver.gpu.has_value());
+  EXPECT_EQ(driver.gpu->vendor, kNvidiaPciVendor);
+  EXPECT_TRUE(driver.preferred);
+  EXPECT_FALSE(profile.RendersOnIntelIntegratedGraphics("auto"));
+  EXPECT_FALSE(profile.RendersOnIntelIntegratedGraphics("discrete"));
+
+  driver = profile.VulkanDriver("integrated");
+  ASSERT_TRUE(driver.gpu.has_value());
+  EXPECT_EQ(driver.gpu->vendor, kIntelPciVendor);
+  EXPECT_EQ(driver.FileNames(), "intel_icd.x86_64.json");
+  EXPECT_TRUE(profile.RendersOnIntelIntegratedGraphics("integrated"));
+  // A value the loader would refuse reads as auto.
+  EXPECT_FALSE(profile.RendersOnIntelIntegratedGraphics("igpu"));
+
+  profile = DetectMachineProfile(
+      MapEnvironment({{"__NV_PRIME_RENDER_OFFLOAD", "0"}}), Probe());
+  EXPECT_EQ(profile.ResolvedGpuPreference("auto"),
+            runtime::GpuPreference::kIntegrated);
+  EXPECT_TRUE(profile.RendersOnIntelIntegratedGraphics("auto"));
+  EXPECT_FALSE(profile.RendersOnIntelIntegratedGraphics("discrete"));
+
+  // Drivers the user pinned stay; VK_LOADER_DEVICE_SELECT names the card.
+  profile = DetectMachineProfile(
+      MapEnvironment({{"VK_DRIVER_FILES", "/opt/intel_icd.json"},
+                      {"VK_LOADER_DEVICE_SELECT", "0x8086:0x9a49"}}),
+      Probe());
+  EXPECT_EQ(profile.vulkan_source, VulkanDriverSource::kUser);
+  ASSERT_TRUE(profile.VulkanDriver("discrete").gpu.has_value());
+  EXPECT_TRUE(profile.RendersOnIntelIntegratedGraphics("discrete"));
+
+  // No integrated card with a driver: the NVIDIA card stands in.
+  std::filesystem::remove(root_.path() /
+                          "usr/share/vulkan/icd.d/intel_icd.x86_64.json");
+  profile = DetectMachineProfile(MapEnvironment(), Probe());
+  driver = profile.VulkanDriver("integrated");
+  ASSERT_TRUE(driver.gpu.has_value());
+  EXPECT_EQ(driver.gpu->vendor, kNvidiaPciVendor);
+  EXPECT_FALSE(driver.preferred);
 }
 
 TEST_F(MachineProfileTest, CannotSeeFlatpakDrivers) {

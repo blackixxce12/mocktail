@@ -143,7 +143,8 @@ class FastFlagsState {
     source.discard = [this] { Load(); };
     context_->AddDirtySource(std::move(source));
     // The conflicts follow the frame rate, performance and quality
-    // settings, and the GPU (Intel-only machines get level 1).
+    // settings, and the graphics card the game renders on (Intel
+    // integrated graphics get level 1).
     context_->OnSettingChanged([this](std::string_view key) {
       if (key != kFastFlagsKey) UpdateConflicts(true);
     });
@@ -184,9 +185,10 @@ class FastFlagsState {
     settings.gamemode = SettingValue("performance.gamemode", "auto");
     settings.graphics_quality =
         SettingValue("engine.graphics_quality", "default");
-    settings.intel_only_direct_vulkan =
-        context_->machine().gpu.intel_only() &&
-        IsVulkanBackend(SettingValue("graphics.backend", "direct-vulkan"));
+    settings.intel_integrated_vulkan =
+        IsVulkanBackend(SettingValue("graphics.backend", "direct-vulkan")) &&
+        context_->machine().RendersOnIntelIntegratedGraphics(
+            SettingValue("engine.gpu", "auto"));
     if (settings_ == settings_key(settings) && !conflicts_dirty_) return;
     settings_ = settings_key(settings);
     conflicts_dirty_ = false;
@@ -199,7 +201,7 @@ class FastFlagsState {
            '\n' + settings.physics_worker_mode + '\n' +
            settings.memory_limit_mb + '\n' + settings.gamemode + '\n' +
            settings.graphics_quality + '\n' +
-           (settings.intel_only_direct_vulkan ? "1" : "0");
+           (settings.intel_integrated_vulkan ? "1" : "0");
   }
 
   void Changed() {

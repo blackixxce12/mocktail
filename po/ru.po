@@ -151,6 +151,20 @@ msgid "Mocktail found no Vulkan driver for your graphics card where the Vulkan l
 msgstr "Mocktail не нашёл драйвер Vulkan для вашей видеокарты там, где его ищет загрузчик Vulkan (/usr/share/vulkan/icd.d и похожие папки). Если Roblox не запустится с Vulkan, выберите OpenGL ES."
 
 #, c-format
+msgid "The game renders on the integrated %s graphics; engine.gpu in config.yaml chooses between the graphics cards."
+msgstr "Игра отрисовывается на встроенной графике %s; какую видеокарту использовать, задаёт engine.gpu в config.yaml."
+
+#, c-format
+msgid "The game renders on the discrete %s card; engine.gpu in config.yaml chooses between the graphics cards."
+msgstr "Игра отрисовывается на дискретной видеокарте %s; какую видеокарту использовать, задаёт engine.gpu в config.yaml."
+
+msgid "engine.gpu asks for integrated graphics, but this computer has none with a Vulkan driver, so the game uses another card."
+msgstr "engine.gpu требует встроенную графику, но на этом компьютере нет встроенной графики с драйвером Vulkan, поэтому игра использует другую видеокарту."
+
+msgid "engine.gpu asks for a discrete card, but this computer has none with a Vulkan driver, so the game uses another card."
+msgstr "engine.gpu требует дискретную видеокарту, но на этом компьютере нет дискретной видеокарты с драйвером Vulkan, поэтому игра использует другую."
+
+#, c-format
 msgid "ANGLE for “ANGLE on Vulkan”: %s, set by MOCKTAIL_ANGLE_LIB_DIR."
 msgstr "ANGLE для варианта «ANGLE поверх Vulkan»: %s, задано в MOCKTAIL_ANGLE_LIB_DIR."
 
@@ -566,8 +580,8 @@ msgstr "Стандарт Mocktail"
 msgid "No level is forced while Mocktail's performance preset is off"
 msgstr "Пока пресет производительности Mocktail выключен, уровень не задаётся"
 
-msgid "Level 1 of 21: Mocktail's choice for Intel graphics with Vulkan"
-msgstr "Уровень 1 из 21: выбор Mocktail для графики Intel с Vulkan"
+msgid "Level 1 of 21: Mocktail's choice for Intel integrated graphics with Vulkan"
+msgstr "Уровень 1 из 21: выбор Mocktail для встроенной графики Intel с Vulkan"
 
 msgid "Level 3 of 21, forced by Mocktail's performance preset"
 msgstr "Уровень 3 из 21, его задаёт пресет производительности Mocktail"
@@ -605,8 +619,8 @@ msgstr "Уровень качества графики Roblox, от 1 до 21, �
 msgid "Mocktail forces a level only while its performance preset is on: with Physics workers on Throughput (the default), or on Automatic with Multithreaded rendering. Otherwise Roblox's own setting always decides."
 msgstr "Mocktail задаёт уровень только при включённом пресете производительности: когда «Потоки физики» стоят на «Пропускная способность» (по умолчанию) или на «Автоматически» вместе с многопоточным рендерингом. В остальных случаях всегда решает настройка самого Roblox."
 
-msgid "• Mocktail default: level 3, or level 1 with Vulkan on computers that have only Intel graphics. Roblox's in-game quality slider then has no effect."
-msgstr "• Стандарт Mocktail: уровень 3, а с Vulkan на компьютерах только с графикой Intel — уровень 1. Ползунок качества в самой игре Roblox тогда не действует."
+msgid "• Mocktail default: level 3, or level 1 when Vulkan renders on Intel integrated graphics. Roblox's in-game quality slider then has no effect."
+msgstr "• Стандарт Mocktail: уровень 3, а когда Vulkan отрисовывает игру на встроенной графике Intel — уровень 1. Ползунок качества в самой игре Roblox тогда не действует."
 
 msgid "• Roblox in-game slider: Mocktail stops forcing a quality level, and the Graphics Quality option in Roblox's settings decides it. While the performance preset is on, Mocktail still lowers texture detail, turns MSAA off and uses low-end level of detail; set Physics workers to Low latency (or Automatic without Multithreaded rendering) to turn that off too."
 msgstr "• Ползунок в игре Roblox: Mocktail перестаёт задавать уровень качества, и его определяет параметр «Качество графики» в настройках Roblox. Пока включён пресет производительности, Mocktail всё равно снижает детализацию текстур, выключает MSAA и использует упрощённую детализацию для слабых устройств; чтобы отключить и это, выберите в «Потоках физики» «Низкая задержка» (или «Автоматически» без многопоточного рендеринга)."
@@ -2959,8 +2973,8 @@ msgstr "Драйвер Vulkan: из среды выполнения Flatpak"
 msgid "No Vulkan driver found"
 msgstr "Драйвер Vulkan не найден"
 
-msgid "The graphics cards in /sys/class/drm with their kernel drivers, named as in Mocktail's session log, and the Vulkan driver Mocktail would choose for the game (a VK_DRIVER_FILES you set yourself wins)."
-msgstr "Видеокарты из /sys/class/drm с их драйверами ядра — под теми же названиями, что и в журнале сеанса Mocktail, — и драйвер Vulkan, который Mocktail выбрал бы для игры (если вы сами задали VK_DRIVER_FILES, действует он)."
+msgid "The graphics cards in /sys/class/drm with their kernel drivers, named as in Mocktail's session log, and the Vulkan driver Mocktail would choose for the game: that of the card engine.gpu in config.yaml asks for, unless you set VK_DRIVER_FILES yourself."
+msgstr "Видеокарты из /sys/class/drm с их драйверами ядра — под теми же названиями, что и в журнале сеанса Mocktail, — и драйвер Vulkan, который Mocktail выбрал бы для игры: драйвер видеокарты, которую указывает engine.gpu в config.yaml, если только вы сами не задали VK_DRIVER_FILES."
 
 msgid "The Graphics page recommends a graphics backend from this."
 msgstr "По этим данным раздел «Графика» советует графический движок."

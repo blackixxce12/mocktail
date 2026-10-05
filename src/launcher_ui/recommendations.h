@@ -52,8 +52,8 @@ std::optional<int> ParseQualityLevel(std::string_view value);
 enum class QualitySource {
   // Nothing is forced: Roblox's own graphics setting decides.
   kRobloxSetting,
-  // "default" with the preset active: level 3, or 1 with direct Vulkan on
-  // Intel-only graphics (graphics_launch_policy.cc).
+  // "default" with the preset active: level 3, or 1 when direct Vulkan
+  // renders on Intel integrated graphics (graphics_launch_policy.cc).
   kMocktailDefault,
   // A level from config.yaml with the preset active.
   kConfiguredLevel,
@@ -67,10 +67,11 @@ struct QualityEffect {
   bool ignored = false;
 };
 
-// `intel_only_vulkan`: direct Vulkan on graphics that are Intel only.
+// `intel_integrated_vulkan`: direct Vulkan renders on Intel integrated
+// graphics (MachineProfile::RendersOnIntelIntegratedGraphics).
 QualityEffect ResolveGraphicsQuality(std::string_view graphics_quality,
                                      bool preset_active,
-                                     bool intel_only_vulkan);
+                                     bool intel_integrated_vulkan);
 
 enum class QualityRecommendationReason {
   // A discrete graphics card (GpuSummary::discrete): Roblox's own setting

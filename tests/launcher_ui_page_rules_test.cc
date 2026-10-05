@@ -318,7 +318,7 @@ TEST(LauncherUiPageRulesTest, FastFlagConflictsFollowTheQualitySetting) {
 TEST(LauncherUiPageRulesTest, ManagedQualityLevel) {
   FastFlagSettings settings;
   EXPECT_EQ(ManagedQualityLevel(settings), std::optional<std::string>("3"));
-  settings.intel_only_direct_vulkan = true;
+  settings.intel_integrated_vulkan = true;
   EXPECT_EQ(ManagedQualityLevel(settings), std::optional<std::string>("1"));
   settings.graphics_quality = "12";
   EXPECT_EQ(ManagedQualityLevel(settings), std::optional<std::string>("12"));

@@ -10,6 +10,7 @@
 #include "launcher_ui/pages.h"
 #include "launcher_ui/recommendations.h"
 #include "runtime/frame_rate_policy.h"
+#include "runtime/runtime_config.h"
 
 namespace mocktail::launcher_ui {
 namespace {
@@ -17,6 +18,15 @@ namespace {
 bool IsVulkanSpelling(const std::string& value) {
   return value == "direct-vulkan" || value == "vulkan" ||
          value == "native-vulkan";
+}
+
+// A colon-separated manifest list (VK_DRIVER_FILES) for reading.
+std::string DriverList(std::string list) {
+  for (std::size_t colon = list.find(':'); colon != std::string::npos;
+       colon = list.find(':', colon + 2)) {
+    list.replace(colon, 1, ", ");
+  }
+  return list;
 }
 
 // The worked example of a fully hinted row: every option described, the
@@ -71,16 +81,18 @@ GtkWidget* BuildGraphicsBackendRow(LauncherContext* context) {
   spec.hint.details_for = [](LauncherContext& ctx) {
     const MachineProfile& machine = ctx.machine();
     if (!machine.detected) return std::string();
+    const std::string gpu_preference = ctx.GameValue("engine.gpu", "auto");
+    const VulkanDriverSelection driver = machine.VulkanDriver(gpu_preference);
     std::string text;
     switch (machine.vulkan_source) {
       case VulkanDriverSource::kPinned:
       case VulkanDriverSource::kLoader:
         text += Format(_("Vulkan driver on this computer: %s"),
-                       machine.vulkan_icd.c_str());
+                       DriverList(driver.icd).c_str());
         break;
       case VulkanDriverSource::kUser:
         text += Format(_("Vulkan driver chosen by VK_DRIVER_FILES: %s"),
-                       machine.vulkan_icd.c_str());
+                       DriverList(driver.icd).c_str());
         break;
       case VulkanDriverSource::kUnknown:
         text += _("Mocktail found no Vulkan driver it recognizes; inside "
@@ -93,6 +105,41 @@ GtkWidget* BuildGraphicsBackendRow(LauncherContext* context) {
                   "and similar folders). If Roblox fails to start with "
                   "Vulkan, choose OpenGL ES.");
         break;
+    }
+    // graphics_launch_policy.cc ApplyVulkanIcdPolicy and SelectHostGpu:
+    // with several cards engine.gpu picks one; one that is not of the kind
+    // asked for stands in when that kind has no Vulkan driver.
+    if (machine.vulkan_source == VulkanDriverSource::kPinned &&
+        driver.gpu.has_value() && machine.gpu.cards.size() > 1) {
+      const std::string card = GpuCardName(*driver.gpu);
+      text += "\n";
+      text += driver.gpu->integrated
+                  ? Format(_("The game renders on the integrated %s graphics; "
+                             "engine.gpu in config.yaml chooses between the "
+                             "graphics cards."),
+                           card.c_str())
+                  : Format(_("The game renders on the discrete %s card; "
+                             "engine.gpu in config.yaml chooses between the "
+                             "graphics cards."),
+                           card.c_str());
+    }
+    if (machine.vulkan_source == VulkanDriverSource::kPinned &&
+        !driver.preferred) {
+      const std::optional<runtime::GpuPreference> configured =
+          runtime::ParseGpuPreference(gpu_preference);
+      if (configured == runtime::GpuPreference::kIntegrated) {
+        text += "\n";
+        text +=
+            _("engine.gpu asks for integrated graphics, but this "
+              "computer has none with a Vulkan driver, so the game uses "
+              "another card.");
+      } else if (configured == runtime::GpuPreference::kDiscrete) {
+        text += "\n";
+        text +=
+            _("engine.gpu asks for a discrete card, but this computer "
+              "has none with a Vulkan driver, so the game uses another "
+              "card.");
+      }
     }
     text += "\n\n";
     if (machine.angle.has_value() && machine.angle->from_environment) {
@@ -379,24 +426,27 @@ bool PresetActive(const LauncherContext& context) {
       context.GameValue("performance.multithreaded_rendering", "false"));
 }
 
-// graphics_launch_policy.cc: direct Vulkan (any spelling) on Intel-only
-// graphics publishes MOCKTAIL_GRAPHICS_QUALITY=1 while the level is default.
-bool IntelOnlyVulkan(const LauncherContext& context) {
+// graphics_launch_policy.cc: direct Vulkan (any spelling) that renders on
+// Intel integrated graphics, with the card engine.gpu picks, publishes
+// MOCKTAIL_GRAPHICS_QUALITY=1 while the level is default.
+bool IntelIntegratedVulkan(const LauncherContext& context) {
   const MachineProfile& machine = context.machine();
-  return machine.detected && machine.gpu.intel_only() &&
+  return machine.detected &&
          IsVulkanSpelling(
-             context.GameValue("graphics.backend", "direct-vulkan"));
+             context.GameValue("graphics.backend", "direct-vulkan")) &&
+         machine.RendersOnIntelIntegratedGraphics(
+             context.GameValue("engine.gpu", "auto"));
 }
 
 QualityEffect CurrentQuality(const LauncherContext& context,
                              const std::string& value) {
   return ResolveGraphicsQuality(value, PresetActive(context),
-                                IntelOnlyVulkan(context));
+                                IntelIntegratedVulkan(context));
 }
 
 std::vector<ComboOption> QualityOptions(LauncherContext& context) {
   std::vector<ComboOption> options;
-  const int default_level = IntelOnlyVulkan(context) ? 1 : 3;
+  const int default_level = IntelIntegratedVulkan(context) ? 1 : 3;
   // A level is named only while the preset forces one.
   options.push_back(
       {"default",
@@ -411,9 +461,9 @@ std::vector<ComboOption> QualityOptions(LauncherContext& context) {
                _("No level is forced while Mocktail's performance preset is "
                  "off"));
          }
-         return IntelOnlyVulkan(ctx)
+         return IntelIntegratedVulkan(ctx)
                     ? std::string(_("Level 1 of 21: Mocktail's choice for "
-                                    "Intel graphics with Vulkan"))
+                                    "Intel integrated graphics with Vulkan"))
                     : std::string(_("Level 3 of 21, forced by Mocktail's "
                                     "performance preset"));
        },
@@ -485,11 +535,12 @@ GtkWidget* BuildGraphicsQualityRow(LauncherContext* context,
         "with Multithreaded rendering. Otherwise Roblox's own setting always "
         "decides.") +
       "\n\n" +
-      // graphics_launch_policy.cc: MOCKTAIL_GRAPHICS_QUALITY=1 on Intel-only
-      // machines with direct Vulkan.
-      _("• Mocktail default: level 3, or level 1 with Vulkan on computers "
-        "that have only Intel graphics. Roblox's in-game quality slider then "
-        "has no effect.") +
+      // graphics_launch_policy.cc: MOCKTAIL_GRAPHICS_QUALITY=1 when direct
+      // Vulkan renders on Intel integrated graphics
+      // (RendersOnIntelIntegratedGraphics, with the card engine.gpu picks).
+      _("• Mocktail default: level 3, or level 1 when Vulkan renders on "
+        "Intel integrated graphics. Roblox's in-game quality slider then has "
+        "no effect.") +
       "\n\n" +
       // performance_policy.cc: "manual" leaves out only
       // FIntDebugFRMQualityLevelOverride; the rest of the preset stays.
@@ -521,9 +572,10 @@ GtkWidget* BuildGraphicsQualityRow(LauncherContext* context,
       text = Format(_("With the current settings Roblox runs at level %d."),
                     effect.level);
     }
-    const std::string note = ctx.UnfollowedOverrideNote(
-        {"performance.physics_worker_mode",
-         "performance.multithreaded_rendering", "graphics.backend"});
+    const std::string note =
+        ctx.UnfollowedOverrideNote({"performance.physics_worker_mode",
+                                    "performance.multithreaded_rendering",
+                                    "graphics.backend", "engine.gpu"});
     if (!note.empty()) text += "\n\n" + note;
     return text;
   };

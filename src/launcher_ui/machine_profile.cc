@@ -9,7 +9,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <thread>
 #include <utility>
@@ -82,60 +84,35 @@ bool ParseHex(const std::string& text, unsigned int* value) {
   if (text.empty()) return false;
   char* end = nullptr;
   const unsigned long parsed = std::strtoul(text.c_str(), &end, 16);
-  if (end == text.c_str() || parsed > 0xffffUL) return false;
+  if (end == text.c_str() || *end != '\0' || parsed > 0xffffUL) return false;
   *value = static_cast<unsigned int>(parsed);
   return true;
 }
 
-// amdgpu reports an APU's carve-out from system memory as its VRAM: a few
-// hundred MiB to 2 GiB on most laptops. Discrete cards have more.
-constexpr std::uint64_t kDiscreteVramBytes = 2ULL * 1024U * 1024U * 1024U;
-// Intel's integrated graphics are always device 2 on the root bus.
-constexpr std::string_view kIntelIntegratedSlot = "0000:00:02.0";
-
-// PCI_SLOT_NAME from the device's uevent ("0000:00:02.0"); empty when
-// unknown.
-std::string PciSlot(const std::filesystem::path& device) {
-  std::ifstream input(device / "uevent");
-  constexpr std::string_view kKey = "PCI_SLOT_NAME=";
-  std::string line;
-  while (std::getline(input, line)) {
-    if (line.compare(0, kKey.size(), kKey) == 0) {
-      return line.substr(kKey.size());
-    }
-  }
-  return {};
-}
-
 GpuSummary DetectGpus(const std::filesystem::path& root) {
   GpuSummary gpus;
+  gpus.cards = runtime::DetectHostGpus(Under(root, "/sys/class/drm"));
+  for (const runtime::HostGpu& card : gpus.cards) {
+    if (card.vendor == kNvidiaPciVendor) {
+      gpus.nvidia = true;
+    } else if (card.vendor == kAmdPciVendor) {
+      gpus.amd = true;
+      gpus.amd_discrete = gpus.amd_discrete || !card.integrated;
+    } else if (card.vendor == kIntelPciVendor) {
+      gpus.intel = true;
+      gpus.intel_discrete = gpus.intel_discrete || !card.integrated;
+    }
+  }
+  // DetectHostGpus leaves out cards no Vulkan driver of Mocktail's runs.
   for (int index = 0; index < 16; ++index) {
-    const std::filesystem::path device =
-        Under(root, "/sys/class/drm/card" + std::to_string(index) + "/device");
-    std::ifstream input(device / "vendor");
+    std::ifstream input(Under(
+        root,
+        "/sys/class/drm/card" + std::to_string(index) + "/device/vendor"));
     std::string raw;
     unsigned int vendor = 0;
-    if (!(input >> raw) || !ParseHex(raw, &vendor)) {
-      continue;
-    }
-    if (vendor == 0x10de) {
-      gpus.nvidia = true;
-    } else if (vendor == 0x1002) {
-      gpus.amd = true;
-      // Without the amdgpu file (the old radeon driver) the card counts as
-      // discrete, as before the check existed.
-      std::ifstream memory(device / "mem_info_vram_total");
-      std::uint64_t vram = 0;
-      if (!(memory >> vram) || vram >= kDiscreteVramBytes) {
-        gpus.amd_discrete = true;
-      }
-    } else if (vendor == 0x8086) {
-      gpus.intel = true;
-      const std::string slot = PciSlot(device);
-      if (!slot.empty() && slot != kIntelIntegratedSlot) {
-        gpus.intel_discrete = true;
-      }
-    } else {
+    if ((input >> raw) && ParseHex(raw, &vendor) &&
+        vendor != kNvidiaPciVendor && vendor != kAmdPciVendor &&
+        vendor != kIntelPciVendor) {
       gpus.other = true;
     }
   }
@@ -158,45 +135,22 @@ std::uint64_t DetectMemory(const std::filesystem::path& root) {
   return 0;
 }
 
-// graphics_launch_policy.cc EnvIsOff.
-bool SwitchedOff(const runtime::Environment& environment,
-                 std::string_view name) {
-  const std::optional<std::string> value = environment.Get(name);
-  return value.has_value() &&
-         (*value == "0" || *value == "off" || *value == "igpu");
-}
-
-// The manifest graphics_launch_policy.cc SelectHardwareIcd pins, step by
-// step: the discrete GPU unless DRI_PRIME or __NV_PRIME_RENDER_OFFLOAD
-// turn offloading off, NVIDIA before nouveau, then Intel.
-std::string SelectPinnedIcd(const std::vector<std::filesystem::path>& directories,
-                            const GpuSummary& gpus,
-                            const runtime::Environment& environment) {
-  const auto find = [&directories](std::string_view needle) {
-    return runtime::SelectVulkanIcdManifest(directories, needle);
-  };
-  const auto nvidia = [&find] {
-    std::string icd = find("nvidia_icd");
-    return icd.empty() ? find("nouveau_icd") : icd;
-  };
-  const bool prefer_discrete =
-      !SwitchedOff(environment, "DRI_PRIME") &&
-      !SwitchedOff(environment, "__NV_PRIME_RENDER_OFFLOAD");
-  if (prefer_discrete && gpus.nvidia) {
-    std::string icd = nvidia();
-    if (!icd.empty()) return icd;
+// graphics_launch_policy.cc FindLoaderSelectedGpu: the detected card
+// VK_LOADER_DEVICE_SELECT ("0xVVVV:0xDDDD") names, if any.
+std::optional<runtime::HostGpu> FindLoaderSelectedGpu(
+    const std::vector<runtime::HostGpu>& cards, std::string_view select) {
+  const std::size_t colon = select.find(':');
+  unsigned int vendor = 0;
+  unsigned int device = 0;
+  if (colon == std::string_view::npos ||
+      !ParseHex(std::string(select.substr(0, colon)), &vendor) ||
+      !ParseHex(std::string(select.substr(colon + 1)), &device)) {
+    return std::nullopt;
   }
-  if (prefer_discrete && gpus.amd) {
-    std::string icd = find("radeon_icd");
-    if (!icd.empty()) return icd;
+  for (const runtime::HostGpu& card : cards) {
+    if (card.vendor == vendor && card.device == device) return card;
   }
-  if (gpus.intel) {
-    std::string icd = find("intel_icd");
-    return icd.empty() ? find("intel_hasvk_icd") : icd;
-  }
-  if (gpus.nvidia) return nvidia();
-  if (gpus.amd) return find("radeon_icd");
-  return {};
+  return std::nullopt;
 }
 
 std::vector<std::filesystem::path> SplitPaths(std::string_view list) {
@@ -397,6 +351,83 @@ int MonitorInfo::PixelHeight() const {
   return static_cast<int>(std::lround(height * scale));
 }
 
+std::string VulkanDriverSelection::FileNames() const {
+  std::string names;
+  std::string_view list = icd;
+  while (!list.empty()) {
+    const std::size_t colon = list.find(':');
+    const std::string_view entry = list.substr(0, colon);
+    if (!entry.empty()) {
+      if (!names.empty()) names += ", ";
+      names += std::filesystem::path(entry).filename().string();
+    }
+    if (colon == std::string_view::npos) break;
+    list.remove_prefix(colon + 1);
+  }
+  return names;
+}
+
+runtime::GpuPreference MachineProfile::ResolvedGpuPreference(
+    std::string_view gpu_preference) const {
+  const std::optional<runtime::GpuPreference> configured =
+      runtime::ParseGpuPreference(gpu_preference);
+  if (!configured.has_value() || *configured == runtime::GpuPreference::kAuto) {
+    return automatic_gpu;
+  }
+  return *configured;
+}
+
+VulkanDriverSelection MachineProfile::VulkanDriver(
+    std::string_view gpu_preference) const {
+  VulkanDriverSelection driver;
+  switch (vulkan_source) {
+    case VulkanDriverSource::kUser:
+      driver.icd = user_vulkan_drivers;
+      // A memory-limit re-exec inherits the pinned drivers and names the
+      // card in VK_LOADER_DEVICE_SELECT (graphics_launch_policy.cc).
+      driver.gpu = FindLoaderSelectedGpu(gpu.cards, loader_device_select);
+      break;
+    case VulkanDriverSource::kPinned: {
+      const runtime::HostGpuSelection& selection =
+          ResolvedGpuPreference(gpu_preference) ==
+                  runtime::GpuPreference::kIntegrated
+              ? integrated_selection
+              : discrete_selection;
+      driver.icd = selection.icd;
+      driver.gpu = selection.gpu;
+      driver.preferred = selection.preferred;
+      break;
+    }
+    case VulkanDriverSource::kLoader:
+      driver.icd = loader_icd;
+      break;
+    case VulkanDriverSource::kNone:
+    case VulkanDriverSource::kUnknown:
+      break;
+  }
+  return driver;
+}
+
+bool MachineProfile::RendersOnIntelIntegratedGraphics(
+    std::string_view gpu_preference) const {
+  return runtime::RendersOnIntelIntegratedGraphics(
+      gpu.cards, VulkanDriver(gpu_preference).gpu);
+}
+
+std::string GpuCardName(const runtime::HostGpu& card) {
+  switch (card.vendor) {
+    case kNvidiaPciVendor:
+      return "NVIDIA";
+    case kAmdPciVendor:
+      return "AMD";
+    case kIntelPciVendor:
+      return card.integrated ? "Intel" : "Intel Arc";
+    default:
+      break;
+  }
+  return {};
+}
+
 std::string MachineProfile::AutomaticDisplayServer(
     std::string_view backend) const {
   window::VideoDriverPolicyInput input;
@@ -570,26 +601,32 @@ MachineProfile DetectMachineProfile(const runtime::Environment& environment,
       HasGameModeLibrary(probe.library_directories, probe.root);
   profile.angle = FindAngle(environment, probe.root);
   // graphics_launch_policy.cc ApplyVulkanIcdPolicy: a driver list the user
-  // set is kept; otherwise Mocktail pins the GPU's manifest, or leaves the
-  // choice to the loader when it recognizes none.
+  // set is kept; otherwise Mocktail pins the drivers of the card engine.gpu
+  // asks for, or leaves the choice to the loader when no card has one.
   const std::string user_files = environment.GetOr("VK_DRIVER_FILES", "");
   const std::string user_icds = environment.GetOr("VK_ICD_FILENAMES", "");
+  profile.user_vulkan_drivers = user_files.empty() ? user_icds : user_files;
+  profile.loader_device_select =
+      environment.GetOr("VK_LOADER_DEVICE_SELECT", "");
+  profile.automatic_gpu = runtime::ResolveGpuPreference(
+      runtime::GpuPreference::kAuto, environment.GetOr("DRI_PRIME", ""),
+      environment.GetOr("__NV_PRIME_RENDER_OFFLOAD", ""));
   std::vector<std::filesystem::path> icd_directories;
   for (const std::filesystem::path& directory : probe.icd_directories) {
     icd_directories.push_back(Under(probe.root, directory));
   }
-  if (!user_files.empty() || !user_icds.empty()) {
-    profile.vulkan_icd = user_files.empty() ? user_icds : user_files;
+  profile.discrete_selection = runtime::SelectHostGpu(
+      profile.gpu.cards, runtime::GpuPreference::kDiscrete, icd_directories);
+  profile.integrated_selection = runtime::SelectHostGpu(
+      profile.gpu.cards, runtime::GpuPreference::kIntegrated, icd_directories);
+  if (!profile.user_vulkan_drivers.empty()) {
     profile.vulkan_source = VulkanDriverSource::kUser;
-  } else if (std::string pinned =
-                 SelectPinnedIcd(icd_directories, profile.gpu, environment);
-             !pinned.empty()) {
-    profile.vulkan_icd = std::move(pinned);
+  } else if (profile.discrete_selection.gpu.has_value()) {
     profile.vulkan_source = VulkanDriverSource::kPinned;
   } else if (std::string found =
                  FindLoaderIcd(LoaderIcdLocations(environment), probe.root);
              !found.empty()) {
-    profile.vulkan_icd = std::move(found);
+    profile.loader_icd = std::move(found);
     profile.vulkan_source = VulkanDriverSource::kLoader;
   } else {
     profile.vulkan_source = profile.flatpak ? VulkanDriverSource::kUnknown

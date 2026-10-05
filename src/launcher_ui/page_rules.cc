@@ -302,13 +302,14 @@ std::optional<std::string> ManagedQualityLevel(
   }
   // performance_policy.cc: "manual" (and its "auto"/"0" spellings) leaves
   // the slider to Roblox; a level is forced as given; the default is 3,
-  // or 1 where graphics_launch_policy.cc publishes it for Intel-only GPUs.
+  // or 1 where graphics_launch_policy.cc publishes it for direct Vulkan on
+  // Intel integrated graphics.
   const std::string& quality = settings.graphics_quality;
   if (quality == "manual" || quality == "auto" || quality == "0") {
     return std::nullopt;
   }
   if (IsDigits(quality)) return quality;
-  return std::string(settings.intel_only_direct_vulkan ? "1" : "3");
+  return std::string(settings.intel_integrated_vulkan ? "1" : "3");
 }
 
 std::vector<launcher::FastFlagConflict> FindFastFlagConflicts(

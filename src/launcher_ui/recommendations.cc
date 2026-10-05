@@ -64,7 +64,7 @@ std::optional<int> ParseQualityLevel(std::string_view value) {
 
 QualityEffect ResolveGraphicsQuality(std::string_view graphics_quality,
                                      bool preset_active,
-                                     bool intel_only_vulkan) {
+                                     bool intel_integrated_vulkan) {
   QualityEffect effect;
   if (graphics_quality == "manual") return effect;
   const std::optional<int> level = ParseQualityLevel(graphics_quality);
@@ -80,10 +80,10 @@ QualityEffect ResolveGraphicsQuality(std::string_view graphics_quality,
     return effect;
   }
   // "default" (or absent): MOCKTAIL_GRAPHICS_QUALITY stays unset, so the
-  // preset uses "3"; graphics_launch_policy.cc publishes "1" first for
-  // direct Vulkan on Intel-only graphics.
+  // preset uses "3"; graphics_launch_policy.cc publishes "1" first when
+  // direct Vulkan renders on Intel integrated graphics.
   effect.source = QualitySource::kMocktailDefault;
-  effect.level = intel_only_vulkan ? 1 : 3;
+  effect.level = intel_integrated_vulkan ? 1 : 3;
   return effect;
 }
 
