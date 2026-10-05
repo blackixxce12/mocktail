@@ -344,7 +344,8 @@ bool IsActionGroup(const std::string& group) {
 
 // Keys that may differ without the user's copy adding anything: the Exec
 // being cleaned, the marker the packaged entry carries for
-// register_url_handler.sh, and desktop actions the copy predates.
+// register_url_handler.sh, and desktop actions and translations the copy
+// predates.
 bool IgnorableMainKey(const std::string& key) {
   return key == "Exec" || key == "X-Mocktail-Managed";
 }
@@ -379,6 +380,10 @@ bool AddsNothingToSystemEntry(const KeyFile& user, const KeyFile& system,
         continue;
       }
       if (group == kMainGroup && (IgnorableMainKey(key) || key == "Actions")) {
+        continue;
+      }
+      // A localized key ("Comment[ru]") added to the packaged entry later.
+      if (key.find('[') != std::string::npos) {
         continue;
       }
       return false;

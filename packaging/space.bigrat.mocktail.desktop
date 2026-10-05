@@ -2,7 +2,9 @@
 Type=Application
 Name=Mocktail
 GenericName=Roblox Player
+GenericName[ru]=Клиент Roblox
 Comment=Play Roblox on Linux
+Comment[ru]=Играйте в Roblox на Linux
 Exec=mocktail %u
 Icon=space.bigrat.mocktail
 StartupWMClass=space.bigrat.mocktail

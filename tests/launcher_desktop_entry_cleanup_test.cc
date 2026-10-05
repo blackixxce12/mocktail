@@ -160,6 +160,9 @@ TEST_F(LauncherDesktopEntryCleanupTest, DerivesXdgPaths) {
 }
 
 TEST_F(LauncherDesktopEntryCleanupTest, PlansToDeleteACopyThatOnlyAddsEnv) {
+  // The packaged entry has translations (Comment[ru], ...) the old copy
+  // lacks; they do not make the copy custom.
+  ASSERT_NE(PackagedEntry().find("\nComment[ru]="), std::string::npos);
   WriteFile(paths_.user_file, kUserEntry);
   WriteFile(system_file_, PackagedEntry());
   DesktopEntryInspection inspection;
