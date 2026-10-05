@@ -14,7 +14,11 @@ _vkh_commit=8d6039a455a7ecc7d2a592ff97f62db4e59b70bf # third_party/Vulkan-Header
 pkgdesc='Android x86-64 Roblox compatibility runtime for Linux (unofficial Mocktail fork with a settings window and fixes)'
 arch=('x86_64')
 url='https://github.com/blackixxce12/mocktail'
-license=('Apache-2.0')
+# Mocktail is Apache-2.0. The binaries also carry third_party/mcpelauncher-linker
+# (MIT; its Android bionic linker sources are BSD-2-Clause and Apache-2.0, and
+# strlcpy/strlcat from OpenBSD are ISC) and an ETC decoder adapted from
+# AssetStudio (MIT); package() installs their notices.
+license=('Apache-2.0' 'BSD-2-Clause' 'ISC' 'MIT')
 depends=(
   'capstone'
   'curl'
@@ -100,6 +104,25 @@ build() {
 
 package() {
   DESTDIR="${pkgdir}" cmake --install build
-  install -Dm644 mocktail/LICENSE \
-    "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+
+  local licenses="${pkgdir}/usr/share/licenses/${pkgname}"
+  local linker=mocktail/third_party/mcpelauncher-linker
+  install -Dm644 mocktail/LICENSE "${licenses}/LICENSE"
+  install -Dm644 "${linker}/LICENSE" \
+    "${licenses}/mcpelauncher-linker/LICENSE"
+  install -Dm644 "${linker}/bionic/linker/NOTICE" \
+    "${licenses}/mcpelauncher-linker/bionic-linker-NOTICE"
+  install -Dm644 "${linker}/bionic/libc/NOTICE" \
+    "${licenses}/mcpelauncher-linker/bionic-libc-NOTICE"
+  install -Dm644 "${linker}/core/NOTICE" \
+    "${licenses}/mcpelauncher-linker/core-NOTICE"
+
+  # The AssetStudio MIT notice lives in the comment above the decoder.
+  local notice="${licenses}/AssetStudio-ETC-decoder"
+  sed -n '/^\/\/ ETC decoder adapted from AssetStudio/,/WITHOUT WARRANTY/{s|^// \{0,1\}||;p}' \
+    mocktail/src/libc_shim/vulkan_etc1_sky_transcoder.cc >"${notice}"
+  if ! grep -q 'Permission is hereby granted' "${notice}"; then
+    error 'no AssetStudio notice in src/libc_shim/vulkan_etc1_sky_transcoder.cc'
+    return 1
+  fi
 }

@@ -5,6 +5,9 @@ pkgbase = mocktail-plus
 	url = https://github.com/blackixxce12/mocktail
 	arch = x86_64
 	license = Apache-2.0
+	license = BSD-2-Clause
+	license = ISC
+	license = MIT
 	makedepends = binutils
 	makedepends = cmake>=3.20
 	makedepends = gettext
