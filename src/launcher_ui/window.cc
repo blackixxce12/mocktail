@@ -464,6 +464,11 @@ GtkWidget* LauncherWindow::BuildLaunchBar() {
 
   status_label_ = gtk_label_new("");
   gtk_label_set_xalign(GTK_LABEL(status_label_), 0.0F);
+  // Two lines before an ellipsis: next to Save and Play in a narrow window
+  // one line left "7 не…" of "7 unsaved changes" (see Refresh()).
+  gtk_label_set_wrap(GTK_LABEL(status_label_), TRUE);
+  gtk_label_set_wrap_mode(GTK_LABEL(status_label_), PANGO_WRAP_WORD_CHAR);
+  gtk_label_set_lines(GTK_LABEL(status_label_), 2);
   gtk_label_set_ellipsize(GTK_LABEL(status_label_), PANGO_ELLIPSIZE_END);
   gtk_widget_set_hexpand(status_label_, TRUE);
   gtk_widget_add_css_class(status_label_, "dim-label");
@@ -518,9 +523,17 @@ void LauncherWindow::Refresh() {
   adw_banner_set_revealed(ADW_BANNER(banner_), banner != nullptr);
 
   const std::string status = context_->StatusText();
-  gtk_label_set_text(GTK_LABEL(status_label_), status.c_str());
-  gtk_widget_set_tooltip_text(status_label_, status.c_str());
   const int unsaved = context_->unsaved_count();
+  // In a narrow window Save and Play leave the status about 70 px, too
+  // little for "7 несохранённых изменений" even on two lines ("7 нес…").
+  // The visible Save button already says there are unsaved changes, so the
+  // count stays in the tooltip; anything else the status says is shown.
+  const bool only_count = narrow_ && unsaved > 0 &&
+                          context_->problem_count() == 0 &&
+                          !context_->read_only();
+  gtk_label_set_text(GTK_LABEL(status_label_),
+                     only_count ? "" : status.c_str());
+  gtk_widget_set_tooltip_text(status_label_, status.c_str());
   gtk_widget_set_visible(save_button_, unsaved > 0);
   GAction* save = g_action_map_lookup_action(G_ACTION_MAP(window_), "save");
   if (save != nullptr) {

@@ -874,16 +874,30 @@ class ComboBinding final : public RowBinding {
   // (level 3)") even in a wide window. In the narrow layout a long value
   // gives way, down to kMinimumValueChars, instead of squeezing the title
   // to a letter per line; labels up to that length ("Автоматически")
-  // never shrink. The full value is in the tooltip.
+  // never shrink. What does not fit goes on a second line rather than
+  // into an ellipsis: at 460 px a single line cut "ПК (Windows …" and
+  // "Стандарт (уро…". Only a value longer than two lines (an audio
+  // device's name) is still cut; the full value is in the tooltip.
   void FitValueLabel() {
     constexpr long kMinimumValueChars = 14;
     if (value_label_ == nullptr) return;
     GtkLabel* label = GTK_LABEL(value_label_);
     if (!context_->narrow()) {
+      gtk_label_set_wrap(label, FALSE);
+      gtk_label_set_lines(label, -1);
+      gtk_label_set_max_width_chars(label, -1);
       gtk_label_set_ellipsize(label, PANGO_ELLIPSIZE_NONE);
       SetMinimumTextWidth(value_label_, 0);
       return;
     }
+    // The combo row's inline list sizes the label at its natural width, so
+    // that width (max-width-chars) is where it wraps; a label wrapped only
+    // by a narrower allocation kept the height of one line.
+    gtk_label_set_wrap(label, TRUE);
+    gtk_label_set_wrap_mode(label, PANGO_WRAP_WORD);
+    gtk_label_set_max_width_chars(label, kMinimumValueChars + 2);
+    gtk_label_set_lines(label, 2);
+    gtk_label_set_justify(label, GTK_JUSTIFY_RIGHT);
     gtk_label_set_ellipsize(label, PANGO_ELLIPSIZE_END);
     SetMinimumTextWidth(value_label_, kMinimumValueChars);
   }
