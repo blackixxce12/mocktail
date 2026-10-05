@@ -70,6 +70,13 @@ struct EnvImportReport {
 EnvImportReport ImportEnvOverrides(const EnvOverrides& overrides,
                                    SettingsDraft* draft);
 
+// The draft holds every value ImportEnvOverrides would move into it. Once
+// it does not (a discard or a reload dropped them), leaving the variables
+// out of the launch would start Roblox with neither their values nor
+// saved ones.
+bool DraftHoldsEnvOverrides(const EnvOverrides& overrides,
+                            const SettingsDraft& draft);
+
 }  // namespace mocktail::launcher_ui
 
 #endif  // MOCKTAIL_LAUNCHER_UI_ENV_OVERRIDES_H_

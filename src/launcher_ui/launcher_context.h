@@ -284,6 +284,10 @@ class LauncherContext {
   void RefreshShell();
   void UpdateConfigBanners();
   void UpdateEnvironmentBanner();
+  // After Discard, Reload or a restore: gives the variables back to this
+  // launch when the moved values went with the rest
+  // (DraftHoldsEnvOverrides).
+  void ForgetDroppedMove();
   void ShowConfigErrorDialog();
   // A change the draft refused, named by its row's title.
   void ToastRefusedChange(std::string_view key, const std::string& error);

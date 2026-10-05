@@ -549,6 +549,7 @@ void LauncherContext::Discard() {
   for (const DirtySource& source : dirty_sources_) {
     if (source.discard) source.discard();
   }
+  ForgetDroppedMove();
   NotifySettingChanged("");
 }
 
@@ -561,6 +562,7 @@ void LauncherContext::Reload() {
     }
     ClearBanner(BannerKind::kChangedOnDisk);
     UpdateConfigBanners();
+    ForgetDroppedMove();
     NotifySettingChanged("");
   };
   if (unsaved_count() == 0 || window() == nullptr) {
@@ -675,6 +677,14 @@ void LauncherContext::MoveEnvironmentIntoSettings() {
                moved));
 }
 
+void LauncherContext::ForgetDroppedMove() {
+  if (!ignore_environment_ || DraftHoldsEnvOverrides(env_, draft_)) return;
+  // "play ignore-env" would now start Roblox with neither the variables'
+  // values nor saved ones (main.cc RemoveUserManagedEnvironment).
+  ignore_environment_ = false;
+  UpdateEnvironmentBanner();
+}
+
 // ---- banners and dialogs
 // ------------------------------------------------------------
 
@@ -781,6 +791,7 @@ void LauncherContext::ShowConfigErrorDialog() {
                    return;
                  }
                  UpdateConfigBanners();
+                 ForgetDroppedMove();
                  NotifySettingChanged("");
                  Toast(_("config.yaml now holds Mocktail's defaults"));
                }},
@@ -794,6 +805,7 @@ void LauncherContext::ShowConfigErrorDialog() {
                    return;
                  }
                  UpdateConfigBanners();
+                 ForgetDroppedMove();
                  NotifySettingChanged("");
                  Toast(_("config.yaml restored from the backup"));
                }}});

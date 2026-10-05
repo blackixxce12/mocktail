@@ -57,6 +57,7 @@ class Selftest {
   guint ChangedOnDisk();
   guint OpenEnvironmentDialog();
   guint RenderEnvironmentDialog();
+  guint MoveThenDropMovedValues();
   guint MoveEnvironment();
   // Sets every kind of Roblox override and opens the overview.
   guint ShowRobloxDecides();

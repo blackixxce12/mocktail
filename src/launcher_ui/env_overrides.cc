@@ -140,4 +140,14 @@ EnvImportReport ImportEnvOverrides(const EnvOverrides& overrides,
   return report;
 }
 
+bool DraftHoldsEnvOverrides(const EnvOverrides& overrides,
+                            const SettingsDraft& draft) {
+  return std::all_of(
+      overrides.all().begin(), overrides.all().end(),
+      [&draft](const EnvOverride& entry) {
+        return entry.shadowed || !entry.imported.has_value() ||
+               draft.Get(entry.yaml_key) == entry.imported;
+      });
+}
+
 }  // namespace mocktail::launcher_ui

@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <iterator>
 #include <map>
 #include <nlohmann/json.hpp>
 #include <string>
@@ -237,6 +238,7 @@ void Selftest::Start() {
   steps_.push_back([this] { return ChangedOnDisk(); });
   steps_.push_back([this] { return OpenEnvironmentDialog(); });
   steps_.push_back([this] { return RenderEnvironmentDialog(); });
+  steps_.push_back([this] { return MoveThenDropMovedValues(); });
   steps_.push_back([this] { return MoveEnvironment(); });
   // What Mocktail decides and what Roblox decides: every kind of override
   // at once, with a level above 3 under the performance preset, shown on
@@ -890,6 +892,61 @@ guint Selftest::RenderEnvironmentDialog() {
     rendered_.push_back(path.filename().string() + " " + detail);
   }
   adw_dialog_force_close(dialog);
+  return kSettleMilliseconds;
+}
+
+// Moving the variables and then dropping the moved values (Discard, as
+// Reset All's Undo and closing with Discard do, or Reload after an edit
+// outside) must give the variables back to this launch: no setting holds
+// their values any more, and "play ignore-env" would start Roblox with
+// neither. config.yaml holds graphics.backend: opengl here (SaveStep); the
+// variable says direct-vulkan.
+guint Selftest::MoveThenDropMovedValues() {
+  const auto expect_variables_back = [this](const std::string& after) {
+    if (context_->ignoring_environment()) {
+      Error("the variables stayed left out of the launch after " + after);
+    }
+    BannerKind kind = BannerKind::kConfigError;
+    const Banner* banner = context_->TopBanner(&kind);
+    if (banner == nullptr || kind != BannerKind::kEnvironmentOverrides) {
+      Error("the environment banner did not come back after " + after);
+    }
+  };
+  if (context_->read_only()) return 50;
+  context_->MoveEnvironmentIntoSettings();
+  if (!context_->ignoring_environment()) {
+    Error("moving the environment did not mark it ignored");
+  }
+  context_->Discard();
+  expect_variables_back("Discard");
+
+  context_->MoveEnvironmentIntoSettings();
+  if (!context_->Save()) Error("Save after moving the variables failed");
+  std::string bytes;
+  {
+    std::ifstream input(context_->config_file(), std::ios::binary);
+    bytes.assign(std::istreambuf_iterator<char>(input),
+                 std::istreambuf_iterator<char>());
+  }
+  const std::size_t moved = bytes.find("backend: direct-vulkan");
+  if (moved == std::string::npos) {
+    Error("the moved value is not in the saved config.yaml");
+    return 50;
+  }
+  bytes.replace(moved, std::string("backend: direct-vulkan").size(),
+                "backend: opengl");
+  std::string error;
+  if (!WriteFile(context_->config_file(), bytes, &error)) {
+    Error(error);
+    return 50;
+  }
+  context_->Reload();
+  expect_variables_back("Reload");
+  if (context_->Value("graphics.backend") !=
+      std::optional<std::string>("opengl")) {
+    Error("Reload did not read the edited config.yaml");
+  }
+  Note("moved_values_dropped_checked", "true");
   return kSettleMilliseconds;
 }
 

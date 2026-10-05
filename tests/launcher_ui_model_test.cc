@@ -398,6 +398,27 @@ TEST(EnvOverridesTest, MovesTheEngineVariablesIntoTheDraft) {
   EXPECT_TRUE(draft.Validate(&error)) << error;
 }
 
+// After "Move into settings", Discard and Reload drop the moved values
+// again; only while the draft still holds them may mocktail leave the
+// variables out of the launch.
+TEST(EnvOverridesTest, TellsWhetherTheDraftStillHoldsTheMovedValues) {
+  SettingsDraft draft;
+  draft.LoadBytes(kUserConfig);
+  const MapEnvironment environment({
+      {"MOCKTAIL_WIN_TITLE", "Roblox: Mocktail #1"},
+      // No config.yaml form: only left out of the launch, never moved.
+      {"SDL_VIDEODRIVER", "kmsdrm"},
+  });
+  const EnvOverrides overrides = EnvOverrides::FromNames(
+      "MOCKTAIL_WIN_TITLE,SDL_VIDEODRIVER", environment);
+  EXPECT_FALSE(DraftHoldsEnvOverrides(overrides, draft));
+  ImportEnvOverrides(overrides, &draft);
+  EXPECT_TRUE(DraftHoldsEnvOverrides(overrides, draft));
+  draft.Discard();
+  EXPECT_FALSE(DraftHoldsEnvOverrides(overrides, draft));
+  EXPECT_TRUE(DraftHoldsEnvOverrides(EnvOverrides(), draft));
+}
+
 TEST(EnvOverridesTest, RedactsCredentialsInUrls) {
   EXPECT_EQ(RedactEnvironmentValue("http://user:secret@proxy:8080/x"),
             "http://***@proxy:8080/x");
