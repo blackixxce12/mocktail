@@ -687,22 +687,19 @@ class ComboBinding final : public RowBinding {
   // ellipsizing label lost the end of a long value ("Mocktail default
   // (level 3)") even in a wide window. In the narrow layout a long value
   // gives way, down to kMinimumValueChars, instead of squeezing the title
-  // to a letter per line; labels up to that length never shrink. The full
-  // value is in the tooltip.
+  // to a letter per line; labels up to that length ("Автоматически")
+  // never shrink. The full value is in the tooltip.
   void FitValueLabel() {
-    constexpr glong kMinimumValueChars = 12;
+    constexpr long kMinimumValueChars = 14;
     if (value_label_ == nullptr) return;
     GtkLabel* label = GTK_LABEL(value_label_);
     if (!context_->narrow()) {
       gtk_label_set_ellipsize(label, PANGO_ELLIPSIZE_NONE);
-      gtk_label_set_width_chars(label, -1);
+      SetMinimumTextWidth(value_label_, 0);
       return;
     }
     gtk_label_set_ellipsize(label, PANGO_ELLIPSIZE_END);
-    gtk_label_set_width_chars(
-        label, static_cast<int>(std::min(
-                   g_utf8_strlen(gtk_label_get_text(label), -1),
-                   kMinimumValueChars)));
+    SetMinimumTextWidth(value_label_, kMinimumValueChars);
   }
 
   static void SetupListItem(GtkSignalListItemFactory*, GObject* object,
@@ -999,6 +996,23 @@ GtkWidget* NewEnvBadge() {
       GTK_ACCESSIBLE(badge), GTK_ACCESSIBLE_PROPERTY_LABEL,
       _("Overridden by an environment variable"), -1);
   return badge;
+}
+
+void SetMinimumTextWidth(GtkWidget* label, long characters) {
+  gtk_label_set_width_chars(GTK_LABEL(label), -1);
+  if (characters <= 0) {
+    gtk_widget_set_size_request(label, -1, -1);
+    return;
+  }
+  const char* text = gtk_label_get_text(GTK_LABEL(label));
+  const char* end = g_utf8_offset_to_pointer(
+      text, std::min<glong>(g_utf8_strlen(text, -1), characters));
+  const std::string shown(text, end);
+  PangoLayout* layout = gtk_widget_create_pango_layout(label, shown.c_str());
+  int width = 0;
+  pango_layout_get_pixel_size(layout, &width, nullptr);
+  g_object_unref(layout);
+  gtk_widget_set_size_request(label, width, -1);
 }
 
 GtkWidget* NewWarningLabel(const std::string& text) {

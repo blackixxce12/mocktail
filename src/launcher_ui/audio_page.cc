@@ -232,18 +232,14 @@ struct CurrentDeviceLabel {
   LauncherContext::ListenerId layout = 0;
   GtkWidget* label = nullptr;  // weak
 
-  // A name of up to 22 characters ("System default", "Системное по
-  // умолчанию") asks for its whole width in the wide layout: GtkBox shares
-  // spare width equally between the title column and the suffixes, so it
-  // was cut even in a wide window. The narrow layout keeps 12 characters,
-  // room for a recognizable name, and leaves the rest to the title.
+  // A name of up to 22 characters asks for its whole width in the wide
+  // layout: GtkBox shares spare width equally between the title column and
+  // the suffixes, so it was cut even in a wide window. The narrow layout
+  // keeps 14 characters, room for a recognizable name and for "System
+  // default" ("Как в системе"), and leaves the rest to the title.
   void Fit() const {
     if (label == nullptr) return;
-    const glong limit = context->narrow() ? 12 : 22;
-    gtk_label_set_width_chars(
-        GTK_LABEL(label),
-        static_cast<int>(std::min(
-            g_utf8_strlen(gtk_label_get_text(GTK_LABEL(label)), -1), limit)));
+    SetMinimumTextWidth(label, context->narrow() ? 14 : 22);
   }
 };
 

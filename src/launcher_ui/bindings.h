@@ -200,6 +200,12 @@ GtkWidget* NewEnvBadge();
 // An inline warning label (style class launcher-warning): wrapped text in
 // the theme's warning color with a warning icon, for use outside rows.
 GtkWidget* NewWarningLabel(const std::string& text);
+// Gives `label` the width its first `characters` characters take as they
+// render (all of its text when shorter) as its minimum, so a value up to
+// that length is never ellipsized. gtk_label_set_width_chars() counts an
+// average Latin character, which cut Cyrillic values of that length
+// ("Автоматичес…"). 0 removes the minimum.
+void SetMinimumTextWidth(GtkWidget* label, long characters);
 
 }  // namespace mocktail::launcher_ui
 
