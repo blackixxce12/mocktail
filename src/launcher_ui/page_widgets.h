@@ -25,7 +25,7 @@ namespace mocktail::launcher_ui {
 void FollowContext(LauncherContext* context, GtkWidget* owner,
                    std::function<void()> fn);
 
-// A flat button with `label`, vertically centred for a row suffix.
+// A button with `label`, vertically centred for a row suffix.
 GtkWidget* NewRowButton(const std::string& label, std::function<void()> fn);
 // A flat circular icon button; `label` is its tooltip and accessible name.
 GtkWidget* NewRowIconButton(const char* icon_name, const std::string& label,

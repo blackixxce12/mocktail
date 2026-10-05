@@ -245,7 +245,9 @@ void FollowContext(LauncherContext* context, GtkWidget* owner,
 
 GtkWidget* NewRowButton(const std::string& label, std::function<void()> fn) {
   GtkWidget* button = gtk_button_new_with_label(label.c_str());
-  gtk_widget_add_css_class(button, "flat");
+  // Framed, like the Accounts page's Sign In… and Start Roblox: a flat
+  // text button in a row ("Check", "Details…", "Move") read as bold text
+  // rather than as something to press.
   gtk_widget_set_valign(button, GTK_ALIGN_CENTER);
   ConnectCallback(button, "clicked", std::move(fn));
   return button;
