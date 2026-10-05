@@ -4,6 +4,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <limits>
 #include <mutex>
 
 namespace mocktail {
@@ -76,6 +77,44 @@ class SurfaceCommitGuard final {
 inline constexpr std::chrono::milliseconds kSurfaceCommitBudget{100};
 // How long a present waits for an ongoing main-thread surface change.
 inline constexpr std::chrono::milliseconds kHostWsiGuardTimeout{250};
+// At most one log line per this interval for each side of the guard: a
+// present stalled on a hidden window keeps every tick waiting past the
+// budget, many times a second.
+inline constexpr std::chrono::seconds kSurfaceCommitReportInterval{5};
+
+// Lets a recurring event through to the log at most once per `interval`,
+// and counts the events in between, so the line it lets through can say
+// how many there were. Thread-safe.
+class LogRateLimiter final {
+ public:
+  using Clock = std::chrono::steady_clock;
+
+  struct Decision {
+    // Log this event.
+    bool log = false;
+    // Events noted so far, this one included.
+    std::uint64_t total = 0;
+    // When `log`: events since the previous line, this one included.
+    std::uint64_t since_last_report = 0;
+  };
+
+  explicit LogRateLimiter(std::chrono::nanoseconds interval)
+      : interval_ns_(interval.count()) {}
+  LogRateLimiter(const LogRateLimiter&) = delete;
+  LogRateLimiter& operator=(const LogRateLimiter&) = delete;
+
+  // Notes one event at `now`. The first event is always logged.
+  Decision Note(Clock::time_point now);
+
+ private:
+  const std::int64_t interval_ns_;
+  std::atomic<std::uint64_t> total_{0};
+  std::atomic<std::uint64_t> reported_total_{0};
+  // Clock time from which the next line may be logged; the lowest value
+  // before the first line, so the first event is always due.
+  std::atomic<std::int64_t> next_report_ns_{
+      std::numeric_limits<std::int64_t>::min()};
+};
 
 // The guard for the game window's surface.
 SurfaceCommitGuard& GameSurfaceCommitGuard();

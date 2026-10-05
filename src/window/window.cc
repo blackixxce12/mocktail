@@ -2032,16 +2032,24 @@ extern "C" bool mocktail_window_host_wsi_enter() {
   if (guard.EnterHostWsi(kHostWsiGuardTimeout)) {
     return true;
   }
-  static std::atomic<std::uint64_t> reported{0};
+  // Only a call that waited out its timeout counts, not one the guard did
+  // not apply to.
+  static std::atomic<std::uint64_t> counted{0};
   const std::uint64_t unguarded = guard.unguarded_host_calls();
-  if (unguarded > reported.exchange(unguarded, std::memory_order_relaxed) &&
-      (unguarded <= 4 || unguarded % 256 == 0)) {
+  if (unguarded <= counted.exchange(unguarded, std::memory_order_relaxed)) {
+    return false;
+  }
+  static LogRateLimiter limiter(kSurfaceCommitReportInterval);
+  const LogRateLimiter::Decision report =
+      limiter.Note(LogRateLimiter::Clock::now());
+  if (report.log) {
     fprintf(stderr,
             "  [window] surface commit guard: a main-thread surface change "
             "held the game surface over %lld ms; host WSI call went ahead "
-            "(%llu so far)\n",
+            "(%llu so far, %llu since the last report)\n",
             static_cast<long long>(kHostWsiGuardTimeout.count()),
-            static_cast<unsigned long long>(unguarded));
+            static_cast<unsigned long long>(report.total),
+            static_cast<unsigned long long>(report.since_last_report));
   }
   return false;
 }
@@ -2147,7 +2155,10 @@ void MaybeQueueInputReadinessSequence() {
 }
 
 void MaybeRequestResizeReadiness() {
-  if (g_resize_readiness_gate == nullptr || g_state.sdl_window == nullptr) {
+  // Most ticks have no request: they must neither wait for a present nor
+  // report one that holds the surface.
+  if (g_resize_readiness_gate == nullptr || g_state.sdl_window == nullptr ||
+      !g_resize_readiness_gate->ResizeRequestPending()) {
     return;
   }
   ScopedSurfaceCommit commit("readiness resize deferred to the next tick");

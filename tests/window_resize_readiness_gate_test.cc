@@ -53,6 +53,34 @@ TEST(WindowResizeReadinessGateTest, RequiresCompleteRealEvidenceInOrder) {
   EXPECT_TRUE(gate.CompletionStatus().ok());
 }
 
+// The main thread asks before it takes the surface-commit guard for
+// SDL_SetWindowSize, so a tick without a request never waits on a present.
+TEST(WindowResizeReadinessGateTest, TellsWhenAResizeRequestIsPending) {
+  WindowResizeReadinessGate disabled;
+  ASSERT_TRUE(disabled.Activate({}, {}).ok());
+  ASSERT_TRUE(disabled.RecordPresent(1).ok());
+  EXPECT_FALSE(disabled.ResizeRequestPending());
+
+  WindowResizeReadinessGate gate;
+  EXPECT_FALSE(gate.ResizeRequestPending());
+  ASSERT_TRUE(gate.Activate({true, 1600, 900}, InitialSurface()).ok());
+  EXPECT_FALSE(gate.ResizeRequestPending());
+  ASSERT_TRUE(gate.RecordPresent(3).ok());
+  // Asking leaves the request where it is.
+  EXPECT_TRUE(gate.ResizeRequestPending());
+  EXPECT_TRUE(gate.ResizeRequestPending());
+  EXPECT_EQ(gate.Snapshot().state,
+            WindowResizeReadinessState::kReadyToRequestResize);
+  WindowResizeRequest request;
+  ASSERT_TRUE(gate.TakeResizeRequest(&request));
+  EXPECT_FALSE(gate.ResizeRequestPending());
+  ASSERT_TRUE(gate.RecordCommittedSurfaceEvent(Changed(1, 1600, 900)).ok());
+  ASSERT_TRUE(gate.RecordPresent(4).ok());
+  EXPECT_FALSE(gate.ResizeRequestPending());
+  ASSERT_TRUE(gate.RecordStopped().ok());
+  EXPECT_FALSE(gate.ResizeRequestPending());
+}
+
 TEST(WindowResizeReadinessGateTest, IntermediateConfigureIsNotAcceptedAsTarget) {
   WindowResizeReadinessGate gate;
   ASSERT_TRUE(gate.Activate({true, 1600, 900}, InitialSurface()).ok());

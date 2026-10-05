@@ -198,6 +198,104 @@ TEST(SurfaceCommitGuardTest, EnvironmentSwitchTurnsTheGuardOffOnlyWhenAsked) {
   }
 }
 
+TEST(LogRateLimiterTest, LetsOneLineThroughPerIntervalAndCounts) {
+  using std::chrono::seconds;
+  LogRateLimiter limiter(seconds(5));
+  const LogRateLimiter::Clock::time_point start{seconds(1000)};
+
+  LogRateLimiter::Decision decision = limiter.Note(start);
+  EXPECT_TRUE(decision.log);
+  EXPECT_EQ(decision.total, 1U);
+  EXPECT_EQ(decision.since_last_report, 1U);
+
+  // A stalled present misses the budget on every tick.
+  for (int tick = 1; tick <= 300; ++tick) {
+    decision = limiter.Note(start + milliseconds(16 * tick));
+    EXPECT_FALSE(decision.log) << tick;
+  }
+  EXPECT_EQ(decision.total, 301U);
+
+  decision = limiter.Note(start + seconds(5));
+  EXPECT_TRUE(decision.log);
+  EXPECT_EQ(decision.total, 302U);
+  EXPECT_EQ(decision.since_last_report, 301U);
+
+  // The next interval runs from that line, not from the first one.
+  EXPECT_FALSE(limiter.Note(start + seconds(9)).log);
+  decision = limiter.Note(start + seconds(10));
+  EXPECT_TRUE(decision.log);
+  EXPECT_EQ(decision.since_last_report, 2U);
+}
+
+TEST(LogRateLimiterTest, OneOfManyThreadsLogsADueLine) {
+  LogRateLimiter limiter(std::chrono::seconds(5));
+  const LogRateLimiter::Clock::time_point now = LogRateLimiter::Clock::now();
+  std::atomic<int> logged{0};
+  std::vector<std::thread> threads;
+  for (int index = 0; index < 8; ++index) {
+    threads.emplace_back([&] {
+      for (int note = 0; note < 1000; ++note) {
+        if (limiter.Note(now).log) logged.fetch_add(1);
+      }
+    });
+  }
+  for (std::thread& thread : threads) thread.join();
+  EXPECT_EQ(logged.load(), 1);
+  EXPECT_EQ(limiter.Note(now).total, 8001U);
+}
+
+// How many lines of `log` contain `text`.
+int CountLines(const std::string& log, const std::string& text) {
+  int count = 0;
+  for (std::size_t at = log.find(text); at != std::string::npos;
+       at = log.find(text, at + text.size())) {
+    ++count;
+  }
+  return count;
+}
+
+// A present stalled on a hidden window makes every main-thread surface
+// change miss its budget, many times a second: one line in the log, not
+// one per tick.
+TEST(SurfaceCommitGuardTest, ReportsAStalledPresentAtMostOncePerInterval) {
+  SurfaceCommitGuard guard;
+  guard.SetActive(true);
+  HostWsiHolder holder(&guard);
+  ASSERT_TRUE(holder.held());
+  testing::internal::CaptureStderr();
+  for (int tick = 0; tick < 20; ++tick) {
+    ScopedSurfaceCommit commit("event pump went ahead", &guard,
+                               milliseconds(1));
+    EXPECT_FALSE(commit.ready());
+  }
+  const std::string log = testing::internal::GetCapturedStderr();
+  // The first line is due unless another test of this process logged one
+  // within the interval.
+  EXPECT_LE(CountLines(log, "a host present held the game surface"), 1)
+      << log;
+}
+
+// The other side: the render thread waits out its timeout behind a
+// main-thread surface change.
+TEST(SurfaceCommitGuardTest, ReportsUnguardedHostCallsAtMostOncePerInterval) {
+  SurfaceCommitGuard& guard = GameSurfaceCommitGuard();
+  guard.SetActive(true);
+  bool may_commit = false;
+  ASSERT_TRUE(guard.EnterCommit(milliseconds(10), &may_commit));
+  testing::internal::CaptureStderr();
+  std::thread present([] {
+    // kHostWsiGuardTimeout (250 ms) each.
+    for (int call = 0; call < 3; ++call) {
+      EXPECT_FALSE(mocktail_window_host_wsi_enter());
+    }
+  });
+  present.join();
+  const std::string log = testing::internal::GetCapturedStderr();
+  guard.LeaveCommit();
+  guard.SetActive(false);
+  EXPECT_LE(CountLines(log, "host WSI call went ahead"), 1) << log;
+}
+
 // The game window defers a fullscreen change while a present holds the
 // surface past the budget, and makes it on a later tick.
 class FullscreenDeferralTest : public ::testing::Test {

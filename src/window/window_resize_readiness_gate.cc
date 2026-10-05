@@ -79,6 +79,11 @@ Status WindowResizeReadinessGate::RecordPresent(uint64_t frame_serial) {
   return Status::Ok();
 }
 
+bool WindowResizeReadinessGate::ResizeRequestPending() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return snapshot_.state == WindowResizeReadinessState::kReadyToRequestResize;
+}
+
 bool WindowResizeReadinessGate::TakeResizeRequest(
     WindowResizeRequest* request) {
   if (request == nullptr) {

@@ -57,6 +57,10 @@ class WindowResizeReadinessGate final {
   Status Activate(WindowResizeReadinessConfig config,
                   const WindowSurfaceSnapshot& initial_surface);
   Status RecordPresent(uint64_t frame_serial);
+  // A resize request waits for TakeResizeRequest: the first present came,
+  // and nothing took the request yet. The main thread asks this before it
+  // takes the surface-commit guard for SDL_SetWindowSize.
+  bool ResizeRequestPending() const;
   bool TakeResizeRequest(WindowResizeRequest* request);
   Status RecordCommittedSurfaceEvent(const WindowSurfaceEvent& event);
   Status RecordStopped();

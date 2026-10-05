@@ -20,23 +20,47 @@ std::int64_t NowNs() {
       .count();
 }
 
-std::atomic<std::uint64_t> g_busy_reports{0};
-
 void ReportBusy(const char* operation, std::chrono::milliseconds budget) {
-  const std::uint64_t count =
-      g_busy_reports.fetch_add(1, std::memory_order_relaxed) + 1;
-  if (count > 8 && count % 256 != 0) {
+  static LogRateLimiter limiter(kSurfaceCommitReportInterval);
+  const LogRateLimiter::Decision report =
+      limiter.Note(LogRateLimiter::Clock::now());
+  if (!report.log) {
     return;
   }
   std::fprintf(stderr,
                "  [window] surface commit guard: a host present held the "
-               "game surface over %lld ms (%s; %llu so far)\n",
+               "game surface over %lld ms (%s; %llu so far, %llu since the "
+               "last report)\n",
                static_cast<long long>(budget.count()),
                operation != nullptr ? operation : "surface change",
-               static_cast<unsigned long long>(count));
+               static_cast<unsigned long long>(report.total),
+               static_cast<unsigned long long>(report.since_last_report));
 }
 
 }  // namespace
+
+LogRateLimiter::Decision LogRateLimiter::Note(Clock::time_point now) {
+  Decision decision;
+  decision.total = total_.fetch_add(1, std::memory_order_relaxed) + 1;
+  const std::int64_t now_ns =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(
+          now.time_since_epoch())
+          .count();
+  std::int64_t due = next_report_ns_.load(std::memory_order_acquire);
+  // Several threads may find the line due; only the one that moves the due
+  // time on logs it.
+  if (now_ns < due ||
+      !next_report_ns_.compare_exchange_strong(due, now_ns + interval_ns_,
+                                               std::memory_order_acq_rel)) {
+    return decision;
+  }
+  decision.log = true;
+  const std::uint64_t previous =
+      reported_total_.exchange(decision.total, std::memory_order_acq_rel);
+  decision.since_last_report =
+      decision.total > previous ? decision.total - previous : 1;
+  return decision;
+}
 
 void SurfaceCommitGuard::SetActive(bool active) {
   active_.store(active, std::memory_order_release);
