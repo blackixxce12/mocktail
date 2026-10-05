@@ -421,7 +421,21 @@ std::string SessionHeaderField(std::string_view header, std::string_view key) {
   return {};
 }
 
+namespace {
+
+// Removes " key=value" (a value without spaces) from a header line.
+void EraseField(std::string* line, std::string_view key) {
+  const std::size_t start = line->find(" " + std::string(key) + "=");
+  if (start == std::string::npos) return;
+  const std::size_t end = line->find(' ', start + 1);
+  line->erase(start,
+              end == std::string::npos ? std::string::npos : end - start);
+}
+
+}  // namespace
+
 std::string TrimSessionHeader(std::string_view header) {
+  constexpr std::string_view kExecutable = "[mocktail] executable=";
   std::string result;
   std::size_t start = 0;
   while (start < header.size()) {
@@ -430,11 +444,16 @@ std::string TrimSessionHeader(std::string_view header) {
     std::string line(header.substr(start, end - start));
     start = end + 1;
     if (StartsWith(line, "[mocktail] log=")) continue;
-    const std::size_t pid = line.find(" pid=");
-    if (pid != std::string::npos) {
-      const std::size_t pid_end = line.find(' ', pid + 1);
-      line.erase(pid, pid_end == std::string::npos ? std::string::npos
-                                                   : pid_end - pid);
+    // The settings window's own process: no game was started, and the
+    // executable is the helper, not mocktail.
+    EraseField(&line, "pid");
+    EraseField(&line, "started");
+    if (StartsWith(line, kExecutable)) {
+      // The path may hold spaces; config= follows it.
+      const std::size_t config = line.find(" config=");
+      line = config == std::string::npos
+                 ? std::string()
+                 : "[mocktail]" + line.substr(config);
     }
     if (line.empty()) continue;
     result += line;

@@ -150,8 +150,11 @@ GtkWidget* BuildShowPlaceNameRow(LauncherContext* context) {
     if (value == "true") {
       return std::string(_("Your status names the experience you play"));
     }
+    // discord_rpc.cc: the experience's icon and its name as hover text are
+    // set either way.
     return Format(
-        _("Off: the first line reads “%s” instead"),
+        _("Off: the first line reads “%s”; the experience's icon, with its "
+          "name on hover, still shows"),
         context.EffectiveValue(kStateText, kDefaultStateText).c_str());
   };
   spec.hint.details =
@@ -164,7 +167,11 @@ GtkWidget* BuildShowPlaceNameRow(LauncherContext* context) {
       _("When off, that line shows the second-line text (“Playing Roblox” "
         "by default) instead. The experience's icon is still shown, and "
         "Discord shows its name when someone points at the icon.") +
-      "\n\n" + _("Browsing and joining look the same either way.");
+      "\n\n" +
+      // discord_rpc.cc: joining takes the playing branch once the name is
+      // known.
+      _("Browsing looks the same either way. While joining, the same rule "
+        "applies as soon as the experience's name is known.");
   return BindSwitchRow(context, std::move(spec));
 }
 
@@ -205,16 +212,17 @@ GtkWidget* BuildJoinRow(LauncherContext* context) {
   };
   spec.hint.details =
       // discord_rpc.cc kJoinPage and BuildDiscordJoinUrl (placeId, and the
-      // gameInstanceId when Roblox reported one).
+      // gameInstanceId only when the launch request carried one).
       _("Adds a button to your status while you play. A friend who clicks it "
         "opens a page on komaruworld.github.io that starts Roblox in the same "
-        "experience, on your server when Roblox reported which one you are "
-        "on.") +
+        "experience. It reaches your exact server only when you joined that "
+        "server directly, for example by joining a friend; otherwise Roblox "
+        "picks a server for them.") +
       std::string("\n\n") +
       // BuildDiscordJoinUrl never includes access or link codes.
       _("The button never contains private server access codes. “Public "
-        "servers only” decides whether it also appears on private and "
-        "reserved servers.");
+        "servers only” decides whether it also appears when you joined "
+        "through a private-server or other access link.");
   return BindSwitchRow(context, std::move(spec));
 }
 
@@ -232,17 +240,20 @@ GtkWidget* BuildPublicOnlyRow(LauncherContext* context) {
   };
   spec.hint.subtitle_for = [](LauncherContext&, const std::string& value) {
     return value == "true"
-               ? std::string(_("No join button on private or reserved servers"))
+               ? std::string(_("No join button when you joined through a "
+                               "private-server or other access link"))
                : std::string(
-                     _("The join button also appears on private and reserved "
-                       "servers"));
+                     _("The join button also appears when you joined through "
+                       "an access link"));
   };
   spec.hint.details =
-      // discord_rpc.cc IsPublicDiscordJoin: no reserved-server access code,
-      // access code or link code.
-      _("When on, the join button is left out while you are on a private "
-        "server, a reserved server (some experiences use them for matches) or "
-        "a server you joined through a link.") +
+      // discord_rpc.cc IsPublicDiscordJoin checks the launch request only;
+      // nothing in Mocktail follows teleports.
+      _("When on, the join button is left out when you joined through a "
+        "private server, a reserved-server invitation or another link with an "
+        "access code. Mocktail does not see teleports inside an experience, "
+        "so after one the button still points at the place and server you "
+        "first joined.") +
       std::string("\n\n") +
       _("When off, friends see the button there too. It carries the "
         "experience and the server, never an access code, so it mostly "
@@ -350,9 +361,11 @@ GtkWidget* BuildApplicationIdRow(LauncherContext* context) {
   // General Discord Rich Presence behaviour: activity type 0 ("Playing")
   // is shown under the application's name (discord_rpc.cc:333).
   spec.hint.details =
-      _("Discord shows the name and artwork of this Discord application as "
-        "the game you are playing. Leave it empty to use the application "
-        "bundled with Mocktail.") +
+      // discord_rpc.cc: the experience's icon replaces the application's
+      // artwork whenever it is known.
+      _("Discord shows this application's name as the game you are playing, "
+        "and its artwork only when the experience's icon is unavailable. "
+        "Leave it empty to use the application bundled with Mocktail.") +
       std::string("\n\n") +
       _("Only enter the ID of an application you created in Discord's "
         "developer portal: 17 to 20 digits. With a wrong ID Discord shows "
@@ -470,19 +483,28 @@ GtkWidget* BuildFleasionRow(LauncherContext* context) {
       std::string("\n\n") +
       // fleasion.cc: cache_root/fleasion/cacert.pem rebuilt at each start;
       // main.cc prints "start Fleasion before Roblox".
-      _("At each start Mocktail combines your system's certificates with "
-        "Fleasion's into a file in its cache folder and uses it for every "
-        "connection. Start Fleasion before you press Play.") +
+      // fleasion.cc: the base is network.ca_bundle when set; readers of
+      // MOCKTAIL_CA_BUNDLE are Roblox (libc_shim.cc), http_client.cc and
+      // discord_rpc.cc, not the updater or the sign-in window.
+      _("At each start Mocktail adds Fleasion's certificate to your system's "
+        "certificates (or to your custom CA bundle) in a file in its cache "
+        "folder, which Roblox, Mocktail's sign-in checks and the Discord "
+        "lookups then trust. Roblox downloads and the website sign-in window "
+        "keep the system's certificates. Start Fleasion before you press "
+        "Play.") +
       "\n\n" +
       _("Only turn this on if you use Fleasion and trust your copy of it: "
-        "whatever holds its certificate can read and change Roblox's "
-        "encrypted traffic. Turn it off when you stop using Fleasion.") +
+        "whoever has Fleasion's private key (ca.key) can read and change "
+        "Roblox's encrypted traffic, including your sign-in. Turn it off when "
+        "you stop using Fleasion.") +
       "\n\n" +
       // runtime_config.cc fleasion_valid_; main.cc PrepareFleasion fails
       // fatally.
+      // fleasion.cc: "Fleasion CA must be a currently valid PEM CA
+      // certificate".
       _("It cannot be combined with the system proxy, nor with a manual proxy "
-        "other than Fleasion's own. Without a readable certificate Mocktail "
-        "stops at start and says why.");
+        "other than Fleasion's own. Without a readable, currently valid CA "
+        "certificate from Fleasion, Mocktail stops at start and says why.");
   spec.hint.details_for = [](LauncherContext& context) {
     const runtime::ProcessEnvironment environment;
     const std::filesystem::path directory =
@@ -665,8 +687,9 @@ void OpenDiscordTextsDialog(LauncherContext* context) {
        _("Unknown experience name"), "Unknown experience", kDiscordTextLimit,
        // discord_rpc.cc: place_name = text.unknown_place when the lookup
        // returned no name.
-       _("Used as the experience's name while you play when Roblox's web API "
-         "did not return one, for example without internet access.")},
+       _("Used as the experience's name while you play when Mocktail could "
+         "not look it up on Roblox's web API, for example when that lookup "
+         "times out.")},
   };
   for (const TextField& field : texts) {
     AddRow(status, BuildTextRow(context, field));

@@ -147,6 +147,9 @@ GtkWidget* BuildCustomDeviceRow(LauncherContext* context) {
 
 // ---- launcher ---------------------------------------------------------------
 
+std::shared_ptr<launcher::DesktopEntryInspection>& Inspection();
+void InspectShortcut();
+
 GtkWidget* BuildShowOnStartRow(LauncherContext* context) {
   RowSpec spec;
   spec.key = "launcher.show_on_start";
@@ -158,8 +161,10 @@ GtkWidget* BuildShowOnStartRow(LauncherContext* context) {
     return value == "true"
                ? std::string(_("Opens before Roblox when you start Mocktail "
                                "from its icon"))
-               : std::string(_("Roblox starts directly; open this window with "
-                               "the shortcut's “Mocktail Settings” action"));
+               : std::string(_("Roblox starts directly; run mocktail "
+                               "--launcher, or use the “Mocktail Settings” "
+                               "shortcut action where your launcher offers "
+                               "it, to come back"));
   };
   spec.hint.details =
       _("When on, starting Mocktail from its icon or with the mocktail "
@@ -170,13 +175,35 @@ GtkWidget* BuildShowOnStartRow(LauncherContext* context) {
         "do Mocktail's own update test runs.") +
       "\n\n" +
       // packaging/space.bigrat.mocktail.desktop actions; command_line.cc.
-      _("When off, right-click the Mocktail icon and choose “Mocktail "
-        "Settings” (or run mocktail --launcher) to come back here; “Play now” "
-        "(mocktail --play) always skips this window.") +
+      // Tiling desktops and launchers such as rofi or fuzzel rarely list
+      // desktop actions.
+      _("When off, run mocktail --launcher to come back here. Desktops that "
+        "show shortcut actions (right-click in GNOME, KDE and most docks) "
+        "also offer “Mocktail Settings”, unless your own copy of the "
+        "shortcut predates it. “Play now” (mocktail --play) always skips "
+        "this window.") +
       "\n\n" +
       // launcher_policy.h ReadLauncherShowOnStart: a broken file gives true.
       _("If config.yaml has an error, the window opens anyway so you can fix "
         "it.");
+  // A copy of the shortcut in ~/.local/share/applications hides the
+  // packaged one, actions included.
+  spec.hint.warning = [](LauncherContext&, const std::string& value) {
+    if (value == "true") return std::string();
+    if (Inspection() == nullptr) InspectShortcut();
+    const std::shared_ptr<launcher::DesktopEntryInspection>& inspection =
+        Inspection();
+    if (inspection == nullptr || !inspection->found ||
+        inspection->bytes.empty() ||
+        inspection->bytes.find("[Desktop Action settings]") !=
+            std::string::npos) {
+      return std::string();
+    }
+    return Format(_("Your own copy of the Mocktail shortcut (%s) has no "
+                    "“Mocktail Settings” action; run mocktail --launcher to "
+                    "come back here."),
+                  inspection->path.c_str());
+  };
   return BindSwitchRow(context, std::move(spec));
 }
 
@@ -249,10 +276,14 @@ GtkWidget* BuildMoveRow(LauncherContext* context) {
   spec.hint.details =
       // LauncherContext::MoveEnvironmentIntoSettings and the managed
       // environment importers; mocktail drops them on "play ignore-env".
-      _("Copies each variable's value into the matching setting, so this "
-        "launch behaves the same but the settings show and control it. The "
-        "variables are left out of this launch; they come back on the next "
-        "start until you remove them from the shortcut or terminal.") +
+      // LauncherContext::MoveEnvironmentIntoSettings ignores the variables
+      // even when one cannot be imported.
+      _("Copies each variable's value into the matching setting, so the "
+        "settings show and control it, and leaves the variables out of this "
+        "launch. A value that has no matching setting is only left out "
+        "(Details lists them), so that setting falls back to config.yaml. "
+        "The variables come back on the next start until you remove them "
+        "from the shortcut or terminal.") +
       std::string("\n\n") + _("Save to keep the moved values.");
   spec.unavailable = [](LauncherContext& context) {
     return context.read_only() ? std::string(_("Fix config.yaml first"))
@@ -473,9 +504,12 @@ GtkWidget* BuildAdvancedPage(LauncherContext* context) {
          BuildFileRow(
              context, "folder-open-symbolic", _("Data folder"),
              paths.data_root(), true,
-             // runtime_paths.cc: payloads, app data and auth live here.
-             _("Roblox itself (the installed versions), its app data such as "
-               "caches, and your saved sign-ins.") +
+             // runtime_paths.cc: payloads, app data and auth live here; the
+             // Android cache, downloads and shader caches under cache_root.
+             Format(_("Roblox itself (the installed versions), its app data "
+                      "and settings, and your saved sign-ins. Caches and "
+                      "downloads are kept in %s."),
+                    paths.cache_root().c_str()) +
                  std::string("\n\n") +
                  _("Do not share this folder: it holds your sign-in "
                    "sessions."),

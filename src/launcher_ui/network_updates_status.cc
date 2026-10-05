@@ -415,9 +415,11 @@ GtkWidget* BuildLatestRobloxRow(LauncherContext* context) {
         "here.") +
       std::string("\n\n") +
       // The template's updates.automatic comment.
+      // update_coordinator.cc: two runs only for a derived profile.
       _("With automatic updates on, Mocktail does that when Roblox starts: it "
-        "tests a new version in two separate test runs with your graphics "
-        "backend and switches to it only if both pass.") +
+        "tests a new version with your graphics backend in a separate test "
+        "run (two for a version Mocktail does not know yet) and switches to "
+        "it only if they pass.") +
       "\n\n" +
       // src/update sets no CURLOPT_PROXY; the MOCKTAIL_HTTP_PROXY_* settings
       // are read by the runtime only.

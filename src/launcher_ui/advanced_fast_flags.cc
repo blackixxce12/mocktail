@@ -464,18 +464,19 @@ class FastFlagsEditor {
     adw_header_bar_pack_end(ADW_HEADER_BAR(header), more);
     InstallActions();
 
-    // research/ux.md 2.7.3 and 4.3: since 29 Sep 2025 Roblox applies only
-    // allowlisted client flags.
+    // The September 2025 allowlist is about local files of Roblox's Windows
+    // and Mac clients; Mocktail passes flags as clientSettingsOverrides.
     GtkWidget* banner = adw_banner_new(
-        _("Use with caution: Roblox ignores most flags that are not on its "
-          "allowlist"));
+        _("Use with caution: a wrong flag can make Roblox unstable, and many "
+          "flags do nothing in the current Roblox version."));
     adw_banner_set_revealed(ADW_BANNER(banner), TRUE);
 
     page_ = adw_preferences_page_new();
     adw_preferences_page_set_description(
         ADW_PREFERENCES_PAGE(page_),
         _("Saved to fflags.json with the other settings. Where Mocktail sets "
-          "a flag itself, its own value wins."));
+          "a flag itself, its value wins, or Mocktail refuses to start when "
+          "the two disagree on a value it checks."));
     Rebuild();
     FollowContext(context, page_, [this] { Rebuild(); });
 
@@ -685,9 +686,14 @@ GtkWidget* BuildFastFlagsRow(LauncherContext* context) {
         "values disagree on something Mocktail checks, stops Roblox from "
         "starting.") +
       std::string("\n\n") +
-      // research/ux.md 2.7.3: the allowlist of 29 Sep 2025.
-      _("Since September 2025 Roblox applies only flags on its allowlist and "
-        "quietly ignores most others.") +
+      // main.cc / legacy_runtime.cc: fflags.json reaches the Android
+      // engine as clientSettingsOverrides, the channel Mocktail's own
+      // debug flags use too.
+      _("Roblox's Windows and Mac clients have accepted only allowlisted "
+        "flags from local files since September 2025. Mocktail hands these "
+        "flags to the Android client the same way it passes its own, but "
+        "whether a flag still does anything depends on the Roblox version; "
+        "many are unused or removed over time.") +
       "\n\n" +
       _("A wrong flag can make Roblox unstable or stop it from starting; "
         "remove it if Roblox misbehaves. Most players never need any.") +

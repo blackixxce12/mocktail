@@ -68,9 +68,12 @@ GtkWidget* BuildAutomaticRow(LauncherContext* context) {
   };
   spec.hint.details =
       // The template's updates.automatic comment; update_coordinator.cc.
+      // update_coordinator.cc: one canary run for a catalogued version,
+      // two for a derived HostAbi profile.
       _("At each start Mocktail asks APKPure for the newest Roblox for "
-        "Android. A new version gets a matching compatibility profile and "
-        "must pass two test starts with your graphics backend, in a separate "
+        "Android. A new version is matched to a known compatibility profile, "
+        "or gets one derived for it, and must pass a test start with your "
+        "graphics backend (two for a derived profile), in a separate "
         "profile, before it replaces the current one.") +
       std::string("\n\n") +
       _("If a test fails, you keep playing the version that works. Checking "
@@ -195,9 +198,9 @@ void UpdateProxyProblem(LauncherContext* context) {
 
 GtkWidget* BuildProxyRow(LauncherContext* context) {
   std::vector<Choice> choices = {
-      {_("No proxy"), _("Connect directly"), nullptr},
+      {_("No proxy"), _("Roblox connects directly"), nullptr},
       {_("System proxy"),
-       _("Use the desktop's proxy setting, read at every start"),
+       _("The system's proxy configuration, read at every start"),
        [](LauncherContext& context) {
          return ProxyChoiceUnavailable(context, ProxyMode::kSystem);
        }},
@@ -235,10 +238,13 @@ GtkWidget* BuildProxyRow(LauncherContext* context) {
     std::string text;
     switch (CurrentProxyMode(context)) {
       case ProxyMode::kNone:
-        text = _("Mocktail and Roblox connect directly");
+        // http_client.cc and discord_rpc.cc leave libcurl's environment
+        // proxy alone when no MOCKTAIL_HTTP_PROXY_* is set.
+        text = _("Roblox connects directly; Mocktail's own requests follow an "
+                 "https_proxy variable if your environment sets one");
         break;
       case ProxyMode::kSystem:
-        text = _("The desktop's proxy, read at every start");
+        text = _("The system's proxy configuration, read at every start");
         break;
       case ProxyMode::kManual:
         text = _("The HTTP proxy below");
@@ -268,14 +274,24 @@ GtkWidget* BuildProxyRow(LauncherContext* context) {
       _("Which proxy Roblox's own web requests, Mocktail's sign-in, the web "
         "sign-in window and the Discord status lookups use. Roblox downloads "
         "and update checks do not use it.") +
-      std::string("\n\n") + _("• No proxy: connect directly.") + "\n\n" +
-      // system_proxy.cc SelectSystemProxy (resolved for
-      // https://www.roblox.com/; credentials refused); main.cc stops when it
-      // fails.
-      _("• System proxy: at every start Mocktail asks the desktop which proxy "
-        "to use for roblox.com (HTTP, HTTPS or SOCKS5), so a changing port is "
-        "followed. Proxies that need a password are not supported, and "
-        "Mocktail stops at start when the desktop's proxy cannot be used.") +
+      std::string("\n\n") +
+      _("• No proxy: Roblox connects directly. Mocktail's own requests and "
+        "Roblox downloads still honour an https_proxy or ALL_PROXY variable, "
+        "and the website sign-in window your desktop's proxy, if you have "
+        "one.") +
+      "\n\n" +
+      // system_proxy.cc SelectSystemProxy: g_proxy_resolver_get_default for
+      // https://www.roblox.com/ (credentials refused); main.cc stops when
+      // it fails. legacy_runtime.cc hands Roblox's engine host and port
+      // only.
+      _("• System proxy: at every start Mocktail asks GLib which proxy to use "
+        "for roblox.com (GNOME or KDE proxy settings, a PAC file, or the "
+        "https_proxy variable), so a changing port is followed. Use an HTTP "
+        "proxy: Roblox itself gets only the host and port, so SOCKS5 and "
+        "HTTPS proxies may not work for it. Proxies that need a password are "
+        "not supported, and Mocktail stops at start when the proxy cannot be "
+        "used. Without glib-networking this always means a direct "
+        "connection.") +
       "\n\n" +
       // runtime_config_file.cc exports MOCKTAIL_HTTP_PROXY_SCHEME=http.
       _("• Manual: an HTTP proxy at the host and port below.") + "\n\n" +
@@ -359,8 +375,9 @@ GtkWidget* BuildCaBundleRow(LauncherContext* context) {
                    "ssl", "https",       "сертификат",   "сертификаты"};
   spec.hint.subtitle_for = [](LauncherContext&, const std::string& value) {
     return value.empty() ? std::string(_("Empty: your system's certificates"))
-                         : std::string(_("Mocktail and Roblox trust only the "
-                                         "certificates in this file"));
+                         : std::string(_("Roblox and Mocktail's own requests "
+                                         "trust only the certificates in this "
+                                         "file"));
   };
   spec.hint.warning = [](LauncherContext&, const std::string& value) {
     // main.cc: an unreadable MOCKTAIL_CA_BUNDLE stops the start (status 2).
@@ -370,10 +387,15 @@ GtkWidget* BuildCaBundleRow(LauncherContext* context) {
                : std::string();
   };
   spec.hint.details =
-      _("A PEM file of certificate authorities that Mocktail and Roblox trust "
-        "for HTTPS instead of the system's list. You only need it on a company "
-        "or school network that inspects HTTPS with its own certificate; the "
-        "file must then also hold the usual public authorities.") +
+      // Readers of MOCKTAIL_CA_BUNDLE: libc_shim.cc (Roblox),
+      // http_client.cc, discord_rpc.cc; the updater and the WebKit window
+      // use the system's store.
+      _("A PEM file of certificate authorities that Roblox, Mocktail's "
+        "sign-in checks and the Discord lookups trust for HTTPS instead of "
+        "the system's list. Roblox downloads, update checks and the website "
+        "sign-in window still use the system's list, so on a network that "
+        "inspects HTTPS also add its certificate to the system. The file must "
+        "also hold the usual public authorities.") +
       std::string("\n\n") +
       // The template: "Mocktail reads this file directly and does not
       // replace it during Roblox payload updates".
@@ -383,7 +405,7 @@ GtkWidget* BuildCaBundleRow(LauncherContext* context) {
       "\n\n" +
       // main.cc ResolveHostCaBundle kInvalidOverride.
       _("Only use a file you trust: any authority in it can pose as any "
-        "website to Mocktail and Roblox. If the file cannot be read, Mocktail "
+        "website to Roblox and Mocktail. If the file cannot be read, Mocktail "
         "stops at start.");
   EntrySpec entry;
   entry.empty_unsets = true;
@@ -410,7 +432,7 @@ GtkWidget* BuildCaBundleRow(LauncherContext* context) {
 GtkWidget* BuildNetworkUpdatesPage(LauncherContext* context) {
   GtkWidget* page =
       NewPage(context, Section::kNetworkUpdates,
-              _("How Roblox is kept up to date and which proxy Mocktail uses"));
+              _("How Roblox is kept up to date and which proxy it uses"));
 
   GtkWidget* updates =
       AddGroup(page, _("Updates"),
@@ -420,8 +442,9 @@ GtkWidget* BuildNetworkUpdatesPage(LauncherContext* context) {
   AddRow(updates, BuildLatestRobloxRow(context));
   AddRow(updates, BuildSourceRow(context));
 
-  GtkWidget* proxy = AddGroup(page, _("Proxy"),
-                              _("How Mocktail and Roblox reach the internet"));
+  GtkWidget* proxy =
+      AddGroup(page, _("Proxy"),
+               _("Which proxy Roblox and Mocktail's sign-in use"));
   AddRow(proxy, BuildProxyRow(context));
   AddRow(proxy, BuildProxyHostRow(context));
   AddRow(proxy, BuildProxyPortRow(context));

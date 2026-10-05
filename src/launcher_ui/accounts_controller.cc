@@ -584,9 +584,11 @@ void AccountsController::ConfirmRemoval(std::int64_t user_id) {
   AdwDialog* dialog = adw_alert_dialog_new(
       Format(_("Remove %s?"), name.c_str()).c_str(),
       _("Mocktail deletes this account's saved sign-in from this computer "
-        "when you save or play. Roblox's servers are not told, so the "
-        "account and its sign-ins elsewhere are not affected. To play with "
-        "it here again, sign in again."));
+        "when you save or play. It does not sign out at Roblox: the session "
+        "stays valid until it expires, and your sign-ins elsewhere are not "
+        "affected. To end it everywhere, use “Log out of all other sessions” "
+        "in Roblox's security settings. To play with it here again, sign in "
+        "again."));
   AdwAlertDialog* alert = ADW_ALERT_DIALOG(dialog);
   adw_alert_dialog_add_responses(alert, "cancel", _("_Cancel"), "remove",
                                  _("_Remove"), nullptr);

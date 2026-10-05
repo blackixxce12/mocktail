@@ -377,6 +377,13 @@ TEST(LauncherUiPageRulesTest, SessionHeaderFields) {
   EXPECT_EQ(trimmed.find("log="), std::string::npos);
   EXPECT_EQ(trimmed.find("pid="), std::string::npos);
   EXPECT_NE(trimmed.find("host=\"Linux 7.2 x86_64\"\n"), std::string::npos);
+  // No game was started, and the executable is the settings helper.
+  EXPECT_EQ(trimmed.find("started="), std::string::npos);
+  EXPECT_NE(trimmed.find("[mocktail] package=build target=x86_64"),
+            std::string::npos);
+  EXPECT_EQ(trimmed.find("executable="), std::string::npos);
+  EXPECT_NE(trimmed.find("[mocktail] config=~/.config/mocktail/config.yaml\n"),
+            std::string::npos);
 
   EXPECT_EQ(FormatDiagnosticLines({{"Mocktail", "1.0.4"}, {"Proxy", ""}}),
             "Mocktail: 1.0.4\nProxy: -\n");

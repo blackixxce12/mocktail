@@ -266,9 +266,14 @@ GtkWidget* BuildSessionRow(LauncherContext* context) {
         "can use Wayland or, through XWayland, X11; the Display page decides "
         "which.") +
       std::string("\n\n") +
-      // video_driver_policy.cc rule 4.
-      _("On NVIDIA with Vulkan the automatic choice is X11 through XWayland, "
-        "because NVIDIA's native Wayland path can hang.");
+      // video_driver_policy.cc rule 4: the NVIDIA kernel driver (not
+      // nouveau), direct Vulkan, and both servers; research/graphics.md 2.2.
+      _("With NVIDIA's own driver and the direct Vulkan backend, the "
+        "automatic choice is X11 through XWayland, because NVIDIA's native "
+        "Wayland path can hang or lose the display. On a scaled screen the "
+        "game then renders at 100 % and the compositor enlarges it, and "
+        "native resolution has no effect; Display › Display server can "
+        "choose Wayland instead.");
   return DecorateRow(context, row, std::move(spec));
 }
 
@@ -290,20 +295,24 @@ GtkWidget* BuildGraphicsRow(LauncherContext* context) {
     if (!driver.empty()) text += " (" + driver + ")";
     if (machine.detected) {
       text += "\n";
-      text += machine.has_vulkan_driver()
-                  ? Format(_("Vulkan driver: %s"),
-                           std::filesystem::path(machine.vulkan_icd)
-                               .filename()
-                               .c_str())
-                  : std::string(_("No Vulkan driver found"));
+      if (machine.has_vulkan_driver()) {
+        text += Format(
+            _("Vulkan driver: %s"),
+            std::filesystem::path(machine.vulkan_icd).filename().c_str());
+      } else if (machine.vulkan_source == VulkanDriverSource::kUnknown) {
+        text += _("Vulkan driver: from the Flatpak runtime");
+      } else {
+        text += _("No Vulkan driver found");
+      }
     }
     return text;
   };
   spec.hint.details =
       // session_log.cc DetectGraphicsHardware; machine_profile.cc.
       _("The graphics cards in /sys/class/drm with their kernel drivers, "
-        "named the way Mocktail's session log names them, and the Vulkan "
-        "driver Roblox would use.") +
+        "named as in Mocktail's session log, and the Vulkan driver Mocktail "
+        "would choose for the game (a VK_DRIVER_FILES you set yourself "
+        "wins).") +
       std::string("\n\n") +
       _("The Graphics page recommends a graphics backend from this.");
   return DecorateRow(context, row, std::move(spec));
@@ -352,8 +361,10 @@ GtkWidget* BuildProcessorRow(LauncherContext* context) {
   };
   spec.hint.details =
       // performance_policy.cc: worker counts from physical cores.
-      _("The Performance page sizes Roblox's worker threads from the physical "
-        "cores when multithreaded rendering or throughput mode is on.");
+      // performance_policy.cc: throughput, or auto with multithreaded.
+      _("At start Mocktail sizes Roblox's worker threads from the physical "
+        "cores when Physics workers is Throughput (the default), or "
+        "Automatic with multithreaded rendering on.");
   return DecorateRow(context, row, std::move(spec));
 }
 

@@ -254,9 +254,12 @@ class AccountsPageView {
     // research/auth.md 5.6: 0600 files in 0700 folders; sessions go only to
     // Roblox (users.roblox.com for the checks) and never to the UI.
     AddGroup(page_, {},
+             // runtime_config.cc / fleasion.cc: with Fleasion on, Roblox's
+             // web traffic goes through its proxy, which trusts its own CA.
              _("Sign-in sessions are stored only on this computer, in files "
-               "only your user can read, and are sent only to Roblox. "
-               "Mocktail never shows them."));
+               "only your user can read, and are sent only to Roblox (and "
+               "pass through Fleasion, which can read them, while it is "
+               "on). Mocktail never shows them."));
 
     g_object_set_data_full(G_OBJECT(page_), kViewKey, this, [](gpointer data) {
       delete static_cast<AccountsPageView*>(data);
@@ -281,8 +284,9 @@ class AccountsPageView {
   void BuildSavedAccounts() {
     accounts_group_ = AddGroup(
         page_, _("Saved accounts"),
-        _("Play starts with the selected account. Switching needs no new "
-          "sign-in."));
+        // main.cc ResolveActiveAccountAuthRoot runs for website joins too.
+        _("Play and joins from roblox.com start with the selected account. "
+          "Switching needs no new sign-in."));
     add_button_ = gtk_button_new();
     GtkWidget* content = adw_button_content_new();
     adw_button_content_set_icon_name(ADW_BUTTON_CONTENT(content),
@@ -363,9 +367,8 @@ class AccountsPageView {
                                  "welcome screen, where you can sign in"));
     };
     spec.hint.details =
-        std::string(_("Roblox starts without a saved account. Use it to try "
-                      "an account you do not want to keep, or to sign in "
-                      "inside Roblox.")) +
+        std::string(_("Roblox starts without a saved account, for example to "
+                      "look around signed out or to sign in inside Roblox.")) +
         "\n\n" +
         // account_store.h SelectForLaunch / ClearSessionArtifacts.
         _("Before a guest start Mocktail clears the website session and the "
@@ -376,7 +379,8 @@ class AccountsPageView {
         // its account, which becomes active.
         _("If you sign in during a guest start, the account is kept: the "
           "next time this window opens, Mocktail asks Roblox whose it is, "
-          "adds it to this list and selects it for Play.");
+          "adds it to this list and selects it for Play. Remove it here "
+          "afterwards if you do not want to keep it.");
     spec.hint.details_for = [](LauncherContext& context) {
       return EffectiveSignIn(context) == "browser"
                  ? std::string(_("Sign-in method is Website window, so "
@@ -480,6 +484,10 @@ class AccountsPageView {
         _("The account you sign in with is kept: the next time this window "
           "opens, Mocktail asks Roblox whose it is, adds it to Saved "
           "accounts and selects it for Play.") +
+        "\n\n" +
+        // accounts_controller.cc PlaySignedOut writes accounts/active=guest.
+        _("This also selects Guest for later starts, website joins included, "
+          "until you sign in or choose an account here.") +
         "\n\n" + _("Start Roblox saves your changes first, like Play.");
     spec.hint.details_for = [](LauncherContext& context) {
       return EffectiveSignIn(context) == "browser"
@@ -518,10 +526,13 @@ class AccountsPageView {
         "\n\n" +
         // main.cc PromptFirstLaunchSignIn; roblox_web_view_bridge.cc routes
         // login challenges to /login when MOCKTAIL_NATIVE_LOGIN=0.
+        // roblox_web_view_bridge.cc: only login challenges are routed to
+        // www.roblox.com/login; other pages keep Roblox's web window.
         _("• Website window: before Roblox starts, Mocktail opens "
           "roblox.com's sign-in page in its own window; close it to continue "
-          "signed out. Verification pages Roblox opens later use this window "
-          "too.") +
+          "signed out. If you later sign in on Roblox's own screen and it "
+          "asks for a verification step, the roblox.com sign-in page opens "
+          "instead.") +
         "\n\n" +
         // main.cc: no first-launch sign-in for an external launch request.
         _("Joining from a link on roblox.com never opens the sign-in window "
@@ -591,9 +602,11 @@ class AccountsPageView {
       }
       if (controller.checking()) {
         GtkWidget* row =
+            // account_store.cc Reconcile asks only about sessions whose
+            // hash changed since the last start, and the guest slot.
             NewStatusRow(_("Checking saved accounts…"),
-                         _("Asking Roblox whether the saved sign-ins still "
-                           "work"));
+                         _("Asking Roblox about sign-ins that changed since "
+                           "the last start"));
         adw_action_row_add_prefix(ADW_ACTION_ROW(row), NewSpinner());
         AddDynamic(row);
       }
@@ -718,7 +731,8 @@ class AccountsPageView {
     g_menu_append_section(menu, nullptr, G_MENU_MODEL(choose));
     g_object_unref(choose);
     GMenu* remove = g_menu_new();
-    g_menu_append(remove, _("Sign Out and _Remove…"), "account.remove");
+    // There is no server-side sign-out (account_store.h RemoveAccount).
+    g_menu_append(remove, _("_Remove from This Computer…"), "account.remove");
     g_menu_append_section(menu, nullptr, G_MENU_MODEL(remove));
     g_object_unref(remove);
 
