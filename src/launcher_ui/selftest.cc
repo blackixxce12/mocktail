@@ -116,6 +116,18 @@ guint FindModelPosition(GtkWidget* combo_row, const std::string& label) {
   return GTK_INVALID_LIST_POSITION;
 }
 
+// The dialog behind a broken config.yaml's Fix… button.
+void OpenConfigErrorDialog(LauncherContext* context) {
+  BannerKind kind = BannerKind::kEnvironmentOverrides;
+  const Banner* banner = context->TopBanner(&kind);
+  if (banner != nullptr && kind == BannerKind::kConfigError &&
+      banner->on_button) {
+    // Copy: the action may replace the banner.
+    const std::function<void()> open = banner->on_button;
+    open();
+  }
+}
+
 }  // namespace
 
 bool PrepareSelftestEnvironment(const std::filesystem::path& out_dir,
@@ -321,12 +333,16 @@ void Selftest::Start() {
   });
   // The dialogs pages open from a row, rendered with the whole window like
   // the environment dialog (<out-dir>/dialog-<name>.png).
-  const std::pair<const char*, void (*)(LauncherContext*)> kDialogs[] = {
+  std::vector<std::pair<const char*, void (*)(LauncherContext*)>> dialogs = {
       {"discord-texts", OpenDiscordTextsDialog},
       {"fast-flags", OpenFastFlagsEditor},
       {"about", OpenAboutDialog},
   };
-  for (const auto& [name, open] : kDialogs) {
+  // A broken config.yaml (the matrix's empty-file runs): its Fix… dialog.
+  if (context_->read_only()) {
+    dialogs.emplace_back("config-error", OpenConfigErrorDialog);
+  }
+  for (const auto& [name, open] : dialogs) {
     steps_.push_back([this, open = open] {
       open(context_);
       return kSettleMilliseconds * 2;
