@@ -108,6 +108,7 @@ TEST(ManagedEnvironmentTest, CoversEverySettingTheLauncherNeeds) {
       {"MOCKTAIL_WINDOW_START_MODE", "display.start_mode"},
       {"MOCKTAIL_NATIVE_LOGIN", "account.sign_in"},
       {"MOCKTAIL_GRAPHICS_QUALITY", "engine.graphics_quality"},
+      {"MOCKTAIL_NVIDIA_SHADER_MT", "engine.nvidia_shader_mt"},
       {"MOCKTAIL_LAUNCHER_SHOW_ON_START", "launcher.show_on_start"},
       {"MOCKTAIL_VSYNC", "graphics.vsync"},
       {"MOCKTAIL_GRAPHICS_BACKEND", "graphics.backend"},
@@ -171,6 +172,7 @@ TEST(ManagedEnvironmentTest, ImportedValuesLoadToTheSameSettings) {
   const std::vector<Case> cases = {
       {"MOCKTAIL_GRAPHICS_BACKEND", "vulkan"},
       {"MOCKTAIL_GRAPHICS_QUALITY", "auto"},
+      {"MOCKTAIL_NVIDIA_SHADER_MT", "off"},
       {"MOCKTAIL_FRAME_RATE_LIMIT", "165"},
       {"MOCKTAIL_VSYNC", "off"},
       {"MOCKTAIL_WINDOW_START_MODE", "maximized"},
@@ -247,6 +249,8 @@ TEST(ManagedEnvironmentTest, ImportedValuesLoadToTheSameSettings) {
     // Backend aliases import as their canonical name.
     EXPECT_EQ(a.graphics_backend(), b.graphics_backend()) << entry.name;
     EXPECT_EQ(a.engine().graphics_quality, b.engine().graphics_quality)
+        << entry.name;
+    EXPECT_EQ(a.engine().nvidia_shader_mt, b.engine().nvidia_shader_mt)
         << entry.name;
     EXPECT_EQ(a.frame_rate().mode, b.frame_rate().mode) << entry.name;
     EXPECT_EQ(a.frame_rate().fixed_fps, b.frame_rate().fixed_fps)

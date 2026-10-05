@@ -143,6 +143,11 @@ engine:
   # Vulkan on Intel-only graphics), manual leaves Roblox's in-game graphics
   # slider in control, and an integer from 1 to 21 forces that level.
   graphics_quality: default
+  # Boolean (default: true): with direct Vulkan, let Roblox load its shader
+  # pack on several threads on NVIDIA GPUs, as it does on Intel and AMD.
+  # false makes Roblox load it on one thread there, as Mocktail did before
+  # this setting existed; use it only if shader loading fails on NVIDIA.
+  nvidia_shader_mt: true
 
 launcher:
   # Boolean (default: true): show the Mocktail settings window before Roblox

@@ -97,6 +97,8 @@ TEST(RuntimeConfigTest, UsesSupportedDefaults) {
   EXPECT_EQ(config.engine().graphics_quality.mode,
             GraphicsQualityMode::kDefault);
   EXPECT_TRUE(config.engine().graphics_quality_valid);
+  EXPECT_TRUE(config.engine().nvidia_shader_mt);
+  EXPECT_TRUE(config.engine().nvidia_shader_mt_valid);
   EXPECT_TRUE(config.launcher().show_on_start);
   EXPECT_TRUE(config.launcher().show_on_start_valid);
 }
@@ -561,6 +563,7 @@ TEST(RuntimeConfigTest, ReadsLauncherManagedSettingsFromEnvironment) {
       {"MOCKTAIL_WINDOW_START_MODE", "windowed"},
       {"MOCKTAIL_NATIVE_LOGIN", "0"},
       {"MOCKTAIL_GRAPHICS_QUALITY", "9"},
+      {"MOCKTAIL_NVIDIA_SHADER_MT", "off"},
       {"MOCKTAIL_LAUNCHER_SHOW_ON_START", "off"},
   }));
   EXPECT_EQ(config.display().server, DisplayServer::kX11);
@@ -568,22 +571,26 @@ TEST(RuntimeConfigTest, ReadsLauncherManagedSettingsFromEnvironment) {
   EXPECT_EQ(config.account().sign_in, SignInMethod::kBrowser);
   EXPECT_EQ(config.engine().graphics_quality,
             (GraphicsQuality{GraphicsQualityMode::kLevel, 9}));
+  EXPECT_FALSE(config.engine().nvidia_shader_mt);
   EXPECT_FALSE(config.launcher().show_on_start);
 
   const RuntimeConfig invalid = RuntimeConfig::FromEnvironment(MapEnvironment({
       {"MOCKTAIL_DISPLAY_SERVER", "mir"},
       {"MOCKTAIL_WINDOW_START_MODE", "hidden"},
       {"MOCKTAIL_GRAPHICS_QUALITY", "40"},
+      {"MOCKTAIL_NVIDIA_SHADER_MT", "auto"},
       {"MOCKTAIL_LAUNCHER_SHOW_ON_START", "sometimes"},
   }));
   EXPECT_FALSE(invalid.display().server_valid);
   EXPECT_FALSE(invalid.display().start_mode_valid);
   EXPECT_FALSE(invalid.engine().graphics_quality_valid);
+  EXPECT_FALSE(invalid.engine().nvidia_shader_mt_valid);
   EXPECT_FALSE(invalid.launcher().show_on_start_valid);
   // Invalid values keep the defaults, so nothing downstream sees garbage.
   EXPECT_EQ(invalid.display().server, DisplayServer::kAuto);
   EXPECT_EQ(invalid.display().start_mode, WindowStartMode::kRemember);
   EXPECT_EQ(invalid.engine().graphics_quality, GraphicsQuality{});
+  EXPECT_TRUE(invalid.engine().nvidia_shader_mt);
   EXPECT_TRUE(invalid.launcher().show_on_start);
 }
 

@@ -264,6 +264,7 @@ std::vector<ManagedEnvironmentVariable> BuildManagedEnvironmentVariables() {
        GraphicsBackendVariable},
       {"MOCKTAIL_GRAPHICS_QUALITY", "engine.graphics_quality",
        GraphicsQualityVariable},
+      {"MOCKTAIL_NVIDIA_SHADER_MT", "engine.nvidia_shader_mt", Switch},
       {"MOCKTAIL_FRAME_RATE_LIMIT", "graphics.frame_rate_limit",
        FrameRateLimit},
       {"MOCKTAIL_VSYNC", "graphics.vsync", Vsync},

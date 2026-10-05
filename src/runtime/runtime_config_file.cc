@@ -208,6 +208,7 @@ bool ValidateAndMap(const ValueMap& yaml, ValueMap* environment,
       "display.start_mode",
       "account.sign_in",
       "engine.graphics_quality",
+      "engine.nvidia_shader_mt",
       "launcher.show_on_start",
   };
   for (const auto& [key, ignored] : yaml) {
@@ -612,6 +613,15 @@ bool ValidateAndMap(const ValueMap& yaml, ValueMap* environment,
     }
     (*environment)["MOCKTAIL_GRAPHICS_QUALITY"] = GraphicsQualityName(*parsed);
   }
+  if (const auto nvidia_shader_mt = value("engine.nvidia_shader_mt");
+      nvidia_shader_mt.has_value()) {
+    bool parsed = false;
+    if (!ParseBoolean(*nvidia_shader_mt, &parsed)) {
+      *error = "engine.nvidia_shader_mt must be true or false";
+      return false;
+    }
+    (*environment)["MOCKTAIL_NVIDIA_SHADER_MT"] = parsed ? "1" : "0";
+  }
   if (const auto show_on_start = value("launcher.show_on_start");
       show_on_start.has_value()) {
     bool parsed = false;
@@ -860,6 +870,10 @@ RuntimeConfigLoadResult LoadRuntimeConfig(
     result.error =
         "graphics quality is invalid: MOCKTAIL_GRAPHICS_QUALITY must be "
         "default, manual, or a level from 1 to 21";
+  } else if (!result.config.engine().nvidia_shader_mt_valid) {
+    result.error =
+        "NVIDIA shader loading policy is invalid: MOCKTAIL_NVIDIA_SHADER_MT "
+        "must be true or false";
   } else if (!result.config.launcher().show_on_start_valid) {
     result.error =
         "launcher start policy is invalid: MOCKTAIL_LAUNCHER_SHOW_ON_START "
@@ -931,6 +945,12 @@ bool ExportRuntimeConfigEnvironment(const RuntimeConfig& config,
   if (!config.engine().graphics_quality_valid) {
     if (error != nullptr) {
       *error = "cannot export an invalid graphics quality";
+    }
+    return false;
+  }
+  if (!config.engine().nvidia_shader_mt_valid) {
+    if (error != nullptr) {
+      *error = "cannot export an invalid NVIDIA shader loading policy";
     }
     return false;
   }
@@ -1049,6 +1069,9 @@ bool ExportRuntimeConfigEnvironment(const RuntimeConfig& config,
           "MOCKTAIL_NATIVE_LOGIN",
           config.account().sign_in == SignInMethod::kBrowser ? "0" : "1",
           error) &&
+      SetEnvironmentValue("MOCKTAIL_NVIDIA_SHADER_MT",
+                          config.engine().nvidia_shader_mt ? "1" : "0",
+                          error) &&
       SetEnvironmentValue("MOCKTAIL_LAUNCHER_SHOW_ON_START",
                           config.launcher().show_on_start ? "1" : "0", error);
   if (!base_exported) {

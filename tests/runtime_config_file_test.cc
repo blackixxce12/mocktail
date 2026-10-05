@@ -192,6 +192,11 @@ TEST(RuntimeConfigBootstrapTest,
            "# Vulkan on Intel-only graphics), manual leaves Roblox's in-game "
            "graphics\n  # slider in control, and an integer from 1 to 21 "
            "forces that level.\n  graphics_quality: default",
+           "# Boolean (default: true): with direct Vulkan, let Roblox load its "
+           "shader\n  # pack on several threads on NVIDIA GPUs, as it does on "
+           "Intel and AMD.\n  # false makes Roblox load it on one thread "
+           "there, as Mocktail did before\n  # this setting existed; use it "
+           "only if shader loading fails on NVIDIA.\n  nvidia_shader_mt: true",
            "# Boolean (default: true): show the Mocktail settings window before "
            "Roblox\n  # starts. Website joins never show it; `mocktail "
            "--launcher` shows it and\n  # `mocktail --play` skips it regardless "
@@ -1160,6 +1165,7 @@ TEST(RuntimeConfigFileTest, ShippedTemplateDefaultsTheLauncherSections) {
   EXPECT_EQ(loaded.config.display().start_mode, WindowStartMode::kRemember);
   EXPECT_EQ(loaded.config.account().sign_in, SignInMethod::kNative);
   EXPECT_EQ(loaded.config.engine().graphics_quality, GraphicsQuality{});
+  EXPECT_TRUE(loaded.config.engine().nvidia_shader_mt);
   EXPECT_TRUE(loaded.config.launcher().show_on_start);
   // New keys live in new top-level sections so that older Mocktail builds,
   // which ignore unknown sections, still start with this file.
@@ -1178,32 +1184,36 @@ TEST(RuntimeConfigFileTest, LoadsEveryLauncherManagedValue) {
     WindowStartMode start_mode;
     SignInMethod sign_in;
     GraphicsQuality quality;
+    bool nvidia_shader_mt;
     bool show_on_start;
   };
   for (const Case& entry : {
            Case{"display:\n  server: auto\n  start_mode: remember\n"
                 "account:\n  sign_in: native\n"
                 "engine:\n  graphics_quality: default\n"
+                "  nvidia_shader_mt: true\n"
                 "launcher:\n  show_on_start: true\n",
                 DisplayServer::kAuto, WindowStartMode::kRemember,
-                SignInMethod::kNative, GraphicsQuality{}, true},
+                SignInMethod::kNative, GraphicsQuality{}, true, true},
            Case{"display:\n  server: wayland\n  start_mode: windowed\n"
                 "account:\n  sign_in: browser\n"
                 "engine:\n  graphics_quality: manual\n"
+                "  nvidia_shader_mt: false\n"
                 "launcher:\n  show_on_start: false\n",
                 DisplayServer::kWayland, WindowStartMode::kWindowed,
                 SignInMethod::kBrowser,
-                GraphicsQuality{GraphicsQualityMode::kManual, 0}, false},
+                GraphicsQuality{GraphicsQualityMode::kManual, 0}, false,
+                false},
            Case{"display:\n  server: x11\n  start_mode: maximized\n"
                 "engine:\n  graphics_quality: 1\n",
                 DisplayServer::kX11, WindowStartMode::kMaximized,
                 SignInMethod::kNative,
-                GraphicsQuality{GraphicsQualityMode::kLevel, 1}, true},
+                GraphicsQuality{GraphicsQualityMode::kLevel, 1}, true, true},
            Case{"display:\n  start_mode: fullscreen\n"
                 "engine:\n  graphics_quality: \"21\"\n",
                 DisplayServer::kAuto, WindowStartMode::kFullscreen,
                 SignInMethod::kNative,
-                GraphicsQuality{GraphicsQualityMode::kLevel, 21}, true},
+                GraphicsQuality{GraphicsQualityMode::kLevel, 21}, true, true},
        }) {
     const std::filesystem::path file =
         temporary.Write(std::string("version: 1\n") + entry.yaml);
@@ -1215,6 +1225,8 @@ TEST(RuntimeConfigFileTest, LoadsEveryLauncherManagedValue) {
         << entry.yaml;
     EXPECT_EQ(loaded.config.account().sign_in, entry.sign_in) << entry.yaml;
     EXPECT_EQ(loaded.config.engine().graphics_quality, entry.quality)
+        << entry.yaml;
+    EXPECT_EQ(loaded.config.engine().nvidia_shader_mt, entry.nvidia_shader_mt)
         << entry.yaml;
     EXPECT_EQ(loaded.config.launcher().show_on_start, entry.show_on_start)
         << entry.yaml;
@@ -1243,6 +1255,10 @@ TEST(RuntimeConfigFileTest, RejectsInvalidLauncherManagedValuesByKey) {
            Case{"engine", "graphics_quality", "auto"},
            Case{"engine", "graphics_quality", "high"},
            Case{"engine", "graphics_quality", "\"\""},
+           Case{"engine", "nvidia_shader_mt", "off"},
+           Case{"engine", "nvidia_shader_mt", "0"},
+           Case{"engine", "nvidia_shader_mt", "auto"},
+           Case{"engine", "nvidia_shader_mt", "False"},
            Case{"launcher", "show_on_start", "yes"},
            Case{"launcher", "show_on_start", "1"},
            Case{"launcher", "show_on_start", "True"},
@@ -1298,6 +1314,7 @@ account:
   sign_in: native
 engine:
   graphics_quality: 12
+  nvidia_shader_mt: true
 launcher:
   show_on_start: true
 )yaml");
@@ -1308,6 +1325,7 @@ launcher:
           {"MOCKTAIL_WINDOW_START_MODE", "fullscreen"},
           {"MOCKTAIL_NATIVE_LOGIN", "0"},
           {"MOCKTAIL_GRAPHICS_QUALITY", "manual"},
+          {"MOCKTAIL_NVIDIA_SHADER_MT", "off"},
           {"MOCKTAIL_LAUNCHER_SHOW_ON_START", "0"},
       }),
       file);
@@ -1317,6 +1335,7 @@ launcher:
   EXPECT_EQ(loaded.config.account().sign_in, SignInMethod::kBrowser);
   EXPECT_EQ(loaded.config.engine().graphics_quality.mode,
             GraphicsQualityMode::kManual);
+  EXPECT_FALSE(loaded.config.engine().nvidia_shader_mt);
   EXPECT_FALSE(loaded.config.launcher().show_on_start);
 
   // The legacy sign-in variable only ever meant "browser" for exactly "0",
@@ -1348,6 +1367,7 @@ launcher:
                                  {"MOCKTAIL_DISPLAY_SERVER", ""},
                                  {"MOCKTAIL_WINDOW_START_MODE", ""},
                                  {"MOCKTAIL_GRAPHICS_QUALITY", ""},
+                                 {"MOCKTAIL_NVIDIA_SHADER_MT", ""},
                                  {"MOCKTAIL_LAUNCHER_SHOW_ON_START", ""},
                              }),
                              temporary.Write(R"yaml(
@@ -1357,6 +1377,7 @@ display:
   start_mode: windowed
 engine:
   graphics_quality: 4
+  nvidia_shader_mt: false
 launcher:
   show_on_start: false
 )yaml"));
@@ -1364,6 +1385,7 @@ launcher:
   EXPECT_EQ(loaded.config.display().server, DisplayServer::kAuto);
   EXPECT_EQ(loaded.config.display().start_mode, WindowStartMode::kRemember);
   EXPECT_EQ(loaded.config.engine().graphics_quality, GraphicsQuality{});
+  EXPECT_TRUE(loaded.config.engine().nvidia_shader_mt);
   EXPECT_TRUE(loaded.config.launcher().show_on_start);
 }
 
@@ -1376,6 +1398,7 @@ TEST(RuntimeConfigFileTest, RejectsInvalidLauncherManagedVariables) {
            {"MOCKTAIL_WINDOW_START_MODE", "minimized"},
            {"MOCKTAIL_GRAPHICS_QUALITY", "25"},
            {"MOCKTAIL_GRAPHICS_QUALITY", "ultra"},
+           {"MOCKTAIL_NVIDIA_SHADER_MT", "auto"},
            {"MOCKTAIL_LAUNCHER_SHOW_ON_START", "maybe"},
        }) {
     const RuntimeConfigLoadResult loaded =
@@ -1399,6 +1422,7 @@ TEST(RuntimeConfigFileTest, ExportsLauncherManagedSettings) {
       "MOCKTAIL_WINDOW_START_MODE",
       "MOCKTAIL_NATIVE_LOGIN",
       "MOCKTAIL_GRAPHICS_QUALITY",
+      "MOCKTAIL_NVIDIA_SHADER_MT",
       "MOCKTAIL_LAUNCHER_SHOW_ON_START",
   });
   TemporaryDirectory temporary;
@@ -1413,6 +1437,7 @@ account:
   sign_in: browser
 engine:
   graphics_quality: 7
+  nvidia_shader_mt: false
 launcher:
   show_on_start: false
 )yaml"));
@@ -1422,6 +1447,7 @@ launcher:
   EXPECT_EQ(GetVariable("MOCKTAIL_WINDOW_START_MODE"), "fullscreen");
   EXPECT_EQ(GetVariable("MOCKTAIL_NATIVE_LOGIN"), "0");
   EXPECT_EQ(GetVariable("MOCKTAIL_GRAPHICS_QUALITY"), "7");
+  EXPECT_EQ(GetVariable("MOCKTAIL_NVIDIA_SHADER_MT"), "0");
   EXPECT_EQ(GetVariable("MOCKTAIL_LAUNCHER_SHOW_ON_START"), "0");
 
   // The exported values read back to the same settings, which is what every
@@ -1433,6 +1459,7 @@ launcher:
   EXPECT_EQ(resolved.account().sign_in, SignInMethod::kBrowser);
   EXPECT_EQ(resolved.engine().graphics_quality,
             (GraphicsQuality{GraphicsQualityMode::kLevel, 7}));
+  EXPECT_FALSE(resolved.engine().nvidia_shader_mt);
   EXPECT_FALSE(resolved.launcher().show_on_start);
 
   loaded = LoadRuntimeConfig(
@@ -1444,6 +1471,7 @@ launcher:
   EXPECT_EQ(GetVariable("MOCKTAIL_WINDOW_START_MODE"), "remember");
   EXPECT_EQ(GetVariable("MOCKTAIL_NATIVE_LOGIN"), "1");
   EXPECT_EQ(GetVariable("MOCKTAIL_GRAPHICS_QUALITY"), "manual");
+  EXPECT_EQ(GetVariable("MOCKTAIL_NVIDIA_SHADER_MT"), "1");
   EXPECT_EQ(GetVariable("MOCKTAIL_LAUNCHER_SHOW_ON_START"), "1");
 }
 

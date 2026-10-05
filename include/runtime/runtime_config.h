@@ -127,6 +127,11 @@ struct AccountConfig {
 struct EngineConfig {
   GraphicsQuality graphics_quality;
   bool graphics_quality_valid = true;
+  // engine.nvidia_shader_mt / MOCKTAIL_NVIDIA_SHADER_MT. False makes the
+  // direct Vulkan launch policy deny Roblox's multithreaded shader pack
+  // loading on NVIDIA GPUs.
+  bool nvidia_shader_mt = true;
+  bool nvidia_shader_mt_valid = true;
 };
 
 struct LauncherConfig {

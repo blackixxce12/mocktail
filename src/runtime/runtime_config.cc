@@ -505,6 +505,12 @@ RuntimeConfig RuntimeConfig::FromEnvironment(const Environment& environment) {
   } else {
     config.engine_.graphics_quality_valid = false;
   }
+  if (const std::optional<bool> nvidia_shader_mt = ParseEnvironmentSwitch(
+          environment.GetOr("MOCKTAIL_NVIDIA_SHADER_MT", "1"))) {
+    config.engine_.nvidia_shader_mt = *nvidia_shader_mt;
+  } else {
+    config.engine_.nvidia_shader_mt_valid = false;
+  }
   if (const std::optional<bool> show_on_start = ParseEnvironmentSwitch(
           environment.GetOr("MOCKTAIL_LAUNCHER_SHOW_ON_START", "1"))) {
     config.launcher_.show_on_start = *show_on_start;
