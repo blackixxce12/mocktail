@@ -9,6 +9,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -19,8 +20,13 @@ namespace mocktail {
 namespace runtime {
 namespace {
 
-constexpr char kVulkanClientSettingsOverrides[] =
-    R"({"FStringGraphicsVulkanShaderMTDenyPattern":"4318:.*"})";
+// Roblox matches this regular expression against
+// "<VkPhysicalDeviceProperties::vendorID>:<driverVersion>", both decimal,
+// and loads its Vulkan shader pack on one thread when it matches. 4318 is
+// NVIDIA's PCI vendor ID, 0x10de.
+constexpr char kShaderMtDenyPatternFlag[] =
+    "FStringGraphicsVulkanShaderMTDenyPattern";
+constexpr char kNvidiaShaderMtDenyPattern[] = "4318:.*";
 
 constexpr const char* kIcdDirectories[] = {
     "/usr/share/vulkan/icd.d",
@@ -110,6 +116,16 @@ bool GraphicsQualityLeftToDefault() {
   const char* current = std::getenv("MOCKTAIL_GRAPHICS_QUALITY");
   return current == nullptr || current[0] == '\0' ||
          std::strcmp(current, "default") == 0;
+}
+
+bool DenyNvidiaShaderLoadingThreads(std::string* error) {
+  const char* current = std::getenv("MOCKTAIL_CLIENT_SETTINGS_OVERRIDES_JSON");
+  std::string merged;
+  if (!MergeNvidiaShaderLoadingClientSettingsOverrides(
+          false, current != nullptr ? current : "", &merged, error)) {
+    return false;
+  }
+  return SetValue("MOCKTAIL_CLIENT_SETTINGS_OVERRIDES_JSON", merged, error);
 }
 
 bool IsStrictOpenGlName(const std::string& name) {
@@ -261,6 +277,31 @@ bool ApplyVulkanIcdPolicy(const HostGpus& gpus, std::string* error) {
 
 }  // namespace
 
+bool MergeNvidiaShaderLoadingClientSettingsOverrides(
+    bool nvidia_shader_mt, std::string_view base_json,
+    std::string* merged_json, std::string* error) {
+  if (merged_json == nullptr) {
+    if (error != nullptr) {
+      *error = "NVIDIA shader loading client-settings output is required";
+    }
+    return false;
+  }
+  nlohmann::json overrides = nlohmann::json::parse(
+      base_json.empty() ? std::string_view("{}") : base_json, nullptr, false,
+      true);
+  if (overrides.is_discarded() || !overrides.is_object()) {
+    if (error != nullptr) {
+      *error = "client-settings overrides must be a JSON object";
+    }
+    return false;
+  }
+  if (!nvidia_shader_mt && !overrides.contains(kShaderMtDenyPatternFlag)) {
+    overrides[kShaderMtDenyPatternFlag] = kNvidiaShaderMtDenyPattern;
+  }
+  *merged_json = overrides.dump();
+  return true;
+}
+
 std::string SelectVulkanIcdManifest(
     const std::vector<std::filesystem::path>& directories,
     std::string_view vendor) {
@@ -351,6 +392,12 @@ bool ApplyGraphicsLaunchPolicy(const RuntimeConfig& config,
     }
     return false;
   }
+  if (!config.engine().nvidia_shader_mt_valid) {
+    if (error != nullptr) {
+      *error = "cannot apply an invalid NVIDIA shader loading policy";
+    }
+    return false;
+  }
   if (!UserSelectsVideoDriver(user_environment) &&
       !ApplyDisplayServer(AvailableDisplayServer(config.display().server),
                           error)) {
@@ -361,6 +408,8 @@ bool ApplyGraphicsLaunchPolicy(const RuntimeConfig& config,
       config.graphics_backend() == GraphicsBackend::kVulkan;
   if (!SetValue("MOCKTAIL_GRAPHICS_BACKEND",
                 config.graphics_backend_name(), error) ||
+      !SetValue("MOCKTAIL_NVIDIA_SHADER_MT",
+                config.engine().nvidia_shader_mt ? "1" : "0", error) ||
       !SetValue("MOCKTAIL_PRELOAD_VULKAN_SHIM",
                 direct_vulkan ? "1" : "0", error) ||
       !SetDefault("MOCKTAIL_REQUIRE_REAL_GRAPHICS", "1", error)) {
@@ -377,8 +426,11 @@ bool ApplyGraphicsLaunchPolicy(const RuntimeConfig& config,
     const char* wsi_mode =
         UnthrottledPresentation(config) ? "immediate" : "mailbox";
     const HostGpus gpus = DetectHostGpus();
-    if (!SetDefault("MOCKTAIL_CLIENT_SETTINGS_OVERRIDES_JSON",
-                    kVulkanClientSettingsOverrides, error) ||
+    // Roblox's loader holds its own lock around every fseek/fread pair on
+    // the shared pack FILE, so several threads are safe on every vendor;
+    // engine.nvidia_shader_mt: false brings back the old NVIDIA deny.
+    if ((!config.engine().nvidia_shader_mt &&
+         !DenyNvidiaShaderLoadingThreads(error)) ||
         !SetDefault("ANV_SYS_MEM_LIMIT", AnvSysMemLimitPercent(), error) ||
         !SetDefault("MESA_VK_WSI_PRESENT_MODE", wsi_mode, error) ||
         // Move GEM_EXECBUFFER2 off the application thread onto Mesa's submit

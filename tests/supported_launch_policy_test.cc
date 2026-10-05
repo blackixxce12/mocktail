@@ -121,6 +121,7 @@ TEST(SupportedLaunchPolicyTest, PreservesCandidateManifestOverPackagedDefault) {
 int RunGraphicsPolicyProbe(const char* backend) {
   for (const char* name : {
            "MOCKTAIL_GRAPHICS_BACKEND",
+           "MOCKTAIL_NVIDIA_SHADER_MT",
            "MOCKTAIL_PRELOAD_VULKAN_SHIM",
            "MOCKTAIL_DISABLE_AUTO_ANGLE_FALLBACK",
            "MOCKTAIL_SOFTWARE_WINDOW_FALLBACK",
@@ -143,9 +144,11 @@ int RunGraphicsPolicyProbe(const char* backend) {
   const bool open_gl = backend != nullptr && std::string(backend) == "opengl";
   const char* resolved = getenv("MOCKTAIL_GRAPHICS_BACKEND");
   const char* preload = getenv("MOCKTAIL_PRELOAD_VULKAN_SHIM");
+  const char* nvidia_shader_mt = getenv("MOCKTAIL_NVIDIA_SHADER_MT");
   if (resolved == nullptr || preload == nullptr ||
       std::string(resolved) != (open_gl ? "opengl" : "direct-vulkan") ||
-      std::string(preload) != (open_gl ? "0" : "1")) {
+      std::string(preload) != (open_gl ? "0" : "1") ||
+      nvidia_shader_mt == nullptr || std::string(nvidia_shader_mt) != "1") {
     return 23;
   }
   if (open_gl) {
@@ -177,22 +180,12 @@ int RunGraphicsPolicyProbe(const char* backend) {
       }
     }
   }
-  return overrides != nullptr && anv_memory_limit != nullptr &&
+  // Mocktail no longer forces any client setting for Vulkan: Roblox's
+  // shader pack loader runs on several threads on every vendor.
+  return overrides == nullptr && anv_memory_limit != nullptr &&
                  submit_thread != nullptr &&
                  std::string(anv_memory_limit) == expected_anv_limit &&
-                 std::string(submit_thread) == "1" &&
-                 std::string(overrides).find(
-                     "FStringGraphicsTextureManager2DenyPattern2") ==
-                     std::string::npos &&
-                 std::string(overrides).find(
-                     "FStringGraphicsVulkanShaderMTDenyPattern") !=
-                     std::string::npos &&
-                 std::string(overrides).find(
-                     "\"FFlagTextureTranscodeNewRollout\"") ==
-                     std::string::npos &&
-                 std::string(overrides).find(
-                     "\"FStringTextureTranscodeRollout\"") ==
-                     std::string::npos
+                 std::string(submit_thread) == "1"
              ? 0
              : 25;
 }
@@ -259,6 +252,143 @@ TEST(GraphicsLaunchPolicyTest, MesaPresentModeFollowsTheVsyncPolicy) {
   ExpectWsiPresentMode("off", "-1", "immediate");
   ExpectWsiPresentMode("on", "unlimited", "mailbox");
   ExpectWsiPresentMode("on", "144", "mailbox");
+}
+
+constexpr char kNvidiaDeny[] =
+    R"({"FStringGraphicsVulkanShaderMTDenyPattern":"4318:.*"})";
+
+// Applies the policy with MOCKTAIL_NVIDIA_SHADER_MT and the user's
+// MOCKTAIL_CLIENT_SETTINGS_OVERRIDES_JSON set as given (nullptr leaves a
+// variable unset), then checks the published overrides against `expected`
+// (nullptr: still unset).
+int RunNvidiaShaderPolicyProbe(const char* backend, const char* switch_value,
+                               const char* user_overrides,
+                               const char* expected) {
+  for (const char* name : {
+           "MOCKTAIL_GRAPHICS_BACKEND",
+           "MOCKTAIL_NVIDIA_SHADER_MT",
+           "MOCKTAIL_CLIENT_SETTINGS_OVERRIDES_JSON",
+       }) {
+    if (unsetenv(name) != 0) return 20;
+  }
+  if (setenv("MOCKTAIL_GRAPHICS_BACKEND", backend, 1) != 0 ||
+      (switch_value != nullptr &&
+       setenv("MOCKTAIL_NVIDIA_SHADER_MT", switch_value, 1) != 0) ||
+      (user_overrides != nullptr &&
+       setenv("MOCKTAIL_CLIENT_SETTINGS_OVERRIDES_JSON", user_overrides, 1) !=
+           0)) {
+    return 21;
+  }
+  const RuntimeConfig config =
+      RuntimeConfig::FromEnvironment(ProcessEnvironment());
+  std::string error;
+  if (!ApplyGraphicsLaunchPolicy(config, &error)) return 22;
+  const char* published = getenv("MOCKTAIL_NVIDIA_SHADER_MT");
+  const char* resolved = config.engine().nvidia_shader_mt ? "1" : "0";
+  if (published == nullptr || std::string(published) != resolved) {
+    return 23;
+  }
+  const char* overrides = getenv("MOCKTAIL_CLIENT_SETTINGS_OVERRIDES_JSON");
+  if (expected == nullptr) {
+    return overrides == nullptr ? 0 : 24;
+  }
+  return overrides != nullptr && std::string(overrides) == expected ? 0 : 25;
+}
+
+void ExpectNvidiaShaderPolicy(const char* backend, const char* switch_value,
+                              const char* user_overrides,
+                              const char* expected) {
+  const pid_t child = fork();
+  ASSERT_GE(child, 0);
+  if (child == 0) {
+    std::_Exit(RunNvidiaShaderPolicyProbe(backend, switch_value, user_overrides,
+                                          expected));
+  }
+  int status = 0;
+  ASSERT_EQ(waitpid(child, &status, 0), child);
+  ASSERT_TRUE(WIFEXITED(status));
+  EXPECT_EQ(WEXITSTATUS(status), 0)
+      << backend << " MOCKTAIL_NVIDIA_SHADER_MT="
+      << (switch_value != nullptr ? switch_value : "(unset)") << " overrides="
+      << (user_overrides != nullptr ? user_overrides : "(unset)");
+}
+
+TEST(GraphicsLaunchPolicyTest, LeavesShaderLoadingThreadsToRobloxByDefault) {
+  ExpectNvidiaShaderPolicy("direct-vulkan", nullptr, nullptr, nullptr);
+  ExpectNvidiaShaderPolicy("direct-vulkan", "1", nullptr, nullptr);
+  ExpectNvidiaShaderPolicy("direct-vulkan", "on", R"({"FFlagExample":"True"})",
+                           R"({"FFlagExample":"True"})");
+}
+
+TEST(GraphicsLaunchPolicyTest, SwitchedOffDeniesShaderLoadingThreadsOnNvidia) {
+  ExpectNvidiaShaderPolicy("direct-vulkan", "0", nullptr, kNvidiaDeny);
+  ExpectNvidiaShaderPolicy("direct-vulkan", "off", "", kNvidiaDeny);
+  // The user's own client settings stay, and the deny joins them.
+  ExpectNvidiaShaderPolicy("direct-vulkan", "false",
+                           R"({"FFlagExample":"True"})",
+                           R"({"FFlagExample":"True",)"
+                           R"("FStringGraphicsVulkanShaderMTDenyPattern":)"
+                           R"("4318:.*"})");
+  // A pattern the user set for the flag is theirs to keep.
+  ExpectNvidiaShaderPolicy(
+      "direct-vulkan", "off",
+      R"({"FStringGraphicsVulkanShaderMTDenyPattern":"4318:5.*"})",
+      R"({"FStringGraphicsVulkanShaderMTDenyPattern":"4318:5.*"})");
+  // The flag only steers Roblox's Vulkan device.
+  ExpectNvidiaShaderPolicy("opengl", "off", nullptr, nullptr);
+}
+
+TEST(GraphicsLaunchPolicyTest, MergesTheNvidiaShaderDenyIntoClientSettings) {
+  std::string merged;
+  std::string error;
+  ASSERT_TRUE(
+      MergeNvidiaShaderLoadingClientSettingsOverrides(true, "", &merged));
+  EXPECT_EQ(merged, "{}");
+  ASSERT_TRUE(MergeNvidiaShaderLoadingClientSettingsOverrides(
+      true, R"({"FFlagExample":"True"})", &merged));
+  EXPECT_EQ(merged, R"({"FFlagExample":"True"})");
+  ASSERT_TRUE(
+      MergeNvidiaShaderLoadingClientSettingsOverrides(false, "{}", &merged));
+  EXPECT_EQ(merged, kNvidiaDeny);
+  ASSERT_TRUE(MergeNvidiaShaderLoadingClientSettingsOverrides(
+      false, R"({"FStringGraphicsVulkanShaderMTDenyPattern":""})", &merged));
+  EXPECT_EQ(merged, R"({"FStringGraphicsVulkanShaderMTDenyPattern":""})");
+
+  for (const char* invalid : {"[]", "\"4318:.*\"", "{", "not json"}) {
+    EXPECT_FALSE(MergeNvidiaShaderLoadingClientSettingsOverrides(
+        false, invalid, &merged, &error))
+        << invalid;
+    EXPECT_FALSE(error.empty()) << invalid;
+  }
+  EXPECT_FALSE(
+      MergeNvidiaShaderLoadingClientSettingsOverrides(false, "{}", nullptr));
+}
+
+TEST(GraphicsLaunchPolicyTest, RefusesAnInvalidNvidiaShaderSwitch) {
+  const pid_t child = fork();
+  ASSERT_GE(child, 0);
+  if (child == 0) {
+    if (setenv("MOCKTAIL_GRAPHICS_BACKEND", "direct-vulkan", 1) != 0 ||
+        setenv("MOCKTAIL_NVIDIA_SHADER_MT", "auto", 1) != 0 ||
+        unsetenv("MOCKTAIL_CLIENT_SETTINGS_OVERRIDES_JSON") != 0) {
+      std::_Exit(20);
+    }
+    const RuntimeConfig invalid =
+        RuntimeConfig::FromEnvironment(ProcessEnvironment());
+    std::string error;
+    std::_Exit(!invalid.engine().nvidia_shader_mt_valid &&
+                       !ApplyGraphicsLaunchPolicy(invalid, {}, &error) &&
+                       error.find("NVIDIA shader loading") !=
+                           std::string::npos &&
+                       getenv("MOCKTAIL_CLIENT_SETTINGS_OVERRIDES_JSON") ==
+                           nullptr
+                   ? 0
+                   : 21);
+  }
+  int status = 0;
+  ASSERT_EQ(waitpid(child, &status, 0), child);
+  ASSERT_TRUE(WIFEXITED(status));
+  EXPECT_EQ(WEXITSTATUS(status), 0);
 }
 
 }  // namespace

@@ -33,6 +33,16 @@ inline constexpr std::string_view kUserVideoDriverVariables[] = {
 // settings window is told to ignore the environment, no longer counts.
 bool UserSelectsVideoDriver(const std::vector<std::string>& user_environment);
 
+// engine.nvidia_shader_mt as Roblox client settings for direct Vulkan. True
+// adds nothing, so Roblox's own FStringGraphicsVulkanShaderMTDenyPattern
+// decides (the value Roblox serves today names only some Imagination PowerVR
+// drivers). False adds the NVIDIA deny, 4318:.*, so Roblox loads its shader
+// pack on one thread there, unless `base_json` already sets that flag.
+// `base_json` must be a JSON object; empty means {}.
+bool MergeNvidiaShaderLoadingClientSettingsOverrides(
+    bool nvidia_shader_mt, std::string_view base_json,
+    std::string* merged_json, std::string* error = nullptr);
+
 // The display server ApplyGraphicsLaunchPolicy publishes for `configured`.
 // Wayland needs a Wayland session (WAYLAND_DISPLAY and XDG_RUNTIME_DIR) and
 // x11 an X display (DISPLAY), the same tests the window policy makes;
@@ -51,6 +61,11 @@ DisplayServer AvailableDisplayServer(DisplayServer configured);
 // (or a server this session lacks, see AvailableDisplayServer) leaves the
 // window policy alone. Nothing is touched while the user selects the video
 // driver (see UserSelectsVideoDriver).
+//
+// MOCKTAIL_NVIDIA_SHADER_MT is published for the canaries as well. With
+// direct Vulkan and engine.nvidia_shader_mt false, the NVIDIA shader loading
+// deny is merged into MOCKTAIL_CLIENT_SETTINGS_OVERRIDES_JSON (see
+// MergeNvidiaShaderLoadingClientSettingsOverrides).
 bool ApplyGraphicsLaunchPolicy(const RuntimeConfig& config,
                                const std::vector<std::string>& user_environment,
                                std::string* error = nullptr);

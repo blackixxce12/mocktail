@@ -126,11 +126,11 @@ export MOCKTAIL_SKIP_LIBROBLOX_CTORS="${MOCKTAIL_SKIP_LIBROBLOX_CTORS:-0}"
 export MOCKTAIL_HOST_JNI_SINGLETON_SEED="${MOCKTAIL_HOST_JNI_SINGLETON_SEED:-0}"
 export MOCKTAIL_INIT_CLIENT_SETTINGS="${MOCKTAIL_INIT_CLIENT_SETTINGS:-1}"
 
-# Roblox 2.725's multithreaded pack loader performs fseek/fread pairs against
-# one shared Android FILE. Host stdio cannot make that two-call transaction
-# atomic, so use Roblox's supported vendor deny policy for NVIDIA (0x10de =
-# 4318) until the loader owns independent positional streams.
-DEFAULT_VULKAN_CLIENT_SETTINGS_OVERRIDES='{"FStringGraphicsVulkanShaderMTDenyPattern":"4318:.*"}'
+# Roblox's multithreaded shader pack loader shares one Android FILE between
+# its workers, but each worker holds the loader's own mutex around its
+# fseek/fread pair, so no vendor needs FStringGraphicsVulkanShaderMTDenyPattern.
+# MOCKTAIL_NVIDIA_SHADER_MT=0 brings back the old NVIDIA (4318) deny.
+DEFAULT_VULKAN_CLIENT_SETTINGS_OVERRIDES='{}'
 
 case "${TIER}" in
   A)

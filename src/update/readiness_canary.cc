@@ -25,9 +25,6 @@ extern char** environ;
 namespace mocktail::update {
 namespace {
 
-constexpr std::string_view kVulkanOverrides =
-    R"({"FStringGraphicsVulkanShaderMTDenyPattern":"4318:.*"})";
-
 bool IsEnvironmentEntry(std::string_view entry, std::string_view name) {
   return entry.size() > name.size() && entry[name.size()] == '=' &&
          entry.substr(0, name.size()) == name;
@@ -325,6 +322,9 @@ CanaryResult RunReadinessCanary(const CanaryOptions& options) {
            "__NV_PRIME_RENDER_OFFLOAD",
            "__VK_LAYER_NV_optimus",
            "__GLX_VENDOR_LIBRARY_NAME",
+           // engine.nvidia_shader_mt, published by ApplyGraphicsLaunchPolicy,
+           // so a canary loads Roblox's shaders the way the game will.
+           "MOCKTAIL_NVIDIA_SHADER_MT",
            // Dynamic-library search state and graphics library overrides
            // must reach the isolated runtime so that distributions which
            // resolve shared libraries through the launcher environment
@@ -384,22 +384,19 @@ CanaryResult RunReadinessCanary(const CanaryOptions& options) {
                          "MOCKTAIL_REQUIRE_REAL_GRAPHICS=1",
                          "MOCKTAIL_AUTO_EXIT_AFTER_PRESENT_MS=5000",
                          "MOCKTAIL_STARTUP_THREAD_TIMEOUT_MS=120000",
+                         "MOCKTAIL_CLIENT_SETTINGS_OVERRIDES_JSON={}",
                      });
   if (options.graphics_backend == CanaryGraphicsBackend::kDirectVulkan) {
-    environment.insert(
-        environment.end(),
-        {"MOCKTAIL_GRAPHICS_BACKEND=direct-vulkan",
-         "MOCKTAIL_PRELOAD_VULKAN_SHIM=1",
-         "MOCKTAIL_CLIENT_SETTINGS_OVERRIDES_JSON=" +
-             std::string(kVulkanOverrides)});
+    environment.insert(environment.end(),
+                       {"MOCKTAIL_GRAPHICS_BACKEND=direct-vulkan",
+                        "MOCKTAIL_PRELOAD_VULKAN_SHIM=1"});
   } else {
     environment.insert(
         environment.end(),
         {"MOCKTAIL_GRAPHICS_BACKEND=" +
              std::string(CanaryGraphicsBackendName(options.graphics_backend)),
          "MOCKTAIL_PRELOAD_VULKAN_SHIM=0",
-         "MOCKTAIL_SOFTWARE_WINDOW_FALLBACK=0",
-         "MOCKTAIL_CLIENT_SETTINGS_OVERRIDES_JSON={}"});
+         "MOCKTAIL_SOFTWARE_WINDOW_FALLBACK=0"});
     if (options.graphics_backend == CanaryGraphicsBackend::kOpenGlEs) {
       environment.push_back("MOCKTAIL_DISABLE_AUTO_ANGLE_FALLBACK=1");
     }
