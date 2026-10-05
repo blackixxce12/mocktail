@@ -21,8 +21,9 @@
 // context's draft (never to disk: Save and Play do that), and keeps itself
 // up to date when anything changes. Each one automatically gets:
 //   - its subtitle from the Hint (current effect, selected option's
-//     description, "Recommended for this computer", the overriding
-//     environment variable and an inline warning, one per line);
+//     description, "Recommended for this computer: X" when the value is
+//     not X, the overriding environment variable and an inline warning,
+//     one per line);
 //   - an info button (dialog-information-symbolic, accessible label
 //     "Learn more about <title>") opening a popover with the details;
 //   - an "ENV" badge while a managed environment variable overrides the key;

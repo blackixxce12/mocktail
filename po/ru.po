@@ -41,9 +41,6 @@ msgstr "Куда выводится звук игры и какой микроф
 msgid "Reset %s to default"
 msgstr "Сбросить «%s» к значению по умолчанию"
 
-msgid "Recommended for this computer"
-msgstr "Рекомендуется для этого компьютера"
-
 #, c-format
 msgid "Recommended for this computer: %s"
 msgstr "Для этого компьютера рекомендуется: %s"

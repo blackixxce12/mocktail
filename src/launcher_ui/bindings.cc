@@ -281,14 +281,15 @@ class RowBinding {
                            ? spec_.hint.subtitle_for(*context_, value)
                            : BaseSubtitle(value);
     std::vector<std::string> lines;
+    // Only a value other than the recommended one says so under the row.
+    // "· Recommended for this computer" after nearly every subtitle made
+    // most of them two or three lines and said nothing a glance needs; the
+    // list marks the recommended choice and Learn more says why.
     std::string recommendation_line;
     if (spec_.hint.recommend && context_->machine().detected) {
       const std::optional<std::string> recommended =
           spec_.hint.recommend(context_->machine());
-      if (recommended.has_value() && *recommended == value) {
-        base += base.empty() ? "" : " · ";
-        base += _("Recommended for this computer");
-      } else if (recommended.has_value()) {
+      if (recommended.has_value() && *recommended != value) {
         recommendation_line = Format(_("Recommended for this computer: %s"),
                                      LabelFor(*recommended).c_str());
       }
