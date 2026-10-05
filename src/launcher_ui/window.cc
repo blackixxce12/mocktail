@@ -111,10 +111,13 @@ void LauncherWindow::Present() { gtk_window_present(GTK_WINDOW(window_)); }
 
 GtkWidget* LauncherWindow::BuildSidebar() {
   sidebar_ = adw_sidebar_new();
+  // Three untitled sections, which the sidebar separates with a line
+  // (SPEC 5): the game's settings, Mocktail's own, and About. A "Mocktail"
+  // heading over the second repeated the window's title right above it and
+  // left the first section, the game's, without one.
   AdwSidebarSection* groups[3] = {adw_sidebar_section_new(),
                                   adw_sidebar_section_new(),
                                   adw_sidebar_section_new()};
-  adw_sidebar_section_set_title(groups[1], "Mocktail");
   guint index = 0;
   for (int group = 0; group < 3; ++group) {
     for (const SectionInfo& info : Sections()) {
