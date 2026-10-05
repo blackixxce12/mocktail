@@ -595,6 +595,7 @@ class AccountsPageView {
 
     AccountsController& controller = *controller_;
     const AccountsModel& model = controller.model();
+    bool empty_state = false;
     if (!controller.environment_override()) {
       if (!controller.load_error().empty()) {
         AddDynamic(NewStatusRow(_("Saved accounts cannot be read"),
@@ -647,6 +648,7 @@ class AccountsPageView {
                           controller.StartSignIn();
                         }));
         AddDynamic(row);
+        empty_state = true;
       }
       for (const runtime::SavedAccount* account : accounts) {
         AddDynamic(BuildAccountRow(*account));
@@ -660,7 +662,11 @@ class AccountsPageView {
 
     const std::string add_reason = controller.AddUnavailableReason();
     SetUnavailable(add_button_, add_reason);
-    gtk_widget_set_visible(add_button_, !controller.environment_override());
+    // The empty state's own Sign In… does what Add Account does; with both,
+    // and the Signing in group's Sign In… below, an empty list offered the
+    // same action three times.
+    gtk_widget_set_visible(add_button_,
+                           !controller.environment_override() && !empty_state);
     SetUnavailable(website_button_, add_reason);
     // Play waits for the check and for an open sign-in window anyway.
     SetUnavailable(inside_button_, add_reason);
