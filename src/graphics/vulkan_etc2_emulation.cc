@@ -1,14 +1,17 @@
 #include "mocktail/graphics/vulkan_etc2_emulation.h"
 
+#include "mocktail/graphics/etc2_decode_totals.h"
 #include "mocktail/graphics/texture_override.h"
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -472,6 +475,22 @@ struct VulkanEtc2Emulation::State {
   TextureOverrides overrides = TextureOverrides::FromEnvironment();
   const std::uint32_t upscale =
       SmallTextureUpscale(std::getenv("MOCKTAIL_SMALL_TEXTURE_UPSCALE"));
+  // This session's decoding, for the totals line in the log.
+  std::mutex totals_mutex;
+  Etc2DecodeTotals totals;
+
+  void LogTotals(const char* label) {
+    std::string line;
+    {
+      std::lock_guard<std::mutex> lock(totals_mutex);
+      if (totals.images == 0 && totals.uploads == 0) {
+        return;
+      }
+      line = FormatEtc2DecodeTotals(totals);
+    }
+    std::fprintf(stderr, "  [vulkan] ETC2 decode totals%s: %s\n", label,
+                 line.c_str());
+  }
 
   std::shared_ptr<const RgbaImage> FindOverride(const PendingUpload& upload,
                                                 const std::uint8_t* compressed,
@@ -688,6 +707,10 @@ void VulkanEtc2Emulation::RegisterDevice(
 }
 
 void VulkanEtc2Emulation::DestroyDevice(VkDevice device) {
+  if (const HostDevice* dev = state_->Find(device);
+      dev != nullptr && dev->emulated) {
+    state_->LogTotals("");
+  }
   std::vector<Staging> doomed;
   {
     std::lock_guard<std::mutex> lock(state_->mutex);
@@ -761,6 +784,13 @@ VkResult VulkanEtc2Emulation::CreateImage(VkDevice device,
                                 create_info->extent.height,
                                 nullptr,
                                 nullptr};
+    }
+    {
+      std::lock_guard<std::mutex> lock(state_->totals_mutex);
+      ++state_->totals.images;
+      if (scale > 1) {
+        ++state_->totals.upscaled_images;
+      }
     }
     if (ShouldLog(&g_image_logs, 4)) {
       std::fprintf(stderr,
@@ -1176,6 +1206,8 @@ void VulkanEtc2Emulation::PrepareSubmit(const VkCommandBuffer* command_buffers,
     VkDeviceSize compressed = 0;
     VkDeviceSize decoded = 0;
   };
+  // Everything from here on holds up the submit.
+  const auto decode_start = std::chrono::steady_clock::now();
   std::vector<Copy> copies;
   std::vector<const PendingUpload*> copied_uploads;
   VkDeviceSize compressed_total = 0;
@@ -1274,11 +1306,32 @@ void VulkanEtc2Emulation::PrepareSubmit(const VkCommandBuffer* command_buffers,
   }
   compressed_offset = 0;
   decoded_offset = 0;
+  VkDeviceSize host_total = 0;
   for (const PendingUpload* upload : copied_uploads) {
     state_->EmitUpload(*upload, scratch_source.data() + compressed_offset,
                        scratch_decoded.data() + decoded_offset);
     compressed_offset += upload->compressed;
     decoded_offset += upload->decoded;
+    host_total += upload->target_bytes;
+  }
+  if (copied_uploads.empty()) {
+    return;
+  }
+  const std::uint64_t decode_ns = static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(
+          std::chrono::steady_clock::now() - decode_start)
+          .count());
+  bool milestone = false;
+  {
+    std::lock_guard<std::mutex> lock(state_->totals_mutex);
+    const std::uint64_t before = state_->totals.host_bytes;
+    AddEtc2SubmitDecode(&state_->totals, copied_uploads.size(),
+                        compressed_total, host_total, decode_ns);
+    milestone =
+        Etc2DecodeTotalsMilestone(before, state_->totals.host_bytes);
+  }
+  if (milestone) {
+    state_->LogTotals(" so far");
   }
 }
 

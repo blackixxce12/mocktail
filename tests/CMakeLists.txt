@@ -627,6 +627,16 @@ target_link_libraries(vulkan_text_overlay_compositor_test PRIVATE
 )
 mocktail_apply_compile_options(vulkan_text_overlay_compositor_test)
 
+add_executable(etc2_decode_totals_test
+  etc2_decode_totals_test.cc
+  ${PROJECT_SOURCE_DIR}/src/graphics/etc2_decode_totals.cc
+)
+target_include_directories(etc2_decode_totals_test PRIVATE
+  ${PROJECT_SOURCE_DIR}/include
+)
+target_link_libraries(etc2_decode_totals_test PRIVATE GTest::gtest_main)
+mocktail_apply_compile_options(etc2_decode_totals_test)
+
 add_executable(video_driver_policy_test
   video_driver_policy_test.cc
 )
@@ -1165,6 +1175,7 @@ gtest_discover_tests(input_pump_pacer_test)
 gtest_discover_tests(vulkan_surface_recovery_gate_test)
 gtest_discover_tests(vulkan_present_progress_gate_test)
 gtest_discover_tests(vulkan_text_overlay_compositor_test)
+gtest_discover_tests(etc2_decode_totals_test)
 gtest_discover_tests(video_driver_policy_test)
 gtest_discover_tests(wayland_global_probe_test)
 gtest_discover_tests(wayland_surface_commit_guard_test)

@@ -108,6 +108,7 @@ add_library(stub_vulkan SHARED
   ${CMAKE_SOURCE_DIR}/src/graphics/bionic_vulkan_loader_adapter.cc
   ${CMAKE_SOURCE_DIR}/src/graphics/vulkan_text_overlay_compositor.cc
   ${CMAKE_SOURCE_DIR}/src/graphics/vulkan_etc2_emulation.cc
+  ${CMAKE_SOURCE_DIR}/src/graphics/etc2_decode_totals.cc
   ${CMAKE_SOURCE_DIR}/src/graphics/etc2_decoder.cc
   ${CMAKE_SOURCE_DIR}/src/graphics/texture_override.cc
 )
