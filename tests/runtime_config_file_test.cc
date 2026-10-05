@@ -189,9 +189,14 @@ TEST(RuntimeConfigBootstrapTest,
            "# String (default: native): sign in on Roblox's own welcome screen "
            "(native)\n  # or in Mocktail's browser sign-in window (browser).\n  "
            "sign_in: native",
-           "# Vulkan on Intel-only graphics), manual leaves Roblox's in-game "
-           "graphics\n  # slider in control, and an integer from 1 to 21 "
-           "forces that level.\n  graphics_quality: default",
+           "# Vulkan on Intel integrated graphics), manual leaves Roblox's "
+           "in-game\n  # graphics slider in control, and an integer from 1 to "
+           "21 forces that level.\n  graphics_quality: default",
+           "# String (default: auto): graphics card for direct Vulkan when the "
+           "computer\n  # has more than one: auto, discrete, or integrated. "
+           "auto prefers the\n  # discrete card unless DRI_PRIME or "
+           "__NV_PRIME_RENDER_OFFLOAD is 0. With a\n  # single card that card "
+           "is used; VK_DRIVER_FILES, when set, takes precedence.\n  gpu: auto",
            "# Boolean (default: true): with direct Vulkan, let Roblox load its "
            "shader\n  # pack on several threads on NVIDIA GPUs, as it does on "
            "Intel and AMD.\n  # false makes Roblox load it on one thread "
@@ -1165,6 +1170,7 @@ TEST(RuntimeConfigFileTest, ShippedTemplateDefaultsTheLauncherSections) {
   EXPECT_EQ(loaded.config.display().start_mode, WindowStartMode::kRemember);
   EXPECT_EQ(loaded.config.account().sign_in, SignInMethod::kNative);
   EXPECT_EQ(loaded.config.engine().graphics_quality, GraphicsQuality{});
+  EXPECT_EQ(loaded.config.engine().gpu, GpuPreference::kAuto);
   EXPECT_TRUE(loaded.config.engine().nvidia_shader_mt);
   EXPECT_TRUE(loaded.config.launcher().show_on_start);
   // New keys live in new top-level sections so that older Mocktail builds,
@@ -1233,6 +1239,25 @@ TEST(RuntimeConfigFileTest, LoadsEveryLauncherManagedValue) {
   }
 }
 
+TEST(RuntimeConfigFileTest, LoadsTheGraphicsCardPreference) {
+  TemporaryDirectory temporary;
+  for (const auto& [value, expected] : {
+           std::pair<const char*, GpuPreference>("auto", GpuPreference::kAuto),
+           {"discrete", GpuPreference::kDiscrete},
+           {"integrated", GpuPreference::kIntegrated},
+           {"\"integrated\"", GpuPreference::kIntegrated},
+       }) {
+    const RuntimeConfigLoadResult loaded = LoadRuntimeConfig(
+        MapEnvironment(), temporary.Write(std::string("version: 1\nengine:\n"
+                                                      "  gpu: ") +
+                                          value + "\n"));
+    ASSERT_TRUE(loaded) << loaded.error << '\n' << value;
+    EXPECT_EQ(loaded.config.engine().gpu, expected) << value;
+    EXPECT_EQ(loaded.config.engine().graphics_quality, GraphicsQuality{})
+        << value;
+  }
+}
+
 TEST(RuntimeConfigFileTest, RejectsInvalidLauncherManagedValuesByKey) {
   TemporaryDirectory temporary;
   struct Case {
@@ -1255,6 +1280,10 @@ TEST(RuntimeConfigFileTest, RejectsInvalidLauncherManagedValuesByKey) {
            Case{"engine", "graphics_quality", "auto"},
            Case{"engine", "graphics_quality", "high"},
            Case{"engine", "graphics_quality", "\"\""},
+           Case{"engine", "gpu", "igpu"},
+           Case{"engine", "gpu", "Discrete"},
+           Case{"engine", "gpu", "nvidia"},
+           Case{"engine", "gpu", "\"\""},
            Case{"engine", "nvidia_shader_mt", "off"},
            Case{"engine", "nvidia_shader_mt", "0"},
            Case{"engine", "nvidia_shader_mt", "auto"},
@@ -1314,6 +1343,7 @@ account:
   sign_in: native
 engine:
   graphics_quality: 12
+  gpu: discrete
   nvidia_shader_mt: true
 launcher:
   show_on_start: true
@@ -1325,6 +1355,7 @@ launcher:
           {"MOCKTAIL_WINDOW_START_MODE", "fullscreen"},
           {"MOCKTAIL_NATIVE_LOGIN", "0"},
           {"MOCKTAIL_GRAPHICS_QUALITY", "manual"},
+          {"MOCKTAIL_GPU", "integrated"},
           {"MOCKTAIL_NVIDIA_SHADER_MT", "off"},
           {"MOCKTAIL_LAUNCHER_SHOW_ON_START", "0"},
       }),
@@ -1335,6 +1366,7 @@ launcher:
   EXPECT_EQ(loaded.config.account().sign_in, SignInMethod::kBrowser);
   EXPECT_EQ(loaded.config.engine().graphics_quality.mode,
             GraphicsQualityMode::kManual);
+  EXPECT_EQ(loaded.config.engine().gpu, GpuPreference::kIntegrated);
   EXPECT_FALSE(loaded.config.engine().nvidia_shader_mt);
   EXPECT_FALSE(loaded.config.launcher().show_on_start);
 
@@ -1367,6 +1399,7 @@ launcher:
                                  {"MOCKTAIL_DISPLAY_SERVER", ""},
                                  {"MOCKTAIL_WINDOW_START_MODE", ""},
                                  {"MOCKTAIL_GRAPHICS_QUALITY", ""},
+                                 {"MOCKTAIL_GPU", ""},
                                  {"MOCKTAIL_NVIDIA_SHADER_MT", ""},
                                  {"MOCKTAIL_LAUNCHER_SHOW_ON_START", ""},
                              }),
@@ -1377,6 +1410,7 @@ display:
   start_mode: windowed
 engine:
   graphics_quality: 4
+  gpu: integrated
   nvidia_shader_mt: false
 launcher:
   show_on_start: false
@@ -1385,6 +1419,7 @@ launcher:
   EXPECT_EQ(loaded.config.display().server, DisplayServer::kAuto);
   EXPECT_EQ(loaded.config.display().start_mode, WindowStartMode::kRemember);
   EXPECT_EQ(loaded.config.engine().graphics_quality, GraphicsQuality{});
+  EXPECT_EQ(loaded.config.engine().gpu, GpuPreference::kAuto);
   EXPECT_TRUE(loaded.config.engine().nvidia_shader_mt);
   EXPECT_TRUE(loaded.config.launcher().show_on_start);
 }
@@ -1398,6 +1433,8 @@ TEST(RuntimeConfigFileTest, RejectsInvalidLauncherManagedVariables) {
            {"MOCKTAIL_WINDOW_START_MODE", "minimized"},
            {"MOCKTAIL_GRAPHICS_QUALITY", "25"},
            {"MOCKTAIL_GRAPHICS_QUALITY", "ultra"},
+           {"MOCKTAIL_GPU", "igpu"},
+           {"MOCKTAIL_GPU", "nvidia"},
            {"MOCKTAIL_NVIDIA_SHADER_MT", "auto"},
            {"MOCKTAIL_LAUNCHER_SHOW_ON_START", "maybe"},
        }) {
@@ -1422,6 +1459,7 @@ TEST(RuntimeConfigFileTest, ExportsLauncherManagedSettings) {
       "MOCKTAIL_WINDOW_START_MODE",
       "MOCKTAIL_NATIVE_LOGIN",
       "MOCKTAIL_GRAPHICS_QUALITY",
+      "MOCKTAIL_GPU",
       "MOCKTAIL_NVIDIA_SHADER_MT",
       "MOCKTAIL_LAUNCHER_SHOW_ON_START",
   });
@@ -1437,6 +1475,7 @@ account:
   sign_in: browser
 engine:
   graphics_quality: 7
+  gpu: integrated
   nvidia_shader_mt: false
 launcher:
   show_on_start: false
@@ -1447,6 +1486,7 @@ launcher:
   EXPECT_EQ(GetVariable("MOCKTAIL_WINDOW_START_MODE"), "fullscreen");
   EXPECT_EQ(GetVariable("MOCKTAIL_NATIVE_LOGIN"), "0");
   EXPECT_EQ(GetVariable("MOCKTAIL_GRAPHICS_QUALITY"), "7");
+  EXPECT_EQ(GetVariable("MOCKTAIL_GPU"), "integrated");
   EXPECT_EQ(GetVariable("MOCKTAIL_NVIDIA_SHADER_MT"), "0");
   EXPECT_EQ(GetVariable("MOCKTAIL_LAUNCHER_SHOW_ON_START"), "0");
 
@@ -1459,6 +1499,7 @@ launcher:
   EXPECT_EQ(resolved.account().sign_in, SignInMethod::kBrowser);
   EXPECT_EQ(resolved.engine().graphics_quality,
             (GraphicsQuality{GraphicsQualityMode::kLevel, 7}));
+  EXPECT_EQ(resolved.engine().gpu, GpuPreference::kIntegrated);
   EXPECT_FALSE(resolved.engine().nvidia_shader_mt);
   EXPECT_FALSE(resolved.launcher().show_on_start);
 
@@ -1471,6 +1512,7 @@ launcher:
   EXPECT_EQ(GetVariable("MOCKTAIL_WINDOW_START_MODE"), "remember");
   EXPECT_EQ(GetVariable("MOCKTAIL_NATIVE_LOGIN"), "1");
   EXPECT_EQ(GetVariable("MOCKTAIL_GRAPHICS_QUALITY"), "manual");
+  EXPECT_EQ(GetVariable("MOCKTAIL_GPU"), "auto");
   EXPECT_EQ(GetVariable("MOCKTAIL_NVIDIA_SHADER_MT"), "1");
   EXPECT_EQ(GetVariable("MOCKTAIL_LAUNCHER_SHOW_ON_START"), "1");
 }
@@ -1489,7 +1531,8 @@ TEST(RuntimeConfigFileTest, DefaultGraphicsQualityLeavesThePresetInCharge) {
   ASSERT_TRUE(ExportRuntimeConfigEnvironment(loaded.config, &error)) << error;
   EXPECT_EQ(GetVariable("MOCKTAIL_GRAPHICS_QUALITY"), std::nullopt);
 
-  // The Intel-only level published by the graphics launch policy survives.
+  // The Intel integrated graphics level the graphics launch policy
+  // publishes survives.
   ASSERT_EQ(setenv("MOCKTAIL_GRAPHICS_QUALITY", "1", 1), 0);
   loaded = LoadRuntimeConfig(ProcessEnvironment(), file);
   ASSERT_TRUE(loaded) << loaded.error;

@@ -139,6 +139,12 @@ Imported GraphicsQualityVariable(std::string_view value) {
   return GraphicsQualityName(*quality);
 }
 
+Imported GpuVariable(std::string_view value) {
+  const std::optional<GpuPreference> preference = ParseGpuPreference(value);
+  if (!preference.has_value()) return std::nullopt;
+  return std::string(GpuPreferenceName(*preference));
+}
+
 Imported FrameRateLimit(std::string_view value) {
   if (value.empty()) return std::nullopt;
   const FrameRatePolicy policy = ParseFrameRatePolicy(value);
@@ -264,6 +270,7 @@ std::vector<ManagedEnvironmentVariable> BuildManagedEnvironmentVariables() {
        GraphicsBackendVariable},
       {"MOCKTAIL_GRAPHICS_QUALITY", "engine.graphics_quality",
        GraphicsQualityVariable},
+      {"MOCKTAIL_GPU", "engine.gpu", GpuVariable},
       {"MOCKTAIL_NVIDIA_SHADER_MT", "engine.nvidia_shader_mt", Switch},
       {"MOCKTAIL_FRAME_RATE_LIMIT", "graphics.frame_rate_limit",
        FrameRateLimit},

@@ -2,6 +2,7 @@
 #define MOCKTAIL_RUNTIME_GRAPHICS_LAUNCH_POLICY_H_
 
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -10,6 +11,61 @@
 
 namespace mocktail {
 namespace runtime {
+
+// An Intel, NVIDIA or AMD graphics card from /sys/class/drm.
+struct HostGpu {
+  unsigned int vendor = 0;  // PCI vendor ID
+  unsigned int device = 0;  // PCI device ID, 0 when sysfs does not say
+  std::string pci_address;  // 0000:c4:00.0, empty when sysfs does not say
+  bool integrated = false;
+};
+
+// The cards under `drm_class_directory` in card-number order. NVIDIA cards
+// are discrete. An Intel or AMD card on the PCI root bus is integrated
+// (every Intel iGPU, at 00:02.0, and the pre-Zen AMD APUs), and so is an AMD
+// card right behind the root bus's device-8 bridge, where Zen APUs put their
+// graphics. Every other card is discrete. Without a PCI path, as on a fake
+// or partial sysfs, Intel counts as integrated and AMD as discrete.
+std::vector<HostGpu> DetectHostGpus(
+    const std::filesystem::path& drm_class_directory = "/sys/class/drm");
+
+// engine.gpu as the Vulkan driver selection applies it. discrete and
+// integrated stand; auto becomes integrated when DRI_PRIME or
+// __NV_PRIME_RENDER_OFFLOAD is 0, off or igpu, and discrete otherwise.
+GpuPreference ResolveGpuPreference(GpuPreference configured,
+                                   std::string_view dri_prime,
+                                   std::string_view nv_prime_render_offload);
+
+struct HostGpuSelection {
+  // The card direct Vulkan renders on; empty when no card has a Vulkan
+  // driver in `icd_directories`.
+  std::optional<HostGpu> gpu;
+  // VK_DRIVER_FILES for it: every installed manifest of its vendor,
+  // colon-separated.
+  std::string icd;
+  // The card is of the preferred kind. False when the computer has none,
+  // or none with a driver, and another card stands in.
+  bool preferred = false;
+  // VK_LOADER_DEVICE_SELECT (0xVVVV:0xDDDD) when another card shares the
+  // vendor's drivers, as with an AMD APU and an AMD dGPU; empty otherwise.
+  std::string loader_device_select;
+};
+
+// Picks the card for `preference` (auto counts as discrete): a card of the
+// preferred kind with a Vulkan driver, NVIDIA before AMD before Intel among
+// discrete cards and Intel before AMD among integrated ones, and any other
+// card with a driver when there is none. A single card is always chosen.
+HostGpuSelection SelectHostGpu(
+    const std::vector<HostGpu>& gpus, GpuPreference preference,
+    const std::vector<std::filesystem::path>& icd_directories);
+
+// Whether direct Vulkan runs on Intel integrated graphics, which get
+// graphics quality level 1 while engine.graphics_quality is default.
+// `selected` is SelectHostGpu's card, or the card VK_LOADER_DEVICE_SELECT
+// names while the Vulkan drivers are already pinned; without one only an
+// Intel-only computer counts.
+bool RendersOnIntelIntegratedGraphics(const std::vector<HostGpu>& gpus,
+                                      const std::optional<HostGpu>& selected);
 
 // Readable ICD manifest for `vendor` that this build can actually load, or an
 // empty path. Directories are searched in order; a manifest built for another

@@ -22,6 +22,7 @@ TEST(HostLaunchEnvironmentTest, NamesOnlyMocktailVariables) {
            "ROBLOX_LIB_PATH",
            "__GL_THREADED_OPTIMIZATIONS",
            "VK_DRIVER_FILES",
+           "VK_LOADER_DEVICE_SELECT",
        }) {
     EXPECT_TRUE(IsMocktailOnlyEnvironmentVariable(name, false)) << name;
   }

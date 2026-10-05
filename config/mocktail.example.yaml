@@ -140,9 +140,14 @@ engine:
   # String (default: default): Roblox graphics quality while Mocktail's
   # rendering preset is active (physics_worker_mode throughput, or auto with
   # multithreaded_rendering). default forces level 3 (level 1 with direct
-  # Vulkan on Intel-only graphics), manual leaves Roblox's in-game graphics
-  # slider in control, and an integer from 1 to 21 forces that level.
+  # Vulkan on Intel integrated graphics), manual leaves Roblox's in-game
+  # graphics slider in control, and an integer from 1 to 21 forces that level.
   graphics_quality: default
+  # String (default: auto): graphics card for direct Vulkan when the computer
+  # has more than one: auto, discrete, or integrated. auto prefers the
+  # discrete card unless DRI_PRIME or __NV_PRIME_RENDER_OFFLOAD is 0. With a
+  # single card that card is used; VK_DRIVER_FILES, when set, takes precedence.
+  gpu: auto
   # Boolean (default: true): with direct Vulkan, let Roblox load its shader
   # pack on several threads on NVIDIA GPUs, as it does on Intel and AMD.
   # false makes Roblox load it on one thread there, as Mocktail did before

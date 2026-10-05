@@ -821,7 +821,8 @@ RunCandidateCanary() {
       PULSE_SERVER|PIPEWIRE_REMOTE|LANG|LANGUAGE|LC_*|TZ|USER|LOGNAME)
         canary_environment+=("${environment_entry}")
         ;;
-      VK_DRIVER_FILES|VK_ICD_FILENAMES|MESA_LOADER_DRIVER_OVERRIDE|DRI_PRIME|\
+      VK_DRIVER_FILES|VK_ICD_FILENAMES|VK_LOADER_DEVICE_SELECT|\
+      MESA_LOADER_DRIVER_OVERRIDE|DRI_PRIME|\
       __NV_PRIME_RENDER_OFFLOAD|__VK_LAYER_NV_optimus|\
       __GLX_VENDOR_LIBRARY_NAME)
         canary_environment+=("${environment_entry}")

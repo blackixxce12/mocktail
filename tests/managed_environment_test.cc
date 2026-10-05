@@ -108,6 +108,7 @@ TEST(ManagedEnvironmentTest, CoversEverySettingTheLauncherNeeds) {
       {"MOCKTAIL_WINDOW_START_MODE", "display.start_mode"},
       {"MOCKTAIL_NATIVE_LOGIN", "account.sign_in"},
       {"MOCKTAIL_GRAPHICS_QUALITY", "engine.graphics_quality"},
+      {"MOCKTAIL_GPU", "engine.gpu"},
       {"MOCKTAIL_NVIDIA_SHADER_MT", "engine.nvidia_shader_mt"},
       {"MOCKTAIL_LAUNCHER_SHOW_ON_START", "launcher.show_on_start"},
       {"MOCKTAIL_VSYNC", "graphics.vsync"},
@@ -172,6 +173,7 @@ TEST(ManagedEnvironmentTest, ImportedValuesLoadToTheSameSettings) {
   const std::vector<Case> cases = {
       {"MOCKTAIL_GRAPHICS_BACKEND", "vulkan"},
       {"MOCKTAIL_GRAPHICS_QUALITY", "auto"},
+      {"MOCKTAIL_GPU", "integrated"},
       {"MOCKTAIL_NVIDIA_SHADER_MT", "off"},
       {"MOCKTAIL_FRAME_RATE_LIMIT", "165"},
       {"MOCKTAIL_VSYNC", "off"},
@@ -250,6 +252,7 @@ TEST(ManagedEnvironmentTest, ImportedValuesLoadToTheSameSettings) {
     EXPECT_EQ(a.graphics_backend(), b.graphics_backend()) << entry.name;
     EXPECT_EQ(a.engine().graphics_quality, b.engine().graphics_quality)
         << entry.name;
+    EXPECT_EQ(a.engine().gpu, b.engine().gpu) << entry.name;
     EXPECT_EQ(a.engine().nvidia_shader_mt, b.engine().nvidia_shader_mt)
         << entry.name;
     EXPECT_EQ(a.frame_rate().mode, b.frame_rate().mode) << entry.name;
@@ -377,6 +380,12 @@ TEST(ManagedEnvironmentTest, ImportsCanonicalSpellings) {
   EXPECT_EQ(Import("MOCKTAIL_GRAPHICS_QUALITY", "default"), "default");
   EXPECT_EQ(Import("MOCKTAIL_GRAPHICS_QUALITY", "05"), "5");
   EXPECT_EQ(Import("MOCKTAIL_GRAPHICS_QUALITY", "22"), std::nullopt);
+
+  EXPECT_EQ(Import("MOCKTAIL_GPU", "auto"), "auto");
+  EXPECT_EQ(Import("MOCKTAIL_GPU", "discrete"), "discrete");
+  EXPECT_EQ(Import("MOCKTAIL_GPU", "integrated"), "integrated");
+  EXPECT_EQ(Import("MOCKTAIL_GPU", "Integrated"), std::nullopt);
+  EXPECT_EQ(Import("MOCKTAIL_GPU", "igpu"), std::nullopt);
 
   EXPECT_EQ(Import("MOCKTAIL_FRAME_RATE_LIMIT", "-1"), "-1");
   EXPECT_EQ(Import("MOCKTAIL_FRAME_RATE_LIMIT", "display"), "display");

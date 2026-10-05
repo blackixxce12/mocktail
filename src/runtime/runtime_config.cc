@@ -249,6 +249,25 @@ std::string GraphicsQualityName(const GraphicsQuality& quality) {
   return "default";
 }
 
+std::optional<GpuPreference> ParseGpuPreference(std::string_view value) {
+  if (value == "auto") return GpuPreference::kAuto;
+  if (value == "discrete") return GpuPreference::kDiscrete;
+  if (value == "integrated") return GpuPreference::kIntegrated;
+  return std::nullopt;
+}
+
+std::string_view GpuPreferenceName(GpuPreference preference) {
+  switch (preference) {
+    case GpuPreference::kDiscrete:
+      return "discrete";
+    case GpuPreference::kIntegrated:
+      return "integrated";
+    case GpuPreference::kAuto:
+      break;
+  }
+  return "auto";
+}
+
 std::optional<bool> ParseEnvironmentSwitch(std::string_view value) {
   if (value == "1" || value == "true" || value == "on") return true;
   if (value == "0" || value == "false" || value == "off") return false;
@@ -504,6 +523,12 @@ RuntimeConfig RuntimeConfig::FromEnvironment(const Environment& environment) {
     config.engine_.graphics_quality = *quality;
   } else {
     config.engine_.graphics_quality_valid = false;
+  }
+  if (const std::optional<GpuPreference> gpu =
+          ParseGpuPreference(environment.GetOr("MOCKTAIL_GPU", "auto"))) {
+    config.engine_.gpu = *gpu;
+  } else {
+    config.engine_.gpu_valid = false;
   }
   if (const std::optional<bool> nvidia_shader_mt = ParseEnvironmentSwitch(
           environment.GetOr("MOCKTAIL_NVIDIA_SHADER_MT", "1"))) {

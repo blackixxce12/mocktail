@@ -289,6 +289,7 @@ if [[ "${MOCKTAIL_ISOLATED_CANARY:-0}" == 1 ]]; then
 fi
 [[ "${VK_DRIVER_FILES:-}" == /test/mocktail-vk.json &&
    "${VK_ICD_FILENAMES:-}" == /test/mocktail-icd.json &&
+   "${VK_LOADER_DEVICE_SELECT:-}" == 0x1002:0x73ff &&
    "${MESA_LOADER_DRIVER_OVERRIDE:-}" == mocktail-test-driver &&
    "${DRI_PRIME:-}" == 1 &&
    "${__NV_PRIME_RENDER_OFFLOAD:-}" == 1 &&
@@ -439,6 +440,7 @@ export LD_AUDIT=
 export RIPGREP_CONFIG_PATH=/dev/null
 export VK_DRIVER_FILES=/test/mocktail-vk.json
 export VK_ICD_FILENAMES=/test/mocktail-icd.json
+export VK_LOADER_DEVICE_SELECT=0x1002:0x73ff
 export MESA_LOADER_DRIVER_OVERRIDE=mocktail-test-driver
 export DRI_PRIME=1
 export __NV_PRIME_RENDER_OFFLOAD=1
@@ -1323,8 +1325,8 @@ grep -Fxq '[auto-update] payload validation started' \
 unset MOCKTAIL_HOST_ALLOCATOR_BRIDGES MOCKTAIL_PATCH_HOSTILE_CANARY \
   MOCKTAIL_SKIP_LIBROBLOX_CTORS MOCKTAIL_COMPATIBILITY_MANIFEST \
   BASH_ENV LD_PRELOAD LD_AUDIT RIPGREP_CONFIG_PATH VK_DRIVER_FILES \
-  VK_ICD_FILENAMES MESA_LOADER_DRIVER_OVERRIDE DRI_PRIME \
-  __NV_PRIME_RENDER_OFFLOAD __VK_LAYER_NV_optimus \
+  VK_ICD_FILENAMES VK_LOADER_DEVICE_SELECT MESA_LOADER_DRIVER_OVERRIDE \
+  DRI_PRIME __NV_PRIME_RENDER_OFFLOAD __VK_LAYER_NV_optimus \
   __GLX_VENDOR_LIBRARY_NAME
 unset -f mocktail_hostile_canary
 

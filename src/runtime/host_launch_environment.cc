@@ -27,6 +27,7 @@ constexpr std::string_view kMocktailVariables[] = {
     "VK_LOADER_DRIVERS_DISABLE",
     "VK_DRIVER_FILES",
     "VK_ICD_FILENAMES",
+    "VK_LOADER_DEVICE_SELECT",
     "MESA_VK_WSI_PRESENT_MODE",
     "MESA_VK_ENABLE_SUBMIT_THREAD",
     "ANV_SYS_MEM_LIMIT",

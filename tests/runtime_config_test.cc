@@ -97,6 +97,8 @@ TEST(RuntimeConfigTest, UsesSupportedDefaults) {
   EXPECT_EQ(config.engine().graphics_quality.mode,
             GraphicsQualityMode::kDefault);
   EXPECT_TRUE(config.engine().graphics_quality_valid);
+  EXPECT_EQ(config.engine().gpu, GpuPreference::kAuto);
+  EXPECT_TRUE(config.engine().gpu_valid);
   EXPECT_TRUE(config.engine().nvidia_shader_mt);
   EXPECT_TRUE(config.engine().nvidia_shader_mt_valid);
   EXPECT_TRUE(config.launcher().show_on_start);
@@ -499,6 +501,11 @@ TEST(RuntimeConfigTest, LauncherManagedNamesRoundTrip) {
        {SignInMethod::kNative, SignInMethod::kBrowser}) {
     EXPECT_EQ(ParseSignInMethod(SignInMethodName(method)), method);
   }
+  for (const GpuPreference preference :
+       {GpuPreference::kAuto, GpuPreference::kDiscrete,
+        GpuPreference::kIntegrated}) {
+    EXPECT_EQ(ParseGpuPreference(GpuPreferenceName(preference)), preference);
+  }
   EXPECT_EQ(GraphicsQualityName(GraphicsQuality{}), "default");
   EXPECT_EQ(GraphicsQualityName({GraphicsQualityMode::kManual, 0}), "manual");
   for (int level = kMinimumGraphicsQualityLevel;
@@ -520,6 +527,11 @@ TEST(RuntimeConfigTest, LauncherManagedParsersAcceptOnlyCanonicalSpellings) {
   }
   for (const char* rejected : {"", "0", "1", "webview", "Browser"}) {
     EXPECT_FALSE(ParseSignInMethod(rejected).has_value()) << rejected;
+  }
+  // DRI_PRIME's own spellings stay with DRI_PRIME.
+  for (const char* rejected :
+       {"", "0", "1", "igpu", "dgpu", "Discrete", "nvidia", " auto"}) {
+    EXPECT_FALSE(ParseGpuPreference(rejected).has_value()) << rejected;
   }
   for (const char* rejected : {"", "0", "22", "-3", "+3", "3 ", "3.0", "auto",
                                "Manual", "99999999999999999999"}) {
@@ -563,6 +575,7 @@ TEST(RuntimeConfigTest, ReadsLauncherManagedSettingsFromEnvironment) {
       {"MOCKTAIL_WINDOW_START_MODE", "windowed"},
       {"MOCKTAIL_NATIVE_LOGIN", "0"},
       {"MOCKTAIL_GRAPHICS_QUALITY", "9"},
+      {"MOCKTAIL_GPU", "discrete"},
       {"MOCKTAIL_NVIDIA_SHADER_MT", "off"},
       {"MOCKTAIL_LAUNCHER_SHOW_ON_START", "off"},
   }));
@@ -571,6 +584,7 @@ TEST(RuntimeConfigTest, ReadsLauncherManagedSettingsFromEnvironment) {
   EXPECT_EQ(config.account().sign_in, SignInMethod::kBrowser);
   EXPECT_EQ(config.engine().graphics_quality,
             (GraphicsQuality{GraphicsQualityMode::kLevel, 9}));
+  EXPECT_EQ(config.engine().gpu, GpuPreference::kDiscrete);
   EXPECT_FALSE(config.engine().nvidia_shader_mt);
   EXPECT_FALSE(config.launcher().show_on_start);
 
@@ -578,18 +592,21 @@ TEST(RuntimeConfigTest, ReadsLauncherManagedSettingsFromEnvironment) {
       {"MOCKTAIL_DISPLAY_SERVER", "mir"},
       {"MOCKTAIL_WINDOW_START_MODE", "hidden"},
       {"MOCKTAIL_GRAPHICS_QUALITY", "40"},
+      {"MOCKTAIL_GPU", "igpu"},
       {"MOCKTAIL_NVIDIA_SHADER_MT", "auto"},
       {"MOCKTAIL_LAUNCHER_SHOW_ON_START", "sometimes"},
   }));
   EXPECT_FALSE(invalid.display().server_valid);
   EXPECT_FALSE(invalid.display().start_mode_valid);
   EXPECT_FALSE(invalid.engine().graphics_quality_valid);
+  EXPECT_FALSE(invalid.engine().gpu_valid);
   EXPECT_FALSE(invalid.engine().nvidia_shader_mt_valid);
   EXPECT_FALSE(invalid.launcher().show_on_start_valid);
   // Invalid values keep the defaults, so nothing downstream sees garbage.
   EXPECT_EQ(invalid.display().server, DisplayServer::kAuto);
   EXPECT_EQ(invalid.display().start_mode, WindowStartMode::kRemember);
   EXPECT_EQ(invalid.engine().graphics_quality, GraphicsQuality{});
+  EXPECT_EQ(invalid.engine().gpu, GpuPreference::kAuto);
   EXPECT_TRUE(invalid.engine().nvidia_shader_mt);
   EXPECT_TRUE(invalid.launcher().show_on_start);
 }

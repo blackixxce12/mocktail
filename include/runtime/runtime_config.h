@@ -113,6 +113,16 @@ struct GraphicsQuality {
   }
 };
 
+// engine.gpu: the graphics card direct Vulkan renders on when the computer
+// has more than one. Auto prefers the discrete card unless DRI_PRIME or
+// __NV_PRIME_RENDER_OFFLOAD asks for the integrated one; a computer with a
+// single card always uses it.
+enum class GpuPreference {
+  kAuto,
+  kDiscrete,
+  kIntegrated,
+};
+
 struct DisplayConfig {
   DisplayServer server = DisplayServer::kAuto;
   bool server_valid = true;
@@ -127,6 +137,8 @@ struct AccountConfig {
 struct EngineConfig {
   GraphicsQuality graphics_quality;
   bool graphics_quality_valid = true;
+  GpuPreference gpu = GpuPreference::kAuto;
+  bool gpu_valid = true;
   // engine.nvidia_shader_mt / MOCKTAIL_NVIDIA_SHADER_MT. False makes the
   // direct Vulkan launch policy deny Roblox's multithreaded shader pack
   // loading on NVIDIA GPUs.
@@ -140,8 +152,8 @@ struct LauncherConfig {
 };
 
 // Parsers accept exactly the lowercase config.yaml spelling, and names return
-// it. MOCKTAIL_DISPLAY_SERVER and MOCKTAIL_WINDOW_START_MODE carry the same
-// spelling; MOCKTAIL_NATIVE_LOGIN keeps its 1/0 form.
+// it. MOCKTAIL_DISPLAY_SERVER, MOCKTAIL_WINDOW_START_MODE and MOCKTAIL_GPU
+// carry the same spelling; MOCKTAIL_NATIVE_LOGIN keeps its 1/0 form.
 std::optional<DisplayServer> ParseDisplayServer(std::string_view value);
 std::string_view DisplayServerName(DisplayServer server);
 std::optional<WindowStartMode> ParseWindowStartMode(std::string_view value);
@@ -155,6 +167,8 @@ std::optional<GraphicsQuality> ParseGraphicsQuality(std::string_view value);
 std::optional<GraphicsQuality> ParseGraphicsQualityVariable(
     std::string_view value);
 std::string GraphicsQualityName(const GraphicsQuality& quality);
+std::optional<GpuPreference> ParseGpuPreference(std::string_view value);
+std::string_view GpuPreferenceName(GpuPreference preference);
 // Switch-style variables: 1, true or on; 0, false or off.
 std::optional<bool> ParseEnvironmentSwitch(std::string_view value);
 

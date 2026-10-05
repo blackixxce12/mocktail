@@ -208,6 +208,7 @@ bool ValidateAndMap(const ValueMap& yaml, ValueMap* environment,
       "display.start_mode",
       "account.sign_in",
       "engine.graphics_quality",
+      "engine.gpu",
       "engine.nvidia_shader_mt",
       "launcher.show_on_start",
   };
@@ -613,6 +614,14 @@ bool ValidateAndMap(const ValueMap& yaml, ValueMap* environment,
     }
     (*environment)["MOCKTAIL_GRAPHICS_QUALITY"] = GraphicsQualityName(*parsed);
   }
+  if (const auto gpu = value("engine.gpu"); gpu.has_value()) {
+    const std::optional<GpuPreference> parsed = ParseGpuPreference(*gpu);
+    if (!parsed.has_value()) {
+      *error = "engine.gpu must be auto, discrete, or integrated";
+      return false;
+    }
+    (*environment)["MOCKTAIL_GPU"] = std::string(GpuPreferenceName(*parsed));
+  }
   if (const auto nvidia_shader_mt = value("engine.nvidia_shader_mt");
       nvidia_shader_mt.has_value()) {
     bool parsed = false;
@@ -791,9 +800,10 @@ bool UnsetEnvironmentValue(const char* name, std::string* error) {
 }
 
 // The default leaves MOCKTAIL_GRAPHICS_QUALITY to the rendering preset, which
-// uses level 3 while the variable is unset and keeps the Intel-only level 1
-// that ApplyGraphicsLaunchPolicy may already have published. Only the literal
-// "default", which the preset does not understand, is removed.
+// uses level 3 while the variable is unset and keeps the level 1 for Intel
+// integrated graphics that ApplyGraphicsLaunchPolicy may already have
+// published. Only the literal "default", which the preset does not
+// understand, is removed.
 bool ExportGraphicsQuality(const GraphicsQuality& quality, std::string* error) {
   if (quality.mode != GraphicsQualityMode::kDefault) {
     return SetEnvironmentValue("MOCKTAIL_GRAPHICS_QUALITY",
@@ -870,6 +880,10 @@ RuntimeConfigLoadResult LoadRuntimeConfig(
     result.error =
         "graphics quality is invalid: MOCKTAIL_GRAPHICS_QUALITY must be "
         "default, manual, or a level from 1 to 21";
+  } else if (!result.config.engine().gpu_valid) {
+    result.error =
+        "graphics card preference is invalid: MOCKTAIL_GPU must be auto, "
+        "discrete, or integrated";
   } else if (!result.config.engine().nvidia_shader_mt_valid) {
     result.error =
         "NVIDIA shader loading policy is invalid: MOCKTAIL_NVIDIA_SHADER_MT "
@@ -945,6 +959,12 @@ bool ExportRuntimeConfigEnvironment(const RuntimeConfig& config,
   if (!config.engine().graphics_quality_valid) {
     if (error != nullptr) {
       *error = "cannot export an invalid graphics quality";
+    }
+    return false;
+  }
+  if (!config.engine().gpu_valid) {
+    if (error != nullptr) {
+      *error = "cannot export an invalid graphics card preference";
     }
     return false;
   }
@@ -1068,6 +1088,9 @@ bool ExportRuntimeConfigEnvironment(const RuntimeConfig& config,
       SetEnvironmentValue(
           "MOCKTAIL_NATIVE_LOGIN",
           config.account().sign_in == SignInMethod::kBrowser ? "0" : "1",
+          error) &&
+      SetEnvironmentValue(
+          "MOCKTAIL_GPU", std::string(GpuPreferenceName(config.engine().gpu)),
           error) &&
       SetEnvironmentValue("MOCKTAIL_NVIDIA_SHADER_MT",
                           config.engine().nvidia_shader_mt ? "1" : "0",
