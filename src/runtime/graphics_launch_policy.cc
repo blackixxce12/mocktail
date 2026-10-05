@@ -123,7 +123,14 @@ bool EnvIsOff(const char* name) {
           std::strcmp(value, "igpu") == 0);
 }
 
+// The same decision as present_mode_policy.cc ResolvePresentModePolicy:
+// Mesa's WSI replaces the present mode Mocktail's adapter chose with
+// MESA_VK_WSI_PRESENT_MODE, so Vertical sync On must win over the unlimited
+// frame rate here too.
 bool UnthrottledPresentation(const RuntimeConfig& config) {
+  if (config.vsync_mode() == "on" || config.vsync_mode() == "1") {
+    return false;
+  }
   if (config.vsync_mode() == "off" || config.vsync_mode() == "0") {
     return true;
   }

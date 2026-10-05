@@ -217,6 +217,50 @@ TEST(GraphicsLaunchPolicyTest, MakesOpenGlStrictAndVulkanIndependent) {
   ExpectGraphicsPolicyProbe("opengl");
 }
 
+// Mesa's WSI applies MESA_VK_WSI_PRESENT_MODE over the present mode the
+// adapter chose, so it must follow present_mode_policy.cc: Vertical sync On
+// wins over the unlimited frame rate, Off and unlimited are unthrottled.
+int RunWsiPresentModeProbe(const char* vsync, const char* frame_rate,
+                           const char* expected) {
+  for (const char* name : {"MOCKTAIL_GRAPHICS_BACKEND", "MOCKTAIL_VSYNC",
+                           "MOCKTAIL_FRAME_RATE_LIMIT",
+                           "MESA_VK_WSI_PRESENT_MODE"}) {
+    if (unsetenv(name) != 0) return 30;
+  }
+  if (setenv("MOCKTAIL_VSYNC", vsync, 1) != 0 ||
+      setenv("MOCKTAIL_FRAME_RATE_LIMIT", frame_rate, 1) != 0) {
+    return 31;
+  }
+  const ProcessEnvironment environment;
+  const RuntimeConfig config = RuntimeConfig::FromEnvironment(environment);
+  std::string error;
+  if (!ApplyGraphicsLaunchPolicy(config, &error)) return 32;
+  const char* mode = getenv("MESA_VK_WSI_PRESENT_MODE");
+  return mode != nullptr && std::string(mode) == expected ? 0 : 33;
+}
+
+void ExpectWsiPresentMode(const char* vsync, const char* frame_rate,
+                          const char* expected) {
+  const pid_t child = fork();
+  ASSERT_GE(child, 0);
+  if (child == 0) {
+    std::_Exit(RunWsiPresentModeProbe(vsync, frame_rate, expected));
+  }
+  int status = 0;
+  ASSERT_EQ(waitpid(child, &status, 0), child);
+  ASSERT_TRUE(WIFEXITED(status));
+  EXPECT_EQ(WEXITSTATUS(status), 0)
+      << "vsync=" << vsync << " frame_rate=" << frame_rate;
+}
+
+TEST(GraphicsLaunchPolicyTest, MesaPresentModeFollowsTheVsyncPolicy) {
+  ExpectWsiPresentMode("auto", "-1", "mailbox");
+  ExpectWsiPresentMode("auto", "unlimited", "immediate");
+  ExpectWsiPresentMode("off", "-1", "immediate");
+  ExpectWsiPresentMode("on", "unlimited", "mailbox");
+  ExpectWsiPresentMode("on", "144", "mailbox");
+}
+
 }  // namespace
 }  // namespace runtime
 }  // namespace mocktail
