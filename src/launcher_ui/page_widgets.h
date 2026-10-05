@@ -9,12 +9,15 @@
 #include <vector>
 
 #include "launcher_ui/launcher_context.h"
+#include "launcher_ui/machine_profile.h"
 #include "launcher_ui/page_rules.h"
+#include "window/video_driver_policy.h"
 
 // Building blocks shared by the Integrations, Network & Updates, Advanced
 // and About pages: buttons and rows that run an action, a file chooser for
 // path entries, a choice row for settings spread over several keys, and the
 // Fleasion/proxy state both the Integrations and the Network page check.
+// The Graphics, Display and About pages share the NVIDIA rule's reasons.
 namespace mocktail::launcher_ui {
 
 // Runs `fn` after every setting or machine change until `owner` is
@@ -66,6 +69,12 @@ std::string DisplayPath(const std::filesystem::path& path,
 // The pseudo key RobloxStatus notifies when the installed or newest Roblox
 // version changes (rows showing them refresh like on a setting change).
 inline constexpr char kRobloxStatusKey[] = "@roblox-status";
+
+// Why the NVIDIA rule keeps direct Vulkan off native Wayland here, as one
+// sentence for hints (video_driver_policy.h NvidiaNativeWaylandBlocker);
+// empty for kNone.
+std::string DescribeNvidiaWaylandBlocker(const MachineProfile& machine,
+                                         window::NvidiaWaylandBlocker blocker);
 
 }  // namespace mocktail::launcher_ui
 

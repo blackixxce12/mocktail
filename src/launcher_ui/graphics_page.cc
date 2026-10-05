@@ -7,6 +7,7 @@
 #include "launcher_ui/bindings.h"
 #include "launcher_ui/i18n.h"
 #include "launcher_ui/launcher_context.h"
+#include "launcher_ui/page_widgets.h"
 #include "launcher_ui/pages.h"
 #include "launcher_ui/recommendations.h"
 #include "runtime/frame_rate_policy.h"
@@ -159,15 +160,18 @@ GtkWidget* BuildGraphicsBackendRow(LauncherContext* context) {
           _("No ANGLE libraries were found, so “ANGLE on Vulkan” is not "
             "available.");
     }
-    if (machine.NvidiaDirectVulkanUsesX11()) {
-      // video_driver_policy.cc rule 4 and the reason in
-      // video_driver_policy.h.
+    if (machine.NvidiaDirectVulkanUsesX11(gpu_preference)) {
+      // video_driver_policy.h ResolveVideoDriverChoice and
+      // NvidiaNativeWaylandBlocker.
       text += "\n\n";
       text +=
-          _("With Vulkan on NVIDIA, the automatic display server runs "
-            "the game through XWayland, because NVIDIA's native Wayland "
-            "path can hang or lose the display. Display › Display server "
-            "can change that.");
+          _("With Vulkan on NVIDIA, the automatic display server runs the "
+            "game through XWayland here.");
+      text += " ";
+      text += DescribeNvidiaWaylandBlocker(
+          machine, machine.NvidiaNativeWaylandBlocker());
+      text += " ";
+      text += _("Display › Display server can change that.");
     }
     return text;
   };

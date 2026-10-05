@@ -600,8 +600,12 @@ add_library(mocktail_launcher_ui_model STATIC
   src/launcher_ui/search_index.cc
   src/launcher_ui/setting_kinds.cc
   src/launcher_ui/settings_draft.cc
-  # Pure policy shared with the game window (no SDL).
+  # Pure policy shared with the game window (no SDL), and what the NVIDIA
+  # display-server rule reads: the commit guard's switch and the
+  # compositor's globals (libwayland-client through dlopen()).
   src/window/video_driver_policy.cc
+  src/window/wayland_global_probe.cc
+  src/window/wayland_surface_commit_guard.cc
 )
 target_include_directories(mocktail_launcher_ui_model PUBLIC include src)
 mocktail_apply_compile_options(mocktail_launcher_ui_model)
@@ -612,6 +616,7 @@ target_link_libraries(mocktail_launcher_ui_model
     Mocktail::LauncherUiLaunch
   PRIVATE
     PkgConfig::GIO
+    ${CMAKE_DL_LIBS}
 )
 
 # GTK-free rules of the Integrations, Network & Updates, Advanced and About

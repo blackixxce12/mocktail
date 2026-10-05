@@ -12,6 +12,8 @@
 #include "runtime/environment.h"
 #include "runtime/graphics_launch_policy.h"
 #include "runtime/runtime_config.h"
+#include "window/video_driver_policy.h"
+#include "window/wayland_global_probe.h"
 
 namespace mocktail::launcher_ui {
 
@@ -46,6 +48,10 @@ struct GpuSummary {
   // video_driver_policy.cc checks (HasNvidiaKernelDriver): the proprietary
   // or open NVIDIA kernel module, not nouveau.
   bool nvidia_kernel_driver = false;
+  // Its version, "615.71.09", from the NVRM line of
+  // /proc/driver/nvidia/version, else /sys/module/nvidia/version
+  // (video_driver_policy.h NvidiaDriverVersion); empty when unknown.
+  std::string nvidia_driver_version;
   // Discrete AMD and Intel cards among `cards`: a Radeon dGPU, an Arc card.
   bool amd_discrete = false;
   bool intel_discrete = false;
@@ -140,6 +146,15 @@ struct MachineProfile {
   bool x11_available = false;
   // MOCKTAIL_PREFER_WAYLAND is not 0/false (window.cc).
   bool prefer_wayland = true;
+  // MOCKTAIL_WAYLAND_COMMIT_GUARD does not turn the surface-commit guard
+  // off (wayland_surface_commit_guard.h SurfaceCommitGuardAllowed).
+  bool surface_commit_guard = true;
+  // Whether the compositor offers wp_linux_drm_syncobj_manager_v1 (explicit
+  // sync). Asked, as the game asks it, only when the answer is the last
+  // thing the NVIDIA rule needs (NeedsWaylandExplicitSyncProbe); unknown
+  // otherwise and when the probe fails.
+  window::WaylandExplicitSync wayland_explicit_sync =
+      window::WaylandExplicitSync::kUnknown;
   bool flatpak = false;
 
   int physical_cores = 0;
@@ -185,13 +200,32 @@ struct MachineProfile {
   // graphics, which then get graphics quality level 1 by default
   // (graphics_launch_policy.h RendersOnIntelIntegratedGraphics).
   bool RendersOnIntelIntegratedGraphics(std::string_view gpu_preference) const;
-  // What display.server: auto picks for the game window with `backend`
-  // (a config.yaml graphics.backend value): "wayland" or "x11", or empty
-  // when this session has neither. Mirrors ResolveVideoDriverChoice.
-  std::string AutomaticDisplayServer(std::string_view backend) const;
-  // display.server: auto runs direct Vulkan through XWayland because of
-  // the NVIDIA kernel driver (video_driver_policy.h).
-  bool NvidiaDirectVulkanUsesX11() const;
+  // What the game window's video driver policy reads with `backend` and
+  // `gpu_preference` (config.yaml graphics.backend and engine.gpu values),
+  // as window.cc ResolveConfiguredVideoDriverChoice gathers it, before the
+  // user's SDL_VIDEODRIVER or display.server, which the Display page
+  // handles itself.
+  window::VideoDriverPolicyInput VideoDriverInput(
+      std::string_view backend, std::string_view gpu_preference) const;
+  // What display.server: auto picks for the game window: "wayland" or
+  // "x11", or empty when this session has neither. Mirrors
+  // ResolveVideoDriverChoice.
+  std::string AutomaticDisplayServer(std::string_view backend,
+                                     std::string_view gpu_preference) const;
+  // display.server: auto is the NVIDIA rule's to decide: direct Vulkan on
+  // the NVIDIA card with Wayland and XWayland both there
+  // (NvidiaDirectVulkanRuleApplies).
+  bool NvidiaRuleApplies(std::string_view backend,
+                         std::string_view gpu_preference) const;
+  // What keeps NVIDIA's direct Vulkan off native Wayland here
+  // (NvidiaNativeWaylandBlocker), kNone when nothing does. With
+  // `wayland_chosen`, display.server: wayland asks for Wayland, so the
+  // Wayland preference does not count.
+  window::NvidiaWaylandBlocker NvidiaNativeWaylandBlocker(
+      bool wayland_chosen = false) const;
+  // The NVIDIA rule keeps direct Vulkan on XWayland under display.server:
+  // auto.
+  bool NvidiaDirectVulkanUsesX11(std::string_view gpu_preference) const;
   // Vendor names, discrete first: "NVIDIA", "AMD + Intel", "" if unknown.
   std::string GpuVendorsLabel() const;
   // The vendors of the discrete cards only: "NVIDIA", "Intel Arc".
@@ -214,6 +248,9 @@ struct MachineProbe {
   // Physical cores; defaults to runtime::DetectAvailablePhysicalCoreCount.
   std::function<int()> physical_cores;
   std::function<int()> logical_cpus;
+  // Lists the compositor's globals (window.cc's registry probe); unset, the
+  // answer stays unknown.
+  std::function<window::WaylandGlobals()> wayland_globals;
 };
 
 MachineProbe DefaultMachineProbe();

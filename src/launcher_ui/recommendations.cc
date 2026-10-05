@@ -257,7 +257,8 @@ std::optional<std::string> RecommendHighDpi(const MachineProfile& machine,
 
 DisplayServerChoice ResolveDisplayServer(const MachineProfile& machine,
                                          std::string_view configured,
-                                         std::string_view backend) {
+                                         std::string_view backend,
+                                         std::string_view gpu_preference) {
   if (!machine.detected) return {};
   const bool chosen_wayland = configured == "wayland";
   const bool chosen_x11 = configured == "x11";
@@ -267,21 +268,25 @@ DisplayServerChoice ResolveDisplayServer(const MachineProfile& machine,
   if (chosen_x11 && machine.x11_available) {
     return {"x11", DisplayServerReason::kChosen};
   }
+  // runtime_config.h: direct-vulkan and auto are the built-in defaults.
+  if (backend.empty()) backend = "direct-vulkan";
+  if (gpu_preference.empty()) gpu_preference = "auto";
   DisplayServerChoice choice;
-  choice.server = machine.AutomaticDisplayServer(
-      backend.empty() ? std::string_view("direct-vulkan") : backend);
+  choice.server = machine.AutomaticDisplayServer(backend, gpu_preference);
   if (chosen_wayland || chosen_x11) {
     choice.reason = DisplayServerReason::kChosenUnavailable;
   } else if (choice.server.empty()) {
     choice.reason = DisplayServerReason::kUnknown;
+  } else if (machine.NvidiaRuleApplies(backend, gpu_preference)) {
+    choice.reason = choice.server == "wayland"
+                        ? DisplayServerReason::kNvidiaVulkanWayland
+                        : DisplayServerReason::kNvidiaVulkanX11;
   } else if (choice.server == "wayland") {
     choice.reason = DisplayServerReason::kWaylandSession;
-  } else if (!machine.wayland_available) {
-    choice.reason = DisplayServerReason::kX11Only;
   } else {
-    // With a Wayland session, only the NVIDIA rule picks X11
+    // Only the NVIDIA rule picks X11 beside a Wayland session
     // (video_driver_policy.cc; SDL's own order prefers Wayland).
-    choice.reason = DisplayServerReason::kNvidiaVulkan;
+    choice.reason = DisplayServerReason::kX11Only;
   }
   return choice;
 }

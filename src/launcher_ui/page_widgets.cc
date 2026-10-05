@@ -374,4 +374,54 @@ std::string DisplayPath(const std::filesystem::path& path,
   return text;
 }
 
+std::string DescribeNvidiaWaylandBlocker(const MachineProfile& machine,
+                                         window::NvidiaWaylandBlocker blocker) {
+  // video_driver_policy.h NvidiaNativeWaylandBlocker, in its order, and
+  // window.cc's log line for each reason.
+  switch (blocker) {
+    case window::NvidiaWaylandBlocker::kWaylandNotPreferred:
+      return _(
+          "MOCKTAIL_PREFER_WAYLAND turns the preference for Wayland "
+          "off.");
+    case window::NvidiaWaylandBlocker::kCommitGuardOff:
+      // wayland_surface_commit_guard.h SurfaceCommitGuardAllowed.
+      return _(
+          "MOCKTAIL_WAYLAND_COMMIT_GUARD turns off the guard that keeps "
+          "the game window's own updates out of NVIDIA's Wayland "
+          "presentation (upstream issue #186).");
+    case window::NvidiaWaylandBlocker::kDriverVersionUnknown:
+      return _(
+          "The NVIDIA driver's version could not be read, so it may "
+          "lack explicit sync, which NVIDIA's Wayland presentation "
+          "needs (driver 555 or newer).");
+    case window::NvidiaWaylandBlocker::kDriverWithoutExplicitSync:
+      // kNvidiaExplicitSyncDriverMajor.
+      return Format(_("NVIDIA driver %s lacks explicit sync, which NVIDIA's "
+                      "Wayland presentation needs; drivers 555 and newer have "
+                      "it."),
+                    machine.gpu.nvidia_driver_version.c_str());
+    case window::NvidiaWaylandBlocker::kOtherGpu:
+      return _(
+          "This computer has an Intel or AMD card beside the NVIDIA one, "
+          "and NVIDIA's Wayland presentation is untested there.");
+    case window::NvidiaWaylandBlocker::kNoNvidiaGpuListed:
+      return _(
+          "NVIDIA's kernel driver is loaded, but no NVIDIA card is "
+          "listed in /sys/class/drm.");
+    case window::NvidiaWaylandBlocker::kExplicitSyncUnknown:
+      return _(
+          "The desktop could not be asked whether it offers explicit "
+          "sync (wp_linux_drm_syncobj_manager_v1), which NVIDIA's "
+          "Wayland presentation needs.");
+    case window::NvidiaWaylandBlocker::kCompositorWithoutExplicitSync:
+      return _(
+          "The desktop does not offer explicit sync "
+          "(wp_linux_drm_syncobj_manager_v1), which NVIDIA's Wayland "
+          "presentation needs.");
+    case window::NvidiaWaylandBlocker::kNone:
+      break;
+  }
+  return {};
+}
+
 }  // namespace mocktail::launcher_ui

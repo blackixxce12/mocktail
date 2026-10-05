@@ -12,8 +12,10 @@
 #include "launcher_ui/bindings.h"
 #include "launcher_ui/i18n.h"
 #include "launcher_ui/launcher_context.h"
+#include "launcher_ui/page_widgets.h"
 #include "launcher_ui/pages.h"
 #include "launcher_ui/recommendations.h"
+#include "window/video_driver_policy.h"
 
 namespace mocktail::launcher_ui {
 namespace {
@@ -41,18 +43,34 @@ std::string SizeText(WindowSize size) {
 
 int Percent(double scale) { return static_cast<int>(std::lround(scale * 100)); }
 
-bool IsVulkanSpelling(const std::string& value) {
-  return value == "direct-vulkan" || value == "vulkan" ||
-         value == "native-vulkan";
-}
-
 std::string Backend(const LauncherContext& context) {
   return context.GameValue("graphics.backend", "direct-vulkan");
 }
 
+// engine.gpu: the card direct Vulkan renders on decides whether the NVIDIA
+// rule applies (video_driver_policy.h vulkan_drivers_exclude_nvidia).
+std::string GpuPreference(const LauncherContext& context) {
+  return context.GameValue("engine.gpu", "auto");
+}
+
 DisplayServerChoice ServerChoice(const LauncherContext& context,
                                  std::string_view configured) {
-  return ResolveDisplayServer(context.machine(), configured, Backend(context));
+  return ResolveDisplayServer(context.machine(), configured, Backend(context),
+                              GpuPreference(context));
+}
+
+// NVIDIA's direct Vulkan would present on native Wayland, and something the
+// NVIDIA rule checks stands against it here (NvidiaNativeWaylandBlocker,
+// with the Wayland preference that display.server: wayland gives).
+bool NvidiaWaylandRisky(const LauncherContext& context) {
+  const MachineProfile& machine = context.machine();
+  if (!machine.detected) return false;
+  const window::VideoDriverPolicyInput input =
+      machine.VideoDriverInput(Backend(context), GpuPreference(context));
+  return input.uses_direct_vulkan && input.has_nvidia_kernel_driver &&
+         !input.vulkan_drivers_exclude_nvidia &&
+         machine.NvidiaNativeWaylandBlocker(true) !=
+             window::NvidiaWaylandBlocker::kNone;
 }
 
 // Whether the game window will be a Wayland one: native resolution and the
@@ -821,7 +839,7 @@ GtkWidget* BuildResolutionRow(LauncherContext* context,
 bool NvidiaXWaylandOnScaledScreen(const LauncherContext& context) {
   const MonitorInfo& monitor = context.machine().monitor;
   return ServerChoice(context, "auto").reason ==
-             DisplayServerReason::kNvidiaVulkan &&
+             DisplayServerReason::kNvidiaVulkanX11 &&
          monitor.valid && monitor.scale > 1.0 + 1e-6;
 }
 
@@ -842,7 +860,10 @@ std::vector<ComboOption> DisplayServerOptions(LauncherContext& context) {
          switch (ServerChoice(ctx, "auto").reason) {
            case DisplayServerReason::kWaylandSession:
              return std::string(_("Uses Wayland here"));
-           case DisplayServerReason::kNvidiaVulkan:
+           case DisplayServerReason::kNvidiaVulkanWayland:
+             return std::string(
+                 _("Uses Wayland here: NVIDIA with explicit sync"));
+           case DisplayServerReason::kNvidiaVulkanX11:
              return std::string(
                  _("Uses X11 (XWayland) here: NVIDIA with Vulkan"));
            case DisplayServerReason::kX11Only:
@@ -854,8 +875,8 @@ std::vector<ComboOption> DisplayServerOptions(LauncherContext& context) {
              break;
          }
          return std::string(
-             _("Wayland when available; X11 (XWayland) for NVIDIA with "
-               "Vulkan"));
+             _("Wayland when available; for NVIDIA with Vulkan only with "
+               "explicit sync"));
        },
        nullptr,
        false,
@@ -865,11 +886,9 @@ std::vector<ComboOption> DisplayServerOptions(LauncherContext& context) {
        {},
        {},
        [](LauncherContext& ctx) {
-         if (ctx.machine().gpu.nvidia_kernel_driver &&
-             IsVulkanSpelling(Backend(ctx))) {
+         if (NvidiaWaylandRisky(ctx)) {
            return std::string(
-               _("Native Wayland; with NVIDIA and Vulkan it has hung for some "
-                 "users"));
+               _("Native Wayland; risky for NVIDIA with Vulkan here"));
          }
          return std::string(
              _("Native Wayland: sharp on scaled screens with native "
@@ -915,24 +934,31 @@ GtkWidget* BuildDisplayServerRow(LauncherContext* context) {
         "applies the next time Roblox starts, also to the test runs of "
         "automatic updates.") +
       std::string("\n\n") +
-      // video_driver_policy.h: NVIDIA native Wayland WSI hangs and
-      // explicit-sync errors (upstream issue #186).
-      _("• Automatic: Wayland when the desktop offers it. The exception is "
-        "NVIDIA's driver with the Vulkan backend: then XWayland, because "
-        "NVIDIA's native Wayland path has hung and lost the display (upstream "
-        "issue #186).") +
+      // video_driver_policy.h ResolveVideoDriverChoice and
+      // NvidiaNativeWaylandBlocker: without explicit sync NVIDIA's Wayland
+      // presentation has hung and lost the display; SDL's own surface
+      // commits broke it too (upstream issue #186), which the surface-commit
+      // guard now prevents. With engine.gpu on another card the rule does
+      // not apply (vulkan_drivers_exclude_nvidia).
+      _("• Automatic: Wayland when the desktop offers it. NVIDIA's driver "
+        "with the Vulkan backend gets it only with driver 555 or newer, a "
+        "desktop that offers explicit sync and no Intel or AMD card beside "
+        "it; otherwise XWayland, because without explicit sync NVIDIA's "
+        "native Wayland presentation has hung and lost the display.") +
       "\n\n" +
       // research/graphics.md 3.3: pointer capture problems through XWayland
       // (upstream issue #135).
       _("• Wayland: the native path, sharp on scaled screens with native "
-        "resolution. On NVIDIA with Vulkan it is the riskier choice, but "
-        "worth a try when the mouse or camera misbehaves through XWayland.") +
+        "resolution. Where Automatic keeps NVIDIA's Vulkan on XWayland it is "
+        "the riskier choice, but worth a try when the mouse or camera "
+        "misbehaves through XWayland.") +
       "\n\n" +
       // research/graphics.md 2.2 and 3.3 (upstream issue #135).
-      _("• X11 (XWayland): avoids NVIDIA's Wayland freezes, but native "
-        "resolution has no effect: on a scaled screen the picture is soft or "
-        "Roblox's interface small, depending on how the desktop scales X11 "
-        "apps. On some desktops (Hyprland) mouse capture can misbehave.") +
+      _("• X11 (XWayland): avoids NVIDIA's Wayland freezes without explicit "
+        "sync, but native resolution has no effect: on a scaled screen the "
+        "picture is soft or Roblox's interface small, depending on how the "
+        "desktop scales X11 apps. On some desktops (Hyprland) mouse capture "
+        "can misbehave.") +
       "\n\n" +
       // graphics_launch_policy.cc UserSelectsVideoDriver.
       _("SDL_VIDEODRIVER or SDL_VIDEO_DRIVER set in the shortcut or terminal "
@@ -954,6 +980,31 @@ GtkWidget* BuildDisplayServerRow(LauncherContext* context) {
       text += " ";
       text += _("NVIDIA's kernel driver is loaded.");
     }
+    const window::VideoDriverPolicyInput input =
+        machine.VideoDriverInput(Backend(ctx), GpuPreference(ctx));
+    if (machine.NvidiaRuleApplies(Backend(ctx), GpuPreference(ctx))) {
+      const window::NvidiaWaylandBlocker blocker =
+          machine.NvidiaNativeWaylandBlocker();
+      text += "\n\n";
+      if (blocker == window::NvidiaWaylandBlocker::kNone) {
+        text += Format(_("With NVIDIA driver %s and explicit sync offered by "
+                         "the desktop, Automatic runs NVIDIA's Vulkan on "
+                         "native Wayland."),
+                       machine.gpu.nvidia_driver_version.c_str());
+      } else {
+        text += DescribeNvidiaWaylandBlocker(machine, blocker);
+        text += " ";
+        text += _("So Automatic runs NVIDIA's Vulkan through XWayland.");
+      }
+    } else if (input.uses_direct_vulkan && input.has_nvidia_kernel_driver &&
+               input.vulkan_drivers_exclude_nvidia) {
+      // video_driver_policy.h: a loaded NVIDIA kernel driver does not count
+      // while the pinned Vulkan drivers exclude NVIDIA.
+      text += "\n\n";
+      text +=
+          _("Vulkan renders on another card than the NVIDIA one here, so "
+            "NVIDIA's rule for the automatic choice does not apply.");
+    }
     return text;
   };
   spec.hint.recommend = [context](const MachineProfile& machine) {
@@ -965,19 +1016,28 @@ GtkWidget* BuildDisplayServerRow(LauncherContext* context) {
   };
   spec.hint.recommend_reason = [context](const MachineProfile& machine) {
     if (NvidiaXWaylandOnScaledScreen(*context)) {
-      return Format(_("Through XWayland this %d %% screen cannot use native "
-                      "resolution, so Roblox looks soft or its interface "
-                      "small, and some desktops (Hyprland) have mouse-capture "
-                      "trouble. Wayland keeps it sharp; NVIDIA's Wayland path "
-                      "can still freeze on some drivers (upstream issue "
-                      "#186), so switch back to Automatic if it does."),
-                    Percent(machine.monitor.scale));
+      std::string text =
+          Format(_("Through XWayland this %d %% screen cannot use native "
+                   "resolution, so Roblox looks soft or its interface small, "
+                   "and some desktops (Hyprland) have mouse-capture trouble. "
+                   "Wayland keeps it sharp."),
+                 Percent(machine.monitor.scale));
+      if (NvidiaWaylandRisky(*context)) {
+        text += " ";
+        text +=
+            _("Automatic keeps NVIDIA's Vulkan off it here for a reason "
+              "(see the warning), so switch back to Automatic if the game "
+              "freezes.");
+      }
+      return text;
     }
     if (ServerChoice(*context, "auto").reason ==
-        DisplayServerReason::kNvidiaVulkan) {
+            DisplayServerReason::kNvidiaVulkanX11 &&
+        NvidiaWaylandRisky(*context)) {
       return std::string(
-          _("It avoids NVIDIA's Wayland freezes (upstream issue #186), and at "
-            "100 % scale XWayland costs no sharpness."));
+          _("It keeps NVIDIA's Vulkan off Wayland where its Wayland "
+            "presentation is not known to be reliable, and at 100 % scale "
+            "XWayland costs no sharpness."));
     }
     return std::string(
         _("It already picks the best server this session offers."));
@@ -992,12 +1052,11 @@ GtkWidget* BuildDisplayServerRow(LauncherContext* context) {
                                  "uses the automatic choice."));
     }
     if (choice.server == "wayland" && value == "wayland" &&
-        ctx.machine().gpu.nvidia_kernel_driver &&
-        IsVulkanSpelling(Backend(ctx))) {
-      return std::string(
-          _("NVIDIA's Wayland path for Vulkan has hung or lost the display for "
-            "some users (upstream issue #186). If the game freezes or closes, "
-            "go back to Automatic."));
+        NvidiaWaylandRisky(ctx)) {
+      const MachineProfile& machine = ctx.machine();
+      return DescribeNvidiaWaylandBlocker(
+                 machine, machine.NvidiaNativeWaylandBlocker(true)) +
+             " " + _("If the game freezes or closes, go back to Automatic.");
     }
     return std::string();
   };

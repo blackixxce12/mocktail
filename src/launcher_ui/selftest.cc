@@ -17,6 +17,7 @@
 #include "launcher_ui/page_dialogs.h"
 #include "runtime/launcher_ui_launch.h"
 #include "runtime/runtime_config_bootstrap.h"
+#include "window/video_driver_policy.h"
 
 namespace mocktail::launcher_ui {
 namespace {
@@ -338,18 +339,34 @@ guint Selftest::RecordWindow() {
   };
   Note("monitor", monitor_json.dump(-1, ' ', false,
                                     nlohmann::json::error_handler_t::replace));
+  const std::string backend =
+      context_->GameValue("graphics.backend", "direct-vulkan");
+  const std::string gpu_preference = context_->GameValue("engine.gpu", "auto");
+  const char* explicit_sync = "unknown";
+  if (machine.wayland_explicit_sync == window::WaylandExplicitSync::kOffered) {
+    explicit_sync = "offered";
+  } else if (machine.wayland_explicit_sync ==
+             window::WaylandExplicitSync::kAbsent) {
+    explicit_sync = "absent";
+  }
   nlohmann::json machine_json = {
       {"detected", machine.detected},
       {"gpu", machine.GpuVendorsLabel()},
       {"nvidia_kernel_driver", machine.gpu.nvidia_kernel_driver},
+      {"nvidia_driver_version", machine.gpu.nvidia_driver_version},
+      {"explicit_sync", explicit_sync},
+      {"nvidia_rule", machine.NvidiaRuleApplies(backend, gpu_preference)},
+      {"nvidia_wayland_blocker",
+       static_cast<int>(machine.NvidiaNativeWaylandBlocker())},
+      {"automatic_display_server",
+       machine.AutomaticDisplayServer(backend, gpu_preference)},
       {"desktop", machine.desktop},
       {"wayland", machine.wayland_available},
       {"x11", machine.x11_available},
       {"physical_cores", machine.physical_cores},
       {"memory_mib", machine.memory_bytes / (1024U * 1024U)},
       {"gamemode_library", machine.gamemode_library},
-      {"vulkan_icd",
-       machine.VulkanDriver(context_->GameValue("engine.gpu", "auto")).icd},
+      {"vulkan_icd", machine.VulkanDriver(gpu_preference).icd},
       {"angle", machine.angle.has_value() ? machine.angle->directory.string()
                                           : std::string()},
   };

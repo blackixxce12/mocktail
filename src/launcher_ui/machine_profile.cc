@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -20,6 +21,8 @@
 #include "runtime/graphics_launch_policy.h"
 #include "runtime/performance_policy.h"
 #include "window/video_driver_policy.h"
+#include "window/wayland_global_probe.h"
+#include "window/wayland_surface_commit_guard.h"
 
 namespace mocktail::launcher_ui {
 namespace {
@@ -119,6 +122,11 @@ GpuSummary DetectGpus(const std::filesystem::path& root) {
   gpus.nvidia_kernel_driver =
       window::HasNvidiaKernelDriver(Under(root, "/proc/driver/nvidia/version"),
                                     Under(root, "/sys/bus/pci/drivers/nvidia"));
+  if (gpus.nvidia_kernel_driver) {
+    gpus.nvidia_driver_version =
+        window::NvidiaDriverVersion(Under(root, "/proc/driver/nvidia/version"),
+                                    Under(root, "/sys/module/nvidia/version"));
+  }
   return gpus;
 }
 
@@ -428,16 +436,43 @@ std::string GpuCardName(const runtime::HostGpu& card) {
   return {};
 }
 
-std::string MachineProfile::AutomaticDisplayServer(
-    std::string_view backend) const {
+window::VideoDriverPolicyInput MachineProfile::VideoDriverInput(
+    std::string_view backend, std::string_view gpu_preference) const {
   window::VideoDriverPolicyInput input;
   input.prefer_wayland = prefer_wayland;
   input.has_wayland_session = wayland_available;
   input.has_x11_display = x11_available;
   input.uses_direct_vulkan = IsVulkanBackend(backend);
   input.has_nvidia_kernel_driver = gpu.nvidia_kernel_driver;
-  switch (window::ResolveVideoDriverChoice(input)) {
+  // window.cc reads the drivers the policy pinned, or the user's own list;
+  // VK_DRIVER_FILES stays unset while the loader chooses.
+  if (vulkan_source == VulkanDriverSource::kUser ||
+      vulkan_source == VulkanDriverSource::kPinned) {
+    input.vulkan_drivers_exclude_nvidia =
+        window::VulkanDriverFilesExcludeNvidia(
+            VulkanDriver(gpu_preference).icd);
+  }
+  // window.cc ResolveNvidiaWaylandEvidence.
+  input.nvidia_driver_major =
+      window::NvidiaDriverMajorVersion(gpu.nvidia_driver_version);
+  for (const runtime::HostGpu& card : gpu.cards) {
+    if (card.vendor == kNvidiaPciVendor) {
+      ++input.nvidia_gpu_count;
+    } else {
+      ++input.other_gpu_count;
+    }
+  }
+  input.surface_commit_guard = surface_commit_guard;
+  input.wayland_explicit_sync = wayland_explicit_sync;
+  return input;
+}
+
+std::string MachineProfile::AutomaticDisplayServer(
+    std::string_view backend, std::string_view gpu_preference) const {
+  switch (window::ResolveVideoDriverChoice(
+      VideoDriverInput(backend, gpu_preference))) {
     case window::VideoDriverChoice::kWayland:
+    case window::VideoDriverChoice::kNvidiaDirectVulkanWayland:
       return "wayland";
     case window::VideoDriverChoice::kX11:
     case window::VideoDriverChoice::kNvidiaDirectVulkanX11:
@@ -451,14 +486,24 @@ std::string MachineProfile::AutomaticDisplayServer(
   return {};
 }
 
-bool MachineProfile::NvidiaDirectVulkanUsesX11() const {
-  window::VideoDriverPolicyInput input;
-  input.prefer_wayland = prefer_wayland;
-  input.has_wayland_session = wayland_available;
-  input.has_x11_display = x11_available;
-  input.uses_direct_vulkan = true;
-  input.has_nvidia_kernel_driver = gpu.nvidia_kernel_driver;
-  return window::ResolveVideoDriverChoice(input) ==
+bool MachineProfile::NvidiaRuleApplies(std::string_view backend,
+                                       std::string_view gpu_preference) const {
+  return window::NvidiaDirectVulkanRuleApplies(
+      VideoDriverInput(backend, gpu_preference));
+}
+
+window::NvidiaWaylandBlocker MachineProfile::NvidiaNativeWaylandBlocker(
+    bool wayland_chosen) const {
+  window::VideoDriverPolicyInput input =
+      VideoDriverInput("direct-vulkan", "auto");
+  if (wayland_chosen) input.prefer_wayland = true;
+  return window::NvidiaNativeWaylandBlocker(input);
+}
+
+bool MachineProfile::NvidiaDirectVulkanUsesX11(
+    std::string_view gpu_preference) const {
+  return window::ResolveVideoDriverChoice(
+             VideoDriverInput("direct-vulkan", gpu_preference)) ==
          window::VideoDriverChoice::kNvidiaDirectVulkanX11;
 }
 
@@ -502,6 +547,10 @@ MachineProbe DefaultMachineProbe() {
   probe.logical_cpus = [] {
     const long count = sysconf(_SC_NPROCESSORS_ONLN);
     return count > 0 ? static_cast<int>(count) : 0;
+  };
+  probe.wayland_globals = [] {
+    // window.cc kWaylandProbeTimeout.
+    return window::ProbeWaylandGlobals(std::chrono::milliseconds(500));
   };
   return probe;
 }
@@ -592,6 +641,10 @@ MachineProfile DetectMachineProfile(const runtime::Environment& environment,
   }
   const std::string prefer = environment.GetOr("MOCKTAIL_PREFER_WAYLAND", "1");
   profile.prefer_wayland = prefer != "0" && prefer != "false";
+  const std::optional<std::string> guard =
+      environment.Get("MOCKTAIL_WAYLAND_COMMIT_GUARD");
+  profile.surface_commit_guard = window::SurfaceCommitGuardAllowed(
+      guard.has_value() ? guard->c_str() : nullptr);
   profile.flatpak = NonEmpty(environment, "FLATPAK_ID") ||
                     Exists(Under(probe.root, "/.flatpak-info"));
   profile.physical_cores = probe.physical_cores ? probe.physical_cores() : 0;
@@ -631,6 +684,21 @@ MachineProfile DetectMachineProfile(const runtime::Environment& environment,
   } else {
     profile.vulkan_source = profile.flatpak ? VulkanDriverSource::kUnknown
                                             : VulkanDriverSource::kNone;
+  }
+  // window.cc asks the compositor only when its answer is all the NVIDIA
+  // rule still needs; so does the settings window, for direct Vulkan on the
+  // NVIDIA card whatever graphics.backend and engine.gpu say now, and with
+  // the Wayland preference on, as display.server: wayland would have it.
+  window::VideoDriverPolicyInput nvidia =
+      profile.VideoDriverInput("direct-vulkan", "auto");
+  nvidia.vulkan_drivers_exclude_nvidia = false;
+  nvidia.prefer_wayland = true;
+  if (window::NeedsWaylandExplicitSyncProbe(nvidia) && probe.wayland_globals) {
+    const window::WaylandGlobals globals = probe.wayland_globals();
+    profile.wayland_explicit_sync =
+        !globals.listed       ? window::WaylandExplicitSync::kUnknown
+        : globals.drm_syncobj ? window::WaylandExplicitSync::kOffered
+                              : window::WaylandExplicitSync::kAbsent;
   }
   profile.detected = true;
   return profile;

@@ -195,9 +195,12 @@ enum class DisplayServerReason {
   kChosenUnavailable,
   // Automatic: Wayland, the session's own.
   kWaylandSession,
-  // Automatic: NVIDIA kernel driver with direct Vulkan and both servers
-  // present (video_driver_policy.cc).
-  kNvidiaVulkan,
+  // Automatic, decided by the NVIDIA rule (direct Vulkan on the NVIDIA
+  // card, both servers present; video_driver_policy.h): native Wayland,
+  // as nothing in NvidiaNativeWaylandBlocker stands against it,
+  kNvidiaVulkanWayland,
+  // or XWayland, as something does.
+  kNvidiaVulkanX11,
   // Automatic: only an X server.
   kX11Only,
   // Detection has not finished, or there is no display at all.
@@ -209,9 +212,12 @@ struct DisplayServerChoice {
   DisplayServerReason reason = DisplayServerReason::kUnknown;
 };
 
+// `configured`, `backend` and `gpu_preference` are the config.yaml values
+// of display.server, graphics.backend and engine.gpu.
 DisplayServerChoice ResolveDisplayServer(const MachineProfile& machine,
                                          std::string_view configured,
-                                         std::string_view backend);
+                                         std::string_view backend,
+                                         std::string_view gpu_preference);
 
 // Mocktail's suggestion when the memory limit is switched on: 3/16 of the
 // RAM (6 GiB of 32, as config/mocktail.example.yaml suggests), at least
