@@ -482,6 +482,8 @@ const std::vector<std::string_view>& DiagnosticSettingKeys() {
       "graphics.frame_rate_limit",
       "graphics.vsync",
       "engine.graphics_quality",
+      "engine.gpu",
+      "engine.nvidia_shader_mt",
       "performance.multithreaded_rendering",
       "performance.physics_worker_mode",
       "performance.memory_limit_mb",

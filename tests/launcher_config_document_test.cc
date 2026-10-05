@@ -1049,6 +1049,57 @@ TEST(LauncherConfigDocumentTest, AddsTheLauncherSectionsToAnOlderConfig) {
             before.config.performance().game_mode);
 }
 
+// A config.yaml written before engine.gpu and engine.nvidia_shader_mt has
+// an engine: section with graphics_quality alone. The new keys go in below
+// it, indented like it, and the runtime's loader reads them.
+TEST(LauncherConfigDocumentTest, AddsTheNewEngineKeysToAnOlderEngineSection) {
+  const std::string original =
+      Fixture() + "engine:\n  # Mine.\n  graphics_quality: 5\n";
+  ConfigDocument document = ConfigDocument::FromBytes(original);
+  std::string error;
+  ASSERT_TRUE(
+      document.Set("engine.gpu", "integrated", ScalarKind::kEnum, &error))
+      << error;
+  ASSERT_TRUE(document.Set("engine.nvidia_shader_mt", "false",
+                           ScalarKind::kBool, &error))
+      << error;
+  const std::string& bytes = document.bytes();
+  EXPECT_NE(bytes.find("\nengine:\n  # Mine.\n  graphics_quality: 5\n"
+                       "  gpu: integrated\n  nvidia_shader_mt: false\n"),
+            std::string::npos)
+      << bytes;
+  const LineDiff diff = Diff(original, bytes);
+  EXPECT_TRUE(diff.removed.empty());
+  EXPECT_EQ(diff.added.size(), 2U);
+
+  ASSERT_TRUE(document.Validate(&error)) << error;
+  const runtime::RuntimeConfigLoadResult loaded = LoadWithRealLoader(bytes);
+  ASSERT_TRUE(loaded) << loaded.error;
+  EXPECT_EQ(
+      loaded.config.engine().graphics_quality,
+      (runtime::GraphicsQuality{runtime::GraphicsQualityMode::kLevel, 5}));
+  EXPECT_EQ(loaded.config.engine().gpu, runtime::GpuPreference::kIntegrated);
+  EXPECT_FALSE(loaded.config.engine().nvidia_shader_mt);
+
+  // The first-run template has both, and they are edited where they are.
+  const std::string shipped(runtime::DefaultRuntimeConfigYaml());
+  ConfigDocument fresh = ConfigDocument::FromBytes(shipped);
+  EXPECT_EQ(fresh.Get("engine.gpu"), "auto");
+  EXPECT_EQ(fresh.Get("engine.nvidia_shader_mt"), "true");
+  ASSERT_TRUE(fresh.Set("engine.gpu", "discrete", ScalarKind::kEnum, &error))
+      << error;
+  ASSERT_TRUE(
+      fresh.Set("engine.nvidia_shader_mt", "false", ScalarKind::kBool, &error))
+      << error;
+  const LineDiff fresh_diff = Diff(shipped, fresh.bytes());
+  EXPECT_EQ(
+      fresh_diff.removed,
+      (std::vector<std::string>{"  gpu: auto", "  nvidia_shader_mt: true"}));
+  EXPECT_EQ(fresh_diff.added,
+            (std::vector<std::string>{"  gpu: discrete",
+                                      "  nvidia_shader_mt: false"}));
+}
+
 TEST(LauncherConfigDocumentTest, NeverLeavesAnEmptySectionHeader) {
   const std::string original = Fixture();
   ConfigDocument document = ConfigDocument::FromBytes(original);

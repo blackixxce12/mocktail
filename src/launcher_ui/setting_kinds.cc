@@ -9,6 +9,8 @@ namespace {
 constexpr std::string_view kBooleanKeys[] = {
     "runtime.headless",
     "performance.multithreaded_rendering",
+    // runtime_config_file.cc reads it with ParseBoolean, like the others.
+    "engine.nvidia_shader_mt",
     "window.high_dpi",
     "network.use_system_proxy",
     "integrations.fleasion.enabled",

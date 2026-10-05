@@ -257,6 +257,9 @@ TEST(SettingKindsTest, WritesEachKeyAsTheLoaderReadsIt) {
             ScalarKind::kString);
   EXPECT_EQ(ScalarKindFor("graphics.backend", "direct-vulkan"),
             ScalarKind::kEnum);
+  EXPECT_EQ(ScalarKindFor("engine.gpu", "integrated"), ScalarKind::kEnum);
+  EXPECT_EQ(ScalarKindFor("engine.nvidia_shader_mt", "false"),
+            ScalarKind::kBool);
   EXPECT_TRUE(IsTextKey("integrations.discord_rpc.text.playing"));
   EXPECT_FALSE(IsTextKey("graphics.vsync"));
 }
@@ -322,6 +325,40 @@ TEST(EnvOverridesTest, MovesValuesIntoTheDraft) {
   EXPECT_EQ(draft.Get("window.title"), "Roblox: Mocktail #1");
   EXPECT_EQ(draft.Get("graphics.frame_rate_limit"), "display");
   EXPECT_EQ(draft.Get("graphics.vsync"), "off");
+  std::string error;
+  EXPECT_TRUE(draft.Validate(&error)) << error;
+}
+
+// engine.gpu and engine.nvidia_shader_mt have no row, but their variables
+// still count as overrides and move into an engine: section the draft adds.
+TEST(EnvOverridesTest, MovesTheEngineVariablesIntoTheDraft) {
+  SettingsDraft draft;
+  draft.LoadBytes(kUserConfig);
+  const MapEnvironment environment({
+      {"MOCKTAIL_GPU", "integrated"},
+      {"MOCKTAIL_NVIDIA_SHADER_MT", "off"},
+  });
+  const EnvOverrides overrides = EnvOverrides::FromNames(
+      "MOCKTAIL_GPU,MOCKTAIL_NVIDIA_SHADER_MT", environment);
+  EXPECT_EQ(overrides.SettingCount(), 2);
+  const EnvOverride* gpu = overrides.Effective("engine.gpu");
+  ASSERT_NE(gpu, nullptr);
+  EXPECT_EQ(gpu->imported, "integrated");
+  const EnvOverride* shader = overrides.Effective("engine.nvidia_shader_mt");
+  ASSERT_NE(shader, nullptr);
+  EXPECT_EQ(shader->imported, "false");
+
+  const EnvImportReport report = ImportEnvOverrides(overrides, &draft);
+  EXPECT_TRUE(report.errors.empty())
+      << (report.errors.empty() ? "" : report.errors.front());
+  EXPECT_EQ(report.imported.size(), 2U);
+  EXPECT_EQ(draft.Get("engine.gpu"), "integrated");
+  EXPECT_EQ(draft.Get("engine.nvidia_shader_mt"), "false");
+  // Plain YAML, as the template writes them.
+  const std::string& bytes = draft.working_bytes();
+  EXPECT_NE(bytes.find("\n  gpu: integrated\n"), std::string::npos) << bytes;
+  EXPECT_NE(bytes.find("\n  nvidia_shader_mt: false\n"), std::string::npos)
+      << bytes;
   std::string error;
   EXPECT_TRUE(draft.Validate(&error)) << error;
 }
