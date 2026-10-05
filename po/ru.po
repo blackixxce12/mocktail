@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mocktail\n"
 "Report-Msgid-Bugs-To: https://github.com/komaruworld/mocktail/issues\n"
-"PO-Revision-Date: 2026-10-05 00:30+0400\n"
+"PO-Revision-Date: 2026-10-05 05:00+0400\n"
 "Last-Translator: Mocktail Project Authors\n"
 "Language-Team: Russian\n"
 "Language: ru\n"
@@ -112,6 +112,9 @@ msgstr "Переопределено переменной окружения"
 msgid "Warning"
 msgstr "Предупреждение"
 
+msgid "No effect on an X11 desktop"
+msgstr "На рабочем столе X11 не действует"
+
 msgid "The game window: its size and start mode, sharpness on scaled screens, the display server and the Roblox theme"
 msgstr "Окно игры: размер и режим запуска, чёткость на масштабированных экранах, графический сервер и тема Roblox"
 
@@ -124,21 +127,32 @@ msgstr "Определяет, как Roblox рисует игру. Измене�
 msgid "• Vulkan: Roblox's own Vulkan renderer talks to your graphics driver directly. It is the default, and the only backend where Vertical sync chooses how frames are presented. When the driver lacks the ETC2 texture format Android games use (common on desktop NVIDIA and AMD cards), Mocktail decodes those textures itself."
 msgstr "• Vulkan: собственный Vulkan-рендерер Roblox работает с драйвером видеокарты напрямую. Это вариант по умолчанию и единственный, при котором настройка «Вертикальная синхронизация» влияет на вывод кадров. Если драйвер не поддерживает формат текстур ETC2, который используют Android-игры (так часто бывает с настольными видеокартами NVIDIA и AMD), Mocktail распаковывает эти текстуры сам."
 
-msgid "• OpenGL ES: Roblox's OpenGL ES 3.0 renderer on your system's EGL driver. Use it when Vulkan is missing or crashes. Vertical sync has no effect here: frames follow the driver's default, which normally waits for the display."
-msgstr "• OpenGL ES: рендерер Roblox для OpenGL ES 3.0 через системный драйвер EGL. Выбирайте его, если Vulkan отсутствует или падает. Вертикальная синхронизация здесь не действует: кадры выводятся так, как по умолчанию решает драйвер, — обычно с ожиданием обновления экрана."
+msgid "• OpenGL ES: Roblox's OpenGL ES 3.0 renderer on your system's EGL driver. Use it when Vulkan is missing or crashes. The driver decides when frames are shown, which normally means waiting for the display."
+msgstr "• OpenGL ES: рендерер Roblox для OpenGL ES 3.0 через системный драйвер EGL. Выбирайте его, если Vulkan отсутствует или падает. Когда выводить кадры, решает драйвер — обычно он ждёт обновления экрана."
 
-msgid "• ANGLE on Vulkan: the OpenGL ES renderer, translated to Vulkan by the ANGLE libraries of a Chromium or Electron installed on this computer. It adds a translation layer, is experimental on NVIDIA (upstream issue #149), and can break when that browser updates. Try it only when Vulkan shows glitches and OpenGL ES does not work."
-msgstr "• ANGLE поверх Vulkan: тот же рендерер OpenGL ES, который библиотеки ANGLE из установленного на компьютере Chromium или Electron переводят в Vulkan. Это лишний слой трансляции; на NVIDIA он экспериментальный (issue #149 в основном репозитории) и может сломаться после обновления этого браузера. Пробуйте его, только если в Vulkan видны артефакты, а OpenGL ES не работает."
+msgid "• ANGLE on Vulkan: the OpenGL ES renderer, translated to Vulkan by ANGLE libraries: Mocktail's own copy when it has one, otherwise those of an installed Chromium, Electron, CEF or Chrome. It adds a translation layer, is untested on NVIDIA, and a browser's copy can break when that browser updates. Try it only when Vulkan shows glitches and OpenGL ES does not work."
+msgstr "• ANGLE поверх Vulkan: тот же рендерер OpenGL ES, который библиотеки ANGLE переводят в Vulkan, — собственная копия Mocktail, если она есть, иначе библиотеки установленного Chromium, Electron, CEF или Chrome. Это лишний слой трансляции; на NVIDIA он не проверен, а копия из браузера может сломаться после его обновления. Пробуйте его, только если в Vulkan видны артефакты, а OpenGL ES не работает."
 
-msgid "Automatic Roblox updates test a new Roblox version with the backend chosen here before switching to it, so a version that fails with it is not installed."
-msgstr "Автоматическое обновление сначала проверяет новую версию Roblox с выбранным здесь движком и только потом переключается на неё, поэтому версия, которая с ним не работает, не устанавливается."
+msgid "Automatic Roblox updates test a new Roblox version with the backend chosen here before switching to it; if the test fails, your current version stays in use. After changing the backend, the next update is tested with the new one."
+msgstr "Автоматическое обновление сначала проверяет новую версию Roblox с выбранным здесь движком и только потом переключается на неё; если проверка не пройдена, остаётся текущая версия. После смены движка следующее обновление проверяется уже с новым."
 
 #, c-format
 msgid "Vulkan driver on this computer: %s"
 msgstr "Драйвер Vulkan на этом компьютере: %s"
 
-msgid "No Vulkan driver for your graphics card was found in the usual places (/usr/share/vulkan/icd.d)."
-msgstr "Драйвер Vulkan для вашей видеокарты не найден в обычных местах (/usr/share/vulkan/icd.d)."
+#, c-format
+msgid "Vulkan driver chosen by VK_DRIVER_FILES: %s"
+msgstr "Драйвер Vulkan, заданный в VK_DRIVER_FILES: %s"
+
+msgid "Mocktail found no Vulkan driver it recognizes; inside Flatpak the drivers come with the runtime. If Roblox fails to start with Vulkan, choose OpenGL ES."
+msgstr "Mocktail не нашёл знакомого ему драйвера Vulkan; во Flatpak драйверы поставляются со средой выполнения. Если Roblox не запустится с Vulkan, выберите OpenGL ES."
+
+msgid "Mocktail found no Vulkan driver for your graphics card where the Vulkan loader looks (/usr/share/vulkan/icd.d and similar folders). If Roblox fails to start with Vulkan, choose OpenGL ES."
+msgstr "Mocktail не нашёл драйвер Vulkan для вашей видеокарты там, где его ищет загрузчик Vulkan (/usr/share/vulkan/icd.d и похожие папки). Если Roblox не запустится с Vulkan, выберите OpenGL ES."
+
+#, c-format
+msgid "ANGLE for “ANGLE on Vulkan”: %s, set by MOCKTAIL_ANGLE_LIB_DIR."
+msgstr "ANGLE для варианта «ANGLE поверх Vulkan»: %s, задано в MOCKTAIL_ANGLE_LIB_DIR."
 
 #, c-format
 msgid "ANGLE for “ANGLE on Vulkan”: Mocktail's own copy in %s."
@@ -161,8 +175,8 @@ msgstr "Драйвер Vulkan установлен, а Vulkan — основно
 msgid "A Vulkan driver for your %s graphics is installed, and Vulkan is Mocktail's default and most direct path."
 msgstr "Для вашей видеокарты %s установлен драйвер Vulkan, а Vulkan — основной и самый прямой путь в Mocktail."
 
-msgid "No Vulkan driver was found, and OpenGL ES works with any driver that supports OpenGL ES 3.0."
-msgstr "Драйвер Vulkan не найден, а OpenGL ES работает с любым драйвером, который поддерживает OpenGL ES 3.0."
+msgid "No Vulkan driver was found where the Vulkan loader looks, and OpenGL ES works with any driver that supports OpenGL ES 3.0."
+msgstr "Там, где ищет загрузчик Vulkan, драйвер Vulkan не найден, а OpenGL ES работает с любым драйвером, который поддерживает OpenGL ES 3.0."
 
 msgid "This spelling starts an OpenGL window instead of the Vulkan one. Choose Vulkan to fix it."
 msgstr "С таким написанием открывается окно OpenGL, а не Vulkan. Выберите Vulkan, чтобы это исправить."
@@ -173,18 +187,21 @@ msgstr "Драйвер Vulkan для вашей видеокарты не най
 msgid "No ANGLE libraries were found, so Roblox cannot start with this backend."
 msgstr "Библиотеки ANGLE не найдены, поэтому с этим движком Roblox не запустится."
 
-msgid "Experimental on NVIDIA: ANGLE on Vulkan has failed there before (upstream issue #149)."
-msgstr "На NVIDIA это экспериментальный режим: ANGLE поверх Vulkan там уже отказывал (issue #149 в основном репозитории)."
-
 #, c-format
-msgid "The libraries in %s do not look like ANGLE. Roblox checks them at start and stops if they are not."
-msgstr "Библиотеки в %s не похожи на ANGLE. Roblox проверяет их при запуске и останавливается, если это не ANGLE."
+msgid "The libraries in %s, set by MOCKTAIL_ANGLE_LIB_DIR, do not look like ANGLE, so Roblox may not start with this backend."
+msgstr "Библиотеки в %s, заданные через MOCKTAIL_ANGLE_LIB_DIR, не похожи на ANGLE, поэтому с этим движком Roblox может не запуститься."
+
+msgid "Untested on NVIDIA: the only report (upstream issue #149) failed with an older Mocktail that did not find ANGLE at all."
+msgstr "На NVIDIA не проверено: единственный отчёт (issue #149 в основном репозитории) касался старой версии Mocktail, которая вообще не находила ANGLE."
 
 msgid "Software rendering on the processor: very slow, only for diagnosing problems."
 msgstr "Программная отрисовка на процессоре: очень медленно, только для диагностики проблем."
 
-msgid "Vertical sync is set, but it has no effect with OpenGL ES."
-msgstr "Вертикальная синхронизация задана, но с OpenGL ES она не действует."
+msgid "Vertical sync On has no effect with OpenGL ES; the driver decides when frames are shown."
+msgstr "Вертикальная синхронизация «Вкл.» с OpenGL ES не действует: когда выводить кадры, решает драйвер."
+
+msgid "With OpenGL ES, Vertical sync Off does not change when frames are shown; it only tells Roblox the display runs at 240 Hz."
+msgstr "С OpenGL ES вертикальная синхронизация «Выкл.» не меняет вывод кадров, а лишь сообщает Roblox, что экран работает на 240 Гц."
 
 msgid "Vulkan"
 msgstr "Vulkan"
@@ -195,8 +212,8 @@ msgstr "Vulkan-рендерер Roblox напрямую через драйве�
 msgid "OpenGL ES"
 msgstr "OpenGL ES"
 
-msgid "For a missing or broken Vulkan driver; Vertical sync has no effect"
-msgstr "Если драйвера Vulkan нет или он не работает; вертикальная синхронизация не действует"
+msgid "For a missing or broken Vulkan driver; the driver decides when frames are shown"
+msgstr "Если драйвера Vulkan нет или он не работает; вывод кадров решает драйвер"
 
 msgid "ANGLE on Vulkan"
 msgstr "ANGLE поверх Vulkan"
@@ -208,14 +225,14 @@ msgstr "OpenGL ES в Vulkan через ANGLE из %s; экспериментал
 msgid "OpenGL ES translated to Vulkan by ANGLE; experimental"
 msgstr "OpenGL ES в Vulkan через ANGLE; экспериментально"
 
-msgid "No Chromium or Electron ANGLE libraries were found on this computer"
-msgstr "На этом компьютере нет библиотек ANGLE из Chromium или Electron"
+msgid "No ANGLE libraries were found on this computer"
+msgstr "На этом компьютере нет библиотек ANGLE"
 
 msgid "OpenGL ES with ANGLE retry"
 msgstr "OpenGL ES с повтором через ANGLE"
 
-msgid "OpenGL ES; if the window cannot start, one retry with ANGLE on Vulkan"
-msgstr "OpenGL ES; если окно не открывается, одна повторная попытка через ANGLE поверх Vulkan"
+msgid "OpenGL ES; if the window cannot start and ANGLE is installed, one retry with ANGLE on Vulkan"
+msgstr "OpenGL ES; если окно не открывается и ANGLE установлен, одна повторная попытка через ANGLE поверх Vulkan"
 
 msgid "ANGLE SwiftShader (software)"
 msgstr "ANGLE SwiftShader (программно)"
@@ -233,13 +250,17 @@ msgid "Which graphics path Roblox uses on this computer"
 msgstr "Каким способом Roblox выводит графику на этом компьютере"
 
 msgid "Your status in Discord and Fleasion asset replacement"
-msgstr "Статус в Discord и замена ресурсов через Fleasion"
+msgstr "Статус в Discord и подмена ассетов через Fleasion"
 
 msgid "config.yaml was changed outside the settings window"
 msgstr "config.yaml изменён вне окна настроек"
 
 msgid "Reload"
 msgstr "Перечитать"
+
+#, c-format
+msgid "Worked out from config.yaml; this launch uses %s=%s instead."
+msgstr "Рассчитано по config.yaml, но в этом запуске действует %s=%s."
 
 #, c-format
 msgid "Cannot change %s: %s"
@@ -258,6 +279,9 @@ msgstr "Настройки не сохранены: %s"
 #, c-format
 msgid "The window size was saved, but the remembered size could not be updated: %s"
 msgstr "Размер окна сохранён, но запомненный размер обновить не удалось: %s"
+
+msgid "In X11 pixels: on this scaled screen it may cover only part of it, depending on how the desktop scales X11 apps"
+msgstr "В пикселях X11: на этом масштабированном экране окно может занять лишь часть экрана — смотря как рабочий стол масштабирует приложения X11"
 
 msgid "Settings saved"
 msgstr "Настройки сохранены"
@@ -412,14 +436,14 @@ msgstr[1] "%d несохранённых изменения"
 msgstr[2] "%d несохранённых изменений"
 
 msgid "Ready to play"
-msgstr "Всё готово к игре"
+msgstr "Можно играть"
 
 #, c-format
 msgid "Could not open %s: %s"
 msgstr "Не удалось открыть %s: %s"
 
-msgid "How Roblox is kept up to date and which proxy Mocktail uses"
-msgstr "Как обновляется Roblox и через какой прокси работает Mocktail"
+msgid "How Roblox is kept up to date and which proxy it uses"
+msgstr "Как обновляется Roblox и через какой прокси он работает"
 
 msgid "Graphics"
 msgstr "Графика"
@@ -526,8 +550,6 @@ msgstr "_Сбросить"
 msgid "All settings reset; save to keep them"
 msgstr "Все настройки сброшены; сохраните, чтобы применить"
 
-# Graphics page.
-
 msgid "Custom…"
 msgstr "Своё…"
 
@@ -536,10 +558,13 @@ msgstr "Автоматически"
 
 #, c-format
 msgid "Mocktail default (level %d)"
-msgstr "Стандарт Mocktail (уровень %d)"
+msgstr "Стандарт (уровень %d)"
 
-msgid "Roblox's own setting decides while Mocktail's performance preset is off"
-msgstr "Пока пресет производительности Mocktail выключен, решает настройка самого Roblox"
+msgid "Mocktail default"
+msgstr "Стандарт Mocktail"
+
+msgid "No level is forced while Mocktail's performance preset is off"
+msgstr "Пока пресет производительности Mocktail выключен, уровень не задаётся"
 
 msgid "Level 1 of 21: Mocktail's choice for Intel graphics with Vulkan"
 msgstr "Уровень 1 из 21: выбор Mocktail для графики Intel с Vulkan"
@@ -550,8 +575,8 @@ msgstr "Уровень 3 из 21, его задаёт пресет произв�
 msgid "Roblox in-game slider"
 msgstr "Ползунок в игре Roblox"
 
-msgid "Roblox's Graphics Quality setting decides (automatic unless you change it)"
-msgstr "Решает настройка качества графики в Roblox (автоматическая, если её не менять)"
+msgid "Roblox's Graphics Quality setting picks the level; the performance preset's other limits stay"
+msgstr "Уровень выбирает настройка качества графики в Roblox; остальные ограничения пресета остаются"
 
 #, c-format
 msgid "Level %d"
@@ -583,8 +608,8 @@ msgstr "Mocktail задаёт уровень только при включён�
 msgid "• Mocktail default: level 3, or level 1 with Vulkan on computers that have only Intel graphics. Roblox's in-game quality slider then has no effect."
 msgstr "• Стандарт Mocktail: уровень 3, а с Vulkan на компьютерах только с графикой Intel — уровень 1. Ползунок качества в самой игре Roblox тогда не действует."
 
-msgid "• Roblox in-game slider: Mocktail forces nothing, and the Graphics Quality option in Roblox's settings decides. It is automatic unless you change it, so Roblox raises or lowers the level with the frame rate."
-msgstr "• Ползунок в игре Roblox: Mocktail ничего не задаёт, решает параметр качества графики в настройках Roblox. Если его не менять, он автоматический: Roblox сам повышает или понижает уровень в зависимости от частоты кадров."
+msgid "• Roblox in-game slider: Mocktail stops forcing a quality level, and the Graphics Quality option in Roblox's settings decides it. While the performance preset is on, Mocktail still lowers texture detail, turns MSAA off and uses low-end level of detail; set Physics workers to Low latency (or Automatic without Multithreaded rendering) to turn that off too."
+msgstr "• Ползунок в игре Roblox: Mocktail перестаёт задавать уровень качества, и его определяет параметр «Качество графики» в настройках Roblox. Пока включён пресет производительности, Mocktail всё равно снижает детализацию текстур, выключает MSAA и использует упрощённую детализацию для слабых устройств; чтобы отключить и это, выберите в «Потоках физики» «Низкая задержка» (или «Автоматически» без многопоточного рендеринга)."
 
 msgid "• Custom level: forces the level you pick."
 msgstr "• Свой уровень: задаётся выбранный вами уровень."
@@ -603,11 +628,11 @@ msgid "With the current settings Roblox runs at level %d."
 msgstr "С текущими настройками Roblox работает на уровне %d."
 
 #, c-format
-msgid "Your %s graphics can usually draw more than level 3, and Roblox's automatic setting keeps the frame rate up by itself."
-msgstr "Видеокарта %s обычно тянет больше третьего уровня, а автоматическая настройка Roblox сама удерживает частоту кадров."
+msgid "Your %s graphics can usually draw more than level 3. Roblox's own Graphics Quality setting then picks the level; while Physics workers is on Throughput, Mocktail's preset still keeps textures and anti-aliasing low."
+msgstr "Видеокарта %s обычно справляется с уровнями выше третьего. Тогда уровень выбирает настройка качества графики самого Roblox; пока в «Потоках физики» выбрана «Пропускная способность», пресет Mocktail всё равно держит текстуры и сглаживание на низком уровне."
 
-msgid "With integrated or unknown graphics, Mocktail's low default keeps the frame rate up."
-msgstr "Со встроенной или неизвестной графикой низкий стандартный уровень Mocktail помогает удержать частоту кадров."
+msgid "With integrated graphics, Mocktail's low default keeps the frame rate up."
+msgstr "Со встроенной графикой низкий стандартный уровень Mocktail помогает удержать частоту кадров."
 
 #, c-format
 msgid "fflags.json sets %s to another level, so Roblox will not start. Remove that flag or choose “Roblox in-game slider”."
@@ -629,7 +654,7 @@ msgid "Change it in small steps and check the frame rate in a busy experience. C
 msgstr "Меняйте его понемногу и проверяйте частоту кадров в насыщенном месте. Чтобы уровень снова выбирал Roblox, выберите выше «Ползунок в игре Roblox»."
 
 msgid "Set in Roblox"
-msgstr "Как в настройках Roblox"
+msgstr "Как в Roblox"
 
 msgid "Roblox's own Maximum Frame Rate menu decides; Mocktail sets no target"
 msgstr "Решает меню «Максимальная частота кадров» самого Roblox; Mocktail цель не задаёт"
@@ -653,14 +678,14 @@ msgstr "Цель — %d кадров в секунду"
 msgid "240 (maximum)"
 msgstr "240 (максимум)"
 
-msgid "Roblox's highest target; Vulkan frames do not wait for the display"
-msgstr "Самая высокая цель Roblox; кадры Vulkan не ждут экран"
+msgid "The highest rate Roblox's menu offers; Vulkan frames do not wait for the display"
+msgstr "Наибольшая частота из меню Roblox; кадры Vulkan не ждут экран"
 
-msgid "Roblox's highest target; Vertical sync On still waits for the display"
-msgstr "Самая высокая цель Roblox; при включённой вертикальной синхронизации кадры всё равно ждут экран"
+msgid "The highest rate Roblox's menu offers; Vertical sync On still waits for the display"
+msgstr "Наибольшая частота из меню Roblox; при включённой вертикальной синхронизации кадры всё равно ждут экран"
 
 msgid "Set in Roblox, synchronized"
-msgstr "Как в настройках Roblox, с синхронизацией"
+msgstr "Как в Roblox, с синхронизацией"
 
 msgid "Roblox's own menu decides; with Automatic vertical sync, Vulkan frames wait for the display"
 msgstr "Решает меню самого Roblox; при автоматической вертикальной синхронизации кадры Vulkan ждут экран"
@@ -675,17 +700,17 @@ msgstr "Любое число кадров в секунду"
 msgid "Frame rate limit"
 msgstr "Ограничение FPS"
 
-msgid "How many frames per second Roblox aims for. A number here is passed to Roblox as its task scheduler target (DFIntTaskSchedulerTargetFps), so Roblox's in-game Maximum Frame Rate menu no longer decides. The change applies the next time Roblox starts."
-msgstr "Сколько кадров в секунду старается выдавать Roblox. Число отсюда передаётся Roblox как цель планировщика задач (DFIntTaskSchedulerTargetFps), и меню «Максимальная частота кадров» в самой игре больше не решает. Изменение вступит в силу при следующем запуске Roblox."
+msgid "How many frames per second Roblox aims for. A number here is passed to Roblox as its task scheduler target (DFIntTaskSchedulerTargetFps). Roblox's in-game Maximum Frame Rate menu stays available; if the game stays below the target, check that menu too. The change applies the next time Roblox starts."
+msgstr "Сколько кадров в секунду старается выдавать Roblox. Число отсюда передаётся Roblox как цель планировщика задач (DFIntTaskSchedulerTargetFps). Меню «Максимальная частота кадров» в самой игре остаётся доступным; если игра не дотягивает до цели, проверьте и его. Изменение вступит в силу при следующем запуске Roblox."
 
 msgid "• Set in Roblox: Mocktail sets no target, and Roblox's own Maximum Frame Rate menu, which Mocktail always turns on, sets the cap."
-msgstr "• Как в настройках Roblox: Mocktail цель не задаёт, а предел устанавливает меню «Максимальная частота кадров» самого Roblox, которое Mocktail всегда включает."
+msgstr "• Как в Roblox: Mocktail цель не задаёт, а предел устанавливает меню «Максимальная частота кадров» самого Roblox, которое Mocktail всегда включает."
 
 msgid "• A number: Roblox aims for exactly that many frames per second. “Match display” writes this screen's refresh rate as a number, so choose it again after moving to another screen."
 msgstr "• Число: Roblox старается выдавать ровно столько кадров в секунду. «Как у экрана» записывает частоту обновления этого экрана числом, поэтому после перехода на другой экран выберите этот вариант снова."
 
-msgid "• 240 (maximum): Roblox's highest target. With Vulkan and Vertical sync on Automatic, frames are shown without waiting for the display, and Roblox is told the display runs at 240 Hz."
-msgstr "• 240 (максимум): самая высокая цель Roblox. С Vulkan и автоматической вертикальной синхронизацией кадры выводятся без ожидания экрана, а Roblox сообщается, что экран работает на 240 Гц."
+msgid "• 240 (maximum): the highest rate Roblox's own menu offers. With Vertical sync on Automatic, Roblox is told the display runs at 240 Hz, and Vulkan frames are shown without waiting for the display."
+msgstr "• 240 (максимум): наибольшая частота, которую предлагает меню самого Roblox. При автоматической вертикальной синхронизации Roblox сообщается, что экран работает на 240 Гц, а кадры Vulkan выводятся без ожидания экрана."
 
 msgid "More frames make motion smoother and input quicker, at the cost of power, heat and fan noise. A target above the screen's refresh rate shows little difference, and a target the computer cannot reach changes nothing."
 msgstr "Чем больше кадров, тем плавнее движение и быстрее отклик, но тем выше расход энергии, нагрев и шум вентиляторов. Цель выше частоты обновления экрана почти незаметна, а цель, до которой компьютер не дотягивает, ничего не меняет."
@@ -699,19 +724,27 @@ msgid "This screen (%s) refreshes at %d Hz."
 msgstr "Частота обновления этого экрана (%s) — %d Гц."
 
 #, c-format
-msgid "Your screen refreshes %d times a second, so this target gives it a new frame on every refresh."
-msgstr "Экран обновляется %d раз в секунду, и с такой целью на каждое обновление приходится новый кадр."
+msgid "Your screen refreshes %d times a second, faster than the 240 frames per second Roblox's own menu offers, so 240 is the closest target."
+msgstr "Экран обновляется %d раз в секунду — чаще, чем 240 кадров в секунду, которые предлагает меню самого Roblox, поэтому ближе всего цель 240."
+
+#, c-format
+msgid "Your screen refreshes %d times a second; this target lets Roblox show a new frame on every refresh when the computer is fast enough."
+msgstr "Экран обновляется %d раз в секунду; с такой целью Roblox показывает новый кадр при каждом обновлении, если компьютеру хватает мощности."
 
 #, c-format
 msgid "Your screen refreshes %d times a second, which Roblox's own menu already reaches."
 msgstr "Экран обновляется %d раз в секунду, а столько даёт и меню самого Roblox."
 
 #, c-format
-msgid "fflags.json sets %s to another value, so Roblox will not start. Remove that flag or choose “Set in Roblox”."
-msgstr "В fflags.json для %s задано другое значение, поэтому Roblox не запустится. Удалите этот флаг или выберите «Как в настройках Roblox»."
+msgid "fflags.json sets %s to another value, but Mocktail always turns it on, so Roblox will not start. Remove that flag from fflags.json."
+msgstr "В fflags.json для %s задано другое значение, но Mocktail всегда включает этот флаг, поэтому Roblox не запустится. Удалите флаг из fflags.json."
 
-msgid "Roblox's highest target is 240, so a larger number may not raise the frame rate."
-msgstr "Самая высокая цель Roblox — 240, поэтому большее число может не поднять частоту кадров."
+#, c-format
+msgid "fflags.json sets %s to another value, so Roblox will not start. Remove that flag or choose “Set in Roblox”."
+msgstr "В fflags.json для %s задано другое значение, поэтому Roblox не запустится. Удалите этот флаг или выберите «Как в Roblox»."
+
+msgid "Above 240, the highest rate Roblox's own menu offers. Mocktail passes the number on unchanged, but higher targets are untested with this Roblox build."
+msgstr "Больше 240 — наибольшей частоты из меню самого Roblox. Mocktail передаёт число как есть, но более высокие цели с этой сборкой Roblox не проверялись."
 
 msgid "Custom frame rate"
 msgstr "Своя частота кадров"
@@ -722,11 +755,11 @@ msgstr "Сколько кадров в секунду старается выд�
 msgid "Any whole number of frames per second. Mocktail passes it to Roblox unchanged, without a list of allowed values."
 msgstr "Любое целое число кадров в секунду. Mocktail передаёт его Roblox как есть, без списка допустимых значений."
 
-msgid "Pick the refresh rate of your screen, or a lower number to save power and heat. Roblox's own maximum is 240."
-msgstr "Выберите частоту обновления экрана или число поменьше, чтобы сберечь энергию и меньше греться. Максимум самого Roblox — 240."
+msgid "Pick the refresh rate of your screen, or a lower number to save power and heat. 240 is the highest rate Roblox's own menu offers."
+msgstr "Выберите частоту обновления экрана или число поменьше, чтобы сберечь энергию и меньше греться. Наибольшая частота в меню самого Roblox — 240."
 
-msgid "The driver's default, since Roblox owns the frame-rate cap"
-msgstr "Как решит драйвер, потому что предел кадров задаёт Roblox"
+msgid "Roblox picks how frames are shown while it owns the cap (mailbox on AMD and Intel)"
+msgstr "Пока предел задаёт Roblox, способ вывода кадров выбирает он сам (на AMD и Intel — mailbox)"
 
 msgid "Synchronized, because a frame-rate target is set"
 msgstr "С синхронизацией, потому что задана цель частоты кадров"
@@ -737,20 +770,20 @@ msgstr "Без синхронизации, потому что частота к
 msgid "Vertical sync"
 msgstr "Вертикальная синхронизация"
 
-msgid "Decides whether Vulkan frames wait for the display's next refresh. Only the Vulkan backend uses it: with OpenGL ES and ANGLE the driver's default applies, which normally waits."
-msgstr "Определяет, ждут ли кадры Vulkan следующего обновления экрана. Действует только с движком Vulkan: с OpenGL ES и ANGLE всё решает драйвер, который обычно ждёт."
+msgid "Decides whether Vulkan frames wait for the display's next refresh. Only the Vulkan backend presents frames this way: with OpenGL ES and ANGLE the driver decides when frames are shown, but Off still tells Roblox the display runs at 240 Hz."
+msgstr "Определяет, ждут ли кадры Vulkan следующего обновления экрана. Так выводит кадры только движок Vulkan: с OpenGL ES и ANGLE момент вывода решает драйвер, но «Выкл.» всё равно сообщает Roblox, что экран работает на 240 Гц."
 
-msgid "• Automatic: synchronized when a frame-rate target is set, not synchronized with the 240 maximum, and the driver's default while Roblox owns the cap."
-msgstr "• Автоматически: с синхронизацией, если задана цель частоты кадров; без неё при максимуме 240; на усмотрение драйвера, пока предел задаёт Roblox."
+msgid "• Automatic: synchronized when a frame-rate target is set, not synchronized with the 240 maximum. While Roblox owns the cap, Roblox picks how frames are presented; with Mesa drivers (AMD, Intel, NVK) Mocktail uses mailbox, which shows only whole frames without making Roblox wait."
+msgstr "• Автоматически: с синхронизацией, если задана цель частоты кадров; без неё при максимуме 240. Пока предел задаёт Roblox, способ вывода кадров выбирает он сам; с драйверами Mesa (AMD, Intel, NVK) Mocktail включает режим mailbox — он показывает только целые кадры и не заставляет Roblox ждать."
 
 msgid "• On: frames wait for the display, using the newest finished frame when the driver allows it. No tearing, slightly more input latency."
 msgstr "• Вкл.: кадры ждут экран, причём, если драйвер позволяет, выводится самый свежий готовый кадр. Без разрывов картинки, но с чуть большей задержкой ввода."
 
-msgid "• Off: frames are shown as soon as they are ready, for the lowest input latency. Roblox is also told the display runs at 240 Hz."
-msgstr "• Выкл.: кадры выводятся сразу, как только готовы, — задержка ввода минимальна. Кроме того, Roblox сообщается, что экран работает на 240 Гц."
+msgid "• Off: frames are shown as soon as they are ready, for the lowest input latency. Roblox is also told the display runs at 240 Hz, and Mocktail stops pacing its main loop, which uses more processor time."
+msgstr "• Выкл.: кадры выводятся сразу, как только готовы, — задержка ввода минимальна. Кроме того, Roblox сообщается, что экран работает на 240 Гц, а Mocktail перестаёт притормаживать свой главный цикл, и тот занимает больше процессорного времени."
 
-msgid "On Wayland a window only tears when the compositor allows it (on Hyprland, for example, allow_tearing); otherwise Off still shows whole frames, just with less waiting."
-msgstr "В Wayland картинка в окне рвётся, только если это разрешает композитор (в Hyprland, например, allow_tearing); иначе и в режиме «Выкл.» показываются целые кадры, просто с меньшим ожиданием."
+msgid "On Wayland a window only tears when the compositor allows it; on Hyprland that takes general:allow_tearing plus an “immediate” window rule for the game. Otherwise Off still shows whole frames, just with less waiting."
+msgstr "В Wayland картинка в окне рвётся, только если это разрешает композитор: в Hyprland для этого нужны general:allow_tearing и правило окна «immediate» для игры. Иначе и в режиме «Выкл.» показываются целые кадры, просто с меньшим ожиданием."
 
 msgid "Waits for the display: no tearing, a little more latency"
 msgstr "Ждёт экран: без разрывов, задержка чуть больше"
@@ -758,11 +791,17 @@ msgstr "Ждёт экран: без разрывов, задержка чуть 
 msgid "Lowest input latency; may tear if the compositor allows it"
 msgstr "Минимальная задержка ввода; разрывы возможны, если их разрешает композитор"
 
-msgid "No effect with this graphics backend; the driver decides"
-msgstr "С этим графическим движком не действует; решает драйвер"
+msgid "With this backend the driver decides when frames are shown, but Roblox is told the display runs at 240 Hz"
+msgstr "С этим движком вывод кадров решает драйвер, но Roblox сообщается, что экран работает на 240 Гц"
 
-msgid "Only the Vulkan backend applies this; choose Vulkan or set Automatic."
-msgstr "Это действует только с движком Vulkan; выберите Vulkan или «Автоматически»."
+msgid "With this backend the driver decides when frames are shown"
+msgstr "С этим движком вывод кадров решает драйвер"
+
+msgid "Only the Vulkan backend applies On; choose Vulkan or set Automatic."
+msgstr "«Вкл.» действует только с движком Vulkan; выберите Vulkan или «Автоматически»."
+
+msgid "With this backend Vertical sync does not change when frames are shown, but Off still tells Roblox the display runs at 240 Hz and stops Mocktail's input pacing. Choose Automatic unless you want that."
+msgstr "С этим движком вертикальная синхронизация не меняет вывод кадров, но «Выкл.» всё равно сообщает Roblox, что экран работает на 240 Гц, и отключает притормаживание ввода в Mocktail. Если это не нужно, выберите «Автоматически»."
 
 msgid "Frame rate"
 msgstr "Частота кадров"
@@ -775,12 +814,12 @@ msgid "In X11 pixels; native resolution has no effect"
 msgstr "В пикселях X11; чёткое изображение не действует"
 
 #, c-format
-msgid "Renders %s px; the compositor upscales it"
-msgstr "Отрисовка %s пикс., композитор растягивает картинку"
+msgid "A %s px picture; the compositor upscales it"
+msgstr "Картинка %s пикс.; композитор её растягивает"
 
 #, c-format
-msgid "Renders %s px"
-msgstr "Отрисовка %s пикс."
+msgid "A %s px picture"
+msgstr "Картинка %s пикс."
 
 msgid "Window size"
 msgstr "Размер окна"
@@ -909,39 +948,40 @@ msgstr "Чёткое изображение при масштабировани�
 msgid "No effect through X11 (XWayland)"
 msgstr "Через X11 (XWayland) не действует"
 
-msgid "Renders every pixel of a scaled screen instead of upscaling"
-msgstr "Рисует каждый пиксель масштабированного экрана вместо растягивания"
+msgid "A full-size picture on a scaled screen instead of an upscaled one"
+msgstr "Полноразмерная картинка на масштабированном экране вместо растянутой"
 
 #, c-format
 msgid "No effect at %d %% scale"
 msgstr "При масштабе %d %% не действует"
 
 #, c-format
-msgid "Scale %d %%: renders all %s pixels"
-msgstr "Масштаб %d %%: рисуются все %s пикс."
+msgid "Scale %d %%: a %s-pixel picture, sharp text and menus"
+msgstr "Масштаб %d %%: картинка %s пикс., чёткие текст и меню"
 
 #, c-format
-msgid "Scale %d %%: renders %s, upscaled by the compositor"
-msgstr "Масштаб %d %%: рисуется %s, композитор растягивает"
+msgid "Scale %d %%: a %s picture, upscaled by the compositor"
+msgstr "Масштаб %d %%: картинка %s, композитор её растягивает"
 
-msgid "On a screen scaled above 100 %, this decides whether Roblox renders every pixel of the screen or the smaller desktop size, which the compositor then stretches. Roblox's menus keep the same size either way."
-msgstr "На экране с масштабом больше 100 % эта настройка решает, рисует ли Roblox каждый пиксель экрана или меньший размер рабочего стола, который потом растягивает композитор. Размер меню Roblox в обоих случаях одинаковый."
+msgid "On a screen scaled above 100 %, this decides whether Roblox hands the compositor a picture with every pixel of the screen or one at the smaller desktop size, which the compositor then stretches. Roblox's menus keep the same size either way."
+msgstr "На экране с масштабом больше 100 % эта настройка решает, отдаёт ли Roblox композитору картинку со всеми пикселями экрана или картинку меньшего размера рабочего стола, которую композитор затем растягивает. Размер меню Roblox в обоих случаях одинаковый."
 
-msgid "• On: sharp text and edges, but the graphics card draws the scale squared times as many pixels: 2.56 times as many at 160 %."
-msgstr "• Вкл.: чёткий текст и края, но видеокарте приходится рисовать больше пикселей — в квадрат масштаба раз: при 160 % в 2,56 раза больше."
+msgid "• On: sharp text and edges; the picture has the scale squared times as many pixels (2.56 times at 160 %), though Roblox may still draw its 3D scene smaller and scale it up itself."
+msgstr "• Вкл.: чёткий текст и края; пикселей в картинке больше в квадрат масштаба раз (при 160 % — в 2,56 раза), хотя трёхмерную сцену Roblox всё равно может рисовать меньше и растягивать сам."
 
 msgid "• Off: fewer pixels to draw, a softer picture and usually a higher frame rate."
 msgstr "• Выкл.: меньше пикселей, картинка мягче, а кадров в секунду обычно больше."
 
-msgid "It works only with Wayland. Through X11 (XWayland) the game gets no pixel density, so this setting changes nothing there."
-msgstr "Работает только с Wayland. Через X11 (XWayland) игра не получает плотность пикселей, поэтому там эта настройка ничего не меняет."
+msgid "It works only with Wayland. Through X11 the window is sized in X pixels and this setting changes nothing."
+msgstr "Работает только с Wayland. Через X11 размер окна задаётся в пикселях X-сервера, и эта настройка ничего не меняет."
 
 #, c-format
 msgid "This screen: %s desktop units at %d %%, %s pixels."
 msgstr "Этот экран: %s в единицах рабочего стола при масштабе %d %%, %s пикс."
 
-msgid "With Intel graphics only, the extra pixels cost more frame rate than the sharper picture is worth."
-msgstr "Когда есть только графика Intel, лишние пиксели отнимают больше кадров, чем стоит прибавка в чёткости."
+#, c-format
+msgid "With integrated graphics, drawing %s instead of %s costs more frame rate than the sharper picture is worth; the compositor stretches the smaller picture."
+msgstr "Со встроенной графикой отрисовка %s вместо %s отнимает больше кадров, чем стоит прибавка в чёткости; меньшую картинку растянет композитор."
 
 #, c-format
 msgid "Your screen is scaled to %d %%, and this keeps the picture as sharp as the screen allows."
@@ -994,8 +1034,8 @@ msgstr "%s пикс. в окне %s"
 msgid "Game resolution"
 msgstr "Разрешение игры"
 
-msgid "What Roblox renders with the settings above, worked out from this screen's desktop size and scale, the window size, the start mode and native resolution. Roblox lays out its interface at the desktop size; this is how many pixels it draws."
-msgstr "Что Roblox будет рисовать с настройками выше. Расчёт учитывает размер и масштаб этого экрана, размер окна, режим запуска и чёткое изображение. Интерфейс Roblox раскладывается по размеру рабочего стола, а здесь показано, сколько пикселей он рисует."
+msgid "The size of the picture Roblox hands to the compositor with the settings above, worked out from this screen's desktop size and scale, the window size, the start mode and native resolution. Roblox lays out its interface at the desktop size. Roblox's dynamic resolution may draw the 3D scene below this size, especially at low graphics quality levels."
+msgstr "Размер картинки, которую Roblox отдаёт композитору при настройках выше. Расчёт учитывает размер и масштаб этого экрана, размер окна, режим запуска и чёткое изображение. Интерфейс Roblox раскладывается по размеру рабочего стола. Динамическое разрешение Roblox может рисовать трёхмерную сцену меньше этого размера, особенно на низких уровнях качества графики."
 
 msgid "A lower fullscreen resolution, as games offer on Windows, is not available: fullscreen always covers the screen at its own size. To draw fewer pixels on a scaled screen, turn native resolution off."
 msgstr "Пониженного разрешения в полноэкранном режиме, как в играх на Windows, нет: полный экран всегда занимает экран в его собственном размере. Чтобы рисовать меньше пикселей на масштабированном экране, выключите чёткое изображение."
@@ -1045,8 +1085,8 @@ msgstr "• Автоматически: Wayland, если рабочий сто�
 msgid "• Wayland: the native path, sharp on scaled screens with native resolution. On NVIDIA with Vulkan it is the riskier choice, but worth a try when the mouse or camera misbehaves through XWayland."
 msgstr "• Wayland: нативный путь, чёткий на масштабированных экранах с чётким изображением. На NVIDIA с Vulkan это более рискованный выбор, но его стоит попробовать, если через XWayland капризничают мышь или камера."
 
-msgid "• X11 (XWayland): works with every driver, but the game gets no pixel density, so native resolution has no effect and the picture may look small or soft on a scaled screen."
-msgstr "• X11 (XWayland): работает с любым драйвером, но игра не получает плотность пикселей, поэтому чёткое изображение не действует, а на масштабированном экране картинка может выглядеть мелкой или мыльной."
+msgid "• X11 (XWayland): avoids NVIDIA's Wayland freezes, but native resolution has no effect: on a scaled screen the picture is soft or Roblox's interface small, depending on how the desktop scales X11 apps. On some desktops (Hyprland) mouse capture can misbehave."
+msgstr "• X11 (XWayland): обходит зависания NVIDIA в Wayland, но чёткое изображение не действует: на масштабированном экране картинка выходит мягкой или интерфейс Roblox — мелким, смотря как рабочий стол масштабирует приложения X11. На некоторых рабочих столах (Hyprland) может сбоить захват мыши."
 
 msgid "SDL_VIDEODRIVER or SDL_VIDEO_DRIVER set in the shortcut or terminal always win over this setting."
 msgstr "Переменные окружения SDL_VIDEODRIVER или SDL_VIDEO_DRIVER из ярлыка или терминала всегда важнее этой настройки."
@@ -1066,8 +1106,12 @@ msgstr "В этом сеансе нет графического сервера 
 msgid "NVIDIA's kernel driver is loaded."
 msgstr "Загружен драйвер ядра NVIDIA."
 
-msgid "It avoids NVIDIA's Wayland hangs; choose Wayland only if XWayland gives you trouble."
-msgstr "Так игра обходит зависания NVIDIA в Wayland; выбирайте Wayland, только если с XWayland есть проблемы."
+#, c-format
+msgid "Through XWayland this %d %% screen cannot use native resolution, so Roblox looks soft or its interface small, and some desktops (Hyprland) have mouse-capture trouble. Wayland keeps it sharp; NVIDIA's Wayland path can still freeze on some drivers (upstream issue #186), so switch back to Automatic if it does."
+msgstr "Через XWayland на этом экране с масштабом %d %% чёткое изображение не работает: картинка Roblox мягкая или интерфейс мелкий, а на некоторых рабочих столах (Hyprland) сбоит захват мыши. С Wayland картинка чёткая, но с некоторыми версиями драйвера NVIDIA игра в Wayland может зависать (issue #186 в основном репозитории) — если так случится, верните «Автоматически»."
+
+msgid "It avoids NVIDIA's Wayland freezes (upstream issue #186), and at 100 % scale XWayland costs no sharpness."
+msgstr "Так игра обходит зависания NVIDIA в Wayland (issue #186 в основном репозитории), а при масштабе 100 % XWayland ничуть не снижает чёткость."
 
 msgid "It already picks the best server this session offers."
 msgstr "Он и так выбирает лучший сервер из тех, что есть в этом сеансе."
@@ -1088,19 +1132,19 @@ msgid "The theme of Roblox's own menus and screens, chosen when the game starts.
 msgstr "Тема меню и экранов самого Roblox; выбирается при запуске игры."
 
 msgid "• From your Roblox account: the theme saved in your Roblox settings, read from Roblox's local data for the signed-in account; dark when none is saved yet."
-msgstr "• Как в аккаунте Roblox: тема, сохранённая в настройках Roblox; она читается из локальных данных Roblox для аккаунта, в который выполнен вход. Если тема ещё не сохранена — тёмная."
+msgstr "• Из аккаунта Roblox: тема, сохранённая в настройках Roblox; она читается из локальных данных Roblox для аккаунта, в который выполнен вход. Если тема ещё не сохранена — тёмная."
 
-msgid "• Follow the system: your desktop's light or dark preference as SDL reports it at start; light when the desktop reports none."
-msgstr "• Как в системе: светлая или тёмная тема рабочего стола — так, как её сообщает SDL при запуске; светлая, если рабочий стол ничего не сообщает."
+msgid "• Follow the system: your desktop's light or dark preference as reported through the desktop portal at start; light when nothing is reported, for example without xdg-desktop-portal-gtk or -gnome."
+msgstr "• Как в системе: светлая или тёмная тема рабочего стола — так, как её сообщает портал рабочего стола при запуске; светлая, если портал ничего не сообщает, например без xdg-desktop-portal-gtk или -gnome."
 
 msgid "• Light and Dark: always that theme."
 msgstr "• Светлая и Тёмная: всегда эта тема."
 
 msgid "With any choice except “From your Roblox account”, Mocktail also writes the resulting theme into Roblox's local settings for the signed-in account at every start."
-msgstr "При любом выборе, кроме «Как в аккаунте Roblox», Mocktail при каждом запуске ещё и записывает получившуюся тему в локальные настройки Roblox для аккаунта, в который выполнен вход."
+msgstr "При любом выборе, кроме «Из аккаунта Roblox», Mocktail при каждом запуске ещё и записывает получившуюся тему в локальные настройки Roblox для аккаунта, в который выполнен вход."
 
 msgid "From your Roblox account"
-msgstr "Как в аккаунте Roblox"
+msgstr "Из аккаунта Roblox"
 
 msgid "The theme saved in your Roblox settings; dark until one is saved"
 msgstr "Тема из настроек Roblox; тёмная, пока там ничего не сохранено"
@@ -1209,20 +1253,6 @@ msgstr "Больше рабочих потоков помогает поднят
 msgid "Physical cores Mocktail may use here: %d (logical processors: %d)."
 msgstr "Физических ядер, доступных Mocktail: %d (логических процессоров: %d)."
 
-#, c-format
-msgid "With %d physical core, Roblox's work can be spread wider than its own default."
-msgid_plural "With %d physical cores, Roblox's work can be spread wider than its own default."
-msgstr[0] "С %d физическим ядром работу Roblox можно распределить шире, чем он делает сам."
-msgstr[1] "С %d физическими ядрами работу Roblox можно распределить шире, чем он делает сам."
-msgstr[2] "С %d физическими ядрами работу Roblox можно распределить шире, чем он делает сам."
-
-#, c-format
-msgid "With only %d physical core there is little to spread."
-msgid_plural "With only %d physical cores there is little to spread."
-msgstr[0] "При всего %d физическом ядре распределять почти нечего."
-msgstr[1] "При всего %d физических ядрах распределять почти нечего."
-msgstr[2] "При всего %d физических ядрах распределять почти нечего."
-
 msgid "Physics workers"
 msgstr "Потоки физики"
 
@@ -1232,8 +1262,8 @@ msgstr "Как Mocktail настраивает рабочие потоки Roblo
 msgid "• Throughput (default): Roblox's worker pools may use every physical core, and Mocktail's performance preset is on: less texture memory, anti-aliasing (MSAA) off, simpler shadows and level of detail, at most 32 sounds at once, and the graphics quality level from Graphics."
 msgstr "• Пропускная способность (по умолчанию): рабочие потоки Roblox могут занять все физические ядра, и включён пресет производительности Mocktail: меньше памяти под текстуры, сглаживание (MSAA) выключено, тени и детализация проще, одновременно звучит не больше 32 звуков, а уровень качества берётся из раздела «Графика»."
 
-msgid "• Low latency: Roblox keeps its own pool sizes; Mocktail only batches physics contact work. The preset stays off, so Roblox's own graphics quality and memory use apply."
-msgstr "• Низкая задержка: Roblox сам определяет число потоков, Mocktail лишь группирует расчёт физических контактов. Пресет остаётся выключенным, поэтому действуют собственные качество графики и расход памяти Roblox."
+msgid "• Low latency: Roblox keeps its own pool sizes; Mocktail only batches physics contact work. The preset stays off, so Roblox's own graphics quality and texture limits apply (Mocktail still sizes Roblox's video memory from this computer's RAM)."
+msgstr "• Низкая задержка: Roblox сам определяет число потоков, Mocktail лишь группирует расчёт физических контактов. Пресет остаётся выключенным, поэтому действуют собственные качество графики и ограничения текстур Roblox (объём видеопамяти для Roblox Mocktail всё равно рассчитывает по оперативной памяти компьютера)."
 
 msgid "• Automatic: no tuning at all, unless Multithreaded rendering is on; that sizes the scheduler from the physical cores and turns the preset on."
 msgstr "• Автоматически: никакой настройки, если только не включён многопоточный рендеринг; тогда планировщик рассчитывается по физическим ядрам и включается пресет."
@@ -1263,8 +1293,11 @@ msgstr "Roblox сам выбирает число потоков; настраи
 msgid "No Mocktail tuning unless Multithreaded rendering is on"
 msgstr "Без настройки от Mocktail, если не включён многопоточный рендеринг"
 
-msgid "GameMode is not installed"
-msgstr "GameMode не установлен"
+msgid "libgamemode.so.0 was not found in the usual places"
+msgstr "libgamemode.so.0 не найдена в обычных местах"
+
+msgid "The GameMode portal is available; whether GameMode is installed on the host could not be checked"
+msgstr "Портал GameMode доступен; установлен ли GameMode в основной системе, проверить не удалось"
 
 msgid "GameMode is installed and its service is available"
 msgstr "GameMode установлен, и его служба доступна"
@@ -1299,8 +1332,8 @@ msgstr "• «Выкл.» никогда к нему не обращается."
 msgid "libgamemode.so.0 is installed."
 msgstr "libgamemode.so.0 установлена."
 
-msgid "libgamemode.so.0 was not found; install your distribution's gamemode package to use GameMode."
-msgstr "libgamemode.so.0 не найдена; чтобы пользоваться GameMode, установите пакет gamemode вашего дистрибутива."
+msgid "libgamemode.so.0 was not found in the usual library folders; install your distribution's gamemode package to use GameMode."
+msgstr "libgamemode.so.0 не найдена в обычных папках библиотек; чтобы пользоваться GameMode, установите пакет gamemode вашего дистрибутива."
 
 #, c-format
 msgid "%s is running."
@@ -1323,8 +1356,8 @@ msgstr "GameMode установлен, и «Автоматически» пол�
 msgid "Automatic costs nothing without GameMode and starts using it once it is installed."
 msgstr "Без GameMode «Автоматически» ничего не стоит, а после его установки начнёт им пользоваться."
 
-msgid "GameMode is not installed, so On only adds a warning to the log."
-msgstr "GameMode не установлен, поэтому «Вкл.» лишь добавит предупреждение в журнал."
+msgid "libgamemode.so.0 was not found, so On will probably only add a warning to the log."
+msgstr "libgamemode.so.0 не найдена, поэтому «Вкл.», скорее всего, лишь добавит предупреждение в журнал."
 
 msgid "No GameMode service answers on the session bus, so the request will fail; Roblox still starts."
 msgstr "На сеансовой шине не отвечает служба GameMode, поэтому запрос не пройдёт; Roblox всё равно запустится."
@@ -1335,11 +1368,14 @@ msgstr "Просит у GameMode больше производительност
 msgid "The same request; the log warns when GameMode is missing"
 msgstr "Тот же запрос; если GameMode нет, в журнале будет предупреждение"
 
-msgid "Not installed"
-msgstr "Не установлен"
+msgid "Not found"
+msgstr "Не найден"
 
 msgid "No service"
 msgstr "Нет службы"
+
+msgid "Portal"
+msgstr "Портал"
 
 msgid "Installed"
 msgstr "Установлен"
@@ -1380,8 +1416,8 @@ msgstr "У этого компьютера %s памяти; при включе�
 msgid "Very low: Roblox may be stopped while it is still loading."
 msgstr "Очень мало: Roblox может быть остановлен ещё во время загрузки."
 
-msgid "Larger than this computer's memory, so the system runs out before the limit is reached."
-msgstr "Больше, чем памяти у этого компьютера, поэтому система исчерпает память раньше, чем сработает предел."
+msgid "Larger than this computer's memory: the game is stopped only after much of it has moved to swap."
+msgstr "Больше, чем памяти у этого компьютера: игра будет остановлена, только когда значительная её часть уже уйдёт в подкачку."
 
 msgid "Processor"
 msgstr "Процессор"
@@ -1406,7 +1442,7 @@ msgid "Look for sound devices again"
 msgstr "Поискать звуковые устройства заново"
 
 msgid "System default"
-msgstr "Системное по умолчанию"
+msgstr "Как в системе"
 
 msgid "The microphone your desktop's sound settings choose"
 msgstr "Микрофон, выбранный в настройках звука рабочего стола"
@@ -1474,7 +1510,7 @@ msgid "Where Roblox plays its sound. Mocktail opens the device through SDL, whic
 msgstr "Куда Roblox выводит звук. Mocktail открывает устройство через SDL, а SDL называет устройства точно так же, как этот список."
 
 msgid "• System default: the output your desktop's sound settings choose. It keeps working when devices come and go."
-msgstr "• Системное по умолчанию: выход, выбранный в настройках звука рабочего стола. Работает и тогда, когда устройства подключают и отключают."
+msgstr "• Как в системе: выход, выбранный в настройках звука рабочего стола. Работает и тогда, когда устройства подключают и отключают."
 
 msgid "• A named device: always that one. If it is unplugged, renamed or shares its name with another device, Roblox stops at start with an audio error instead of playing elsewhere."
 msgstr "• Конкретное устройство: всегда только оно. Если его отключили, переименовали или такое же имя есть у другого устройства, Roblox остановится при запуске с ошибкой звука, а не заиграет через другой выход."
@@ -1483,13 +1519,13 @@ msgid "Roblox's own audio settings can still switch the output while you play; t
 msgstr "Во время игры выход можно переключить и в настройках звука самого Roblox; этот выбор здесь не сохраняется."
 
 msgid "A pinned device stops Roblox from starting whenever it is disconnected; System default follows your desktop instead."
-msgstr "Закреплённое устройство не даёт Roblox запуститься, когда оно отключено, а «Системное по умолчанию» просто следует за рабочим столом."
+msgstr "Закреплённое устройство не даёт Roblox запуститься, когда оно отключено, а вариант «Как в системе» просто следует за рабочим столом."
 
 msgid "This device is not connected, so Roblox will not start until it is back or System default is chosen."
-msgstr "Это устройство не подключено, поэтому Roblox не запустится, пока оно не появится или не будет выбрано «Системное по умолчанию»."
+msgstr "Это устройство не подключено, поэтому Roblox не запустится, пока оно не появится или не будет выбран вариант «Как в системе»."
 
-msgid "Several devices have this name, so Roblox refuses it. Choose System default."
-msgstr "Это имя у нескольких устройств, поэтому Roblox его не примет. Выберите «Системное по умолчанию»."
+msgid "Several devices have this name, so Roblox refuses it. Choose System default, or give the devices different names in your sound settings."
+msgstr "Это имя у нескольких устройств, поэтому Roblox его не примет. Выберите «Как в системе» или дайте устройствам разные имена в настройках звука."
 
 msgid "Microphone"
 msgstr "Микрофон"
@@ -1498,7 +1534,7 @@ msgid "The microphone Roblox voice chat records from, opened through SDL by its 
 msgstr "Микрофон, с которого записывает голосовой чат Roblox. Его открывает SDL по точному имени."
 
 msgid "• System default: the microphone your desktop's sound settings choose."
-msgstr "• Системное по умолчанию: микрофон, выбранный в настройках звука рабочего стола."
+msgstr "• Как в системе: микрофон, выбранный в настройках звука рабочего стола."
 
 msgid "• A named microphone: always that one. If it is missing at start or shares its name with another device, Roblox does not start."
 msgstr "• Конкретный микрофон: всегда только он. Если при запуске его нет или такое же имя есть у другого устройства, Roblox не запустится."
@@ -1510,10 +1546,13 @@ msgid "Whether voice chat is available at all depends on your Roblox account and
 msgstr "Доступен ли голосовой чат вообще, зависит от вашего аккаунта Roblox и настроек самого Roblox."
 
 msgid "A pinned microphone stops Roblox from starting whenever it is disconnected; System default follows your desktop instead."
-msgstr "Закреплённый микрофон не даёт Roblox запуститься, когда он отключён, а «Системное по умолчанию» просто следует за рабочим столом."
+msgstr "Закреплённый микрофон не даёт Roblox запуститься, когда он отключён, а вариант «Как в системе» просто следует за рабочим столом."
 
 msgid "This microphone is not connected, so Roblox will not start until it is back or System default is chosen."
-msgstr "Этот микрофон не подключён, поэтому Roblox не запустится, пока он не появится или не будет выбрано «Системное по умолчанию»."
+msgstr "Этот микрофон не подключён, поэтому Roblox не запустится, пока он не появится или не будет выбран вариант «Как в системе»."
+
+msgid "Several microphones have this name, so Roblox refuses it. Choose System default, or give the devices different names in your sound settings."
+msgstr "Это имя у нескольких микрофонов, поэтому Roblox его не примет. Выберите «Как в системе» или дайте устройствам разные имена в настройках звука."
 
 msgid "Device numbers change between starts. Choose the microphone by its name instead."
 msgstr "Номера устройств меняются от запуска к запуску. Лучше выберите микрофон по имени."
@@ -1589,8 +1628,8 @@ msgstr "Выполнен вход: %s"
 msgid "Remove %s?"
 msgstr "Удалить %s?"
 
-msgid "Mocktail deletes this account's saved sign-in from this computer when you save or play. Roblox's servers are not told, so the account and its sign-ins elsewhere are not affected. To play with it here again, sign in again."
-msgstr "Mocktail удалит сохранённый вход этого аккаунта с этого компьютера, когда вы сохраните изменения или начнёте игру. Серверы Roblox об этом не узнают, поэтому сам аккаунт и входы в него на других устройствах не пострадают. Чтобы снова играть им здесь, войдите ещё раз."
+msgid "Mocktail deletes this account's saved sign-in from this computer when you save or play. It does not sign out at Roblox: the session stays valid until it expires, and your sign-ins elsewhere are not affected. To end it everywhere, use “Log out of all other sessions” in Roblox's security settings. To play with it here again, sign in again."
+msgstr "Mocktail удалит сохранённый вход этого аккаунта с этого компьютера, когда вы сохраните изменения или начнёте игру. Из аккаунта на стороне Roblox это не выходит: сеанс останется действительным, пока не истечёт, а входы на других устройствах не пострадают. Чтобы завершить его везде, выйдите из всех остальных сеансов в настройках безопасности Roblox. Чтобы снова играть этим аккаунтом здесь, войдите ещё раз."
 
 msgid "_Remove"
 msgstr "_Удалить"
@@ -1643,17 +1682,17 @@ msgstr "не проверен: Roblox недоступен"
 msgid "Selected for Play"
 msgstr "Выбран для игры"
 
-msgid "Sign-in sessions are stored only on this computer, in files only your user can read, and are sent only to Roblox. Mocktail never shows them."
-msgstr "Сеансы входа хранятся только на этом компьютере, в файлах, доступных лишь вашему пользователю, и отправляются только в Roblox. Mocktail никогда их не показывает."
+msgid "Sign-in sessions are stored only on this computer, in files only your user can read, and are sent only to Roblox (and pass through Fleasion, which can read them, while it is on). Mocktail never shows them."
+msgstr "Сеансы входа хранятся только на этом компьютере, в файлах, доступных лишь вашему пользователю, и отправляются только в Roblox (пока включён Fleasion, они проходят и через него, и он может их прочитать). Mocktail никогда их не показывает."
 
 msgid "Saved accounts"
 msgstr "Сохранённые аккаунты"
 
-msgid "Play starts with the selected account. Switching needs no new sign-in."
-msgstr "Игра запускается с выбранным аккаунтом. Чтобы переключиться, входить заново не нужно."
+msgid "Play and joins from roblox.com start with the selected account. Switching needs no new sign-in."
+msgstr "«Играть» и вход в игру с roblox.com используют выбранный аккаунт. Чтобы переключиться, входить заново не нужно."
 
 msgid "_Add Account"
-msgstr "_Добавить аккаунт"
+msgstr "_Добавить"
 
 msgid "%s is set, so Roblox uses that sign-in and not the saved accounts"
 msgstr "Из-за %s Roblox использует этот вход, а не сохранённые аккаунты"
@@ -1682,14 +1721,14 @@ msgstr "Запуск без входа; сначала откроется окн
 msgid "Starts signed out; Roblox opens on its welcome screen, where you can sign in"
 msgstr "Запуск без входа; Roblox откроется на приветственном экране, где можно войти"
 
-msgid "Roblox starts without a saved account. Use it to try an account you do not want to keep, or to sign in inside Roblox."
-msgstr "Roblox запускается без сохранённого аккаунта. Так можно зайти в аккаунт, который не хочется сохранять, или войти прямо в Roblox."
+msgid "Roblox starts without a saved account, for example to look around signed out or to sign in inside Roblox."
+msgstr "Roblox запускается без сохранённого аккаунта — например, чтобы осмотреться без входа или войти прямо в Roblox."
 
 msgid "Before a guest start Mocktail clears the website session and the player data Roblox cached for the last account, so nothing of another account carries over."
 msgstr "Перед гостевым запуском Mocktail очищает сеанс сайта и данные игрока, которые Roblox сохранил для прошлого аккаунта, чтобы от другого аккаунта ничего не осталось."
 
-msgid "If you sign in during a guest start, the account is kept: the next time this window opens, Mocktail asks Roblox whose it is, adds it to this list and selects it for Play."
-msgstr "Если войти во время гостевого запуска, аккаунт сохранится: при следующем открытии этого окна Mocktail спросит у Roblox, чей это вход, добавит аккаунт в этот список и выберет его для игры."
+msgid "If you sign in during a guest start, the account is kept: the next time this window opens, Mocktail asks Roblox whose it is, adds it to this list and selects it for Play. Remove it here afterwards if you do not want to keep it."
+msgstr "Если войти во время гостевого запуска, аккаунт сохранится: при следующем открытии этого окна Mocktail спросит у Roblox, чей это вход, добавит аккаунт в этот список и выберет его для игры. Если он вам не нужен, потом удалите его здесь."
 
 msgid "Sign-in method is Website window, so Mocktail's sign-in window opens before Roblox. Close it to stay signed out."
 msgstr "Способ входа — «Окно сайта», поэтому перед Roblox откроется окно входа Mocktail. Закройте его, чтобы остаться без входа."
@@ -1722,7 +1761,7 @@ msgid "The new account is selected for the next Play, and Save or Play keeps tha
 msgstr "Новый аккаунт выбирается для следующего запуска, а «Сохранить» или «Играть» закрепляют этот выбор. Чтобы отменить вход, закройте окно."
 
 msgid "The session goes only to Roblox and is stored in a file only your user can read. It never appears in this window, in logs or on the command line."
-msgstr "Сеанс отправляется только в Roblox и хранится в файле, доступном лишь вашему пользователю. Он никогда не появляется в этом окне, в логах или в командной строке."
+msgstr "Сеанс отправляется только в Roblox и хранится в файле, доступном лишь вашему пользователю. Он никогда не появляется в этом окне, в журналах или в командной строке."
 
 msgid "_Start Roblox"
 msgstr "_Запустить"
@@ -1745,6 +1784,9 @@ msgstr "Если вход Roblox запросит проверку устрой�
 msgid "The account you sign in with is kept: the next time this window opens, Mocktail asks Roblox whose it is, adds it to Saved accounts and selects it for Play."
 msgstr "Аккаунт, в который вы вошли, сохранится: при следующем открытии этого окна Mocktail спросит у Roblox, чей это вход, добавит его в «Сохранённые аккаунты» и выберет для игры."
 
+msgid "This also selects Guest for later starts, website joins included, until you sign in or choose an account here."
+msgstr "Заодно для следующих запусков, включая вход в игру с сайта, выбирается «Гость» — пока вы не войдёте или не выберете здесь аккаунт."
+
 msgid "Start Roblox saves your changes first, like Play."
 msgstr "«Запустить Roblox», как и «Играть», сначала сохраняет изменения."
 
@@ -1758,10 +1800,10 @@ msgid "Decides where you sign in when Roblox starts without a working saved sess
 msgstr "Определяет, где вы входите, когда Roblox запускается без действующего сохранённого сеанса: как гость или с сохранённым аккаунтом, вход в который истёк. Аккаунт с действующим входом в любом случае запускается сразу."
 
 msgid "• Roblox app: Roblox's own welcome screen. Its sign-in may ask for a Google Play Integrity device check, which nothing on Linux can pass; Mocktail then opens the roblox.com sign-in page instead and restarts Roblox signed in once you are done."
-msgstr "• Приложение Roblox: приветственный экран самого Roblox. Его вход может запросить проверку устройства Google Play Integrity, которую на Linux пройти невозможно; тогда Mocktail откроет вместо неё страницу входа roblox.com, а после входа перезапустит Roblox уже с аккаунтом."
+msgstr "• В приложении: приветственный экран самого Roblox. Его вход может запросить проверку устройства Google Play Integrity, которую на Linux пройти невозможно; тогда Mocktail откроет вместо неё страницу входа roblox.com, а после входа перезапустит Roblox уже с аккаунтом."
 
-msgid "• Website window: before Roblox starts, Mocktail opens roblox.com's sign-in page in its own window; close it to continue signed out. Verification pages Roblox opens later use this window too."
-msgstr "• Окно сайта: перед запуском Roblox Mocktail открывает страницу входа roblox.com в своём окне; закройте его, чтобы продолжить без входа. Страницы подтверждения, которые Roblox откроет позже, тоже показываются в этом окне."
+msgid "• Website window: before Roblox starts, Mocktail opens roblox.com's sign-in page in its own window; close it to continue signed out. If you later sign in on Roblox's own screen and it asks for a verification step, the roblox.com sign-in page opens instead."
+msgstr "• Окно сайта: перед запуском Roblox Mocktail открывает страницу входа roblox.com в своём окне; закройте его, чтобы продолжить без входа. Если потом вы входите на экране самого Roblox и он просит пройти проверку, вместо неё откроется страница входа roblox.com."
 
 msgid "Joining from a link on roblox.com never opens the sign-in window first; it starts with the selected account."
 msgstr "Вход в игру по ссылке с roblox.com не открывает окно входа: игра сразу запускается с выбранным аккаунтом."
@@ -1773,7 +1815,7 @@ msgid "The sign-in window is not installed (mocktail_webview_helper is missing),
 msgstr "Окно входа не установлено (нет mocktail_webview_helper), поэтому вместо него появится приветственный экран Roblox."
 
 msgid "Roblox app"
-msgstr "Приложение Roblox"
+msgstr "В приложении"
 
 msgid "Roblox's welcome screen; the website opens when Roblox asks for Play Integrity"
 msgstr "Приветственный экран Roblox; сайт откроется, если Roblox запросит Play Integrity"
@@ -1784,8 +1826,8 @@ msgstr "Окно сайта"
 msgid "Mocktail's roblox.com window opens on start whenever no account is signed in"
 msgstr "Окно roblox.com от Mocktail открывается при запуске, если вход не выполнен"
 
-msgid "Asking Roblox whether the saved sign-ins still work"
-msgstr "Mocktail спрашивает у Roblox, действуют ли сохранённые входы"
+msgid "Asking Roblox about sign-ins that changed since the last start"
+msgstr "Запрос к Roblox о входах, изменившихся с прошлого запуска"
 
 msgid "Waiting for you to sign in…"
 msgstr "Ожидание входа…"
@@ -1814,8 +1856,8 @@ msgstr "Войти снова как %s"
 msgid "Sign _In Again…"
 msgstr "Войти _снова…"
 
-msgid "Sign Out and _Remove…"
-msgstr "Выйти и _удалить…"
+msgid "_Remove from This Computer…"
+msgstr "_Удалить с этого компьютера…"
 
 msgid "More"
 msgstr "Ещё"
@@ -1900,8 +1942,9 @@ msgstr "Показывать название игры"
 msgid "Your status names the experience you play"
 msgstr "В статусе видно название игры"
 
-msgid "Off: the first line reads “%s” instead"
-msgstr "Выключено: вместо названия в первой строке «%s»"
+#, c-format
+msgid "Off: the first line reads “%s”; the experience's icon, with its name on hover, still shows"
+msgstr "Выключено: в первой строке «%s»; значок игры с названием при наведении всё равно виден"
 
 msgid "When on, the first line of your status while you play is the experience's name (the “While playing” text, which is just the name unless you change it)."
 msgstr "Когда включено, первая строка статуса во время игры — название игры (текст «Во время игры», по умолчанию это просто название)."
@@ -1909,8 +1952,8 @@ msgstr "Когда включено, первая строка статуса в
 msgid "When off, that line shows the second-line text (“Playing Roblox” by default) instead. The experience's icon is still shown, and Discord shows its name when someone points at the icon."
 msgstr "Когда выключено, в этой строке стоит текст второй строки (по умолчанию «Playing Roblox»). Значок игры всё равно виден, а при наведении на него Discord покажет название."
 
-msgid "Browsing and joining look the same either way."
-msgstr "Выбор игры и подключение выглядят одинаково в обоих случаях."
+msgid "Browsing looks the same either way. While joining, the same rule applies as soon as the experience's name is known."
+msgstr "Статус при выборе игры от этого не меняется. При подключении то же правило действует, как только становится известно название игры."
 
 msgid "Show play time"
 msgstr "Показывать время в игре"
@@ -1933,11 +1976,11 @@ msgstr "Выключено: кнопки «Присоединиться» нет
 msgid "Adds a “%s” button to your status while you play"
 msgstr "Добавляет в статус кнопку «%s», пока вы играете"
 
-msgid "Adds a button to your status while you play. A friend who clicks it opens a page on komaruworld.github.io that starts Roblox in the same experience, on your server when Roblox reported which one you are on."
-msgstr "Пока вы играете, в статусе есть кнопка. Друг, нажавший её, откроет страницу на komaruworld.github.io, которая запустит Roblox в той же игре — и на вашем сервере, если Roblox сообщил, на каком вы."
+msgid "Adds a button to your status while you play. A friend who clicks it opens a page on komaruworld.github.io that starts Roblox in the same experience. It reaches your exact server only when you joined that server directly, for example by joining a friend; otherwise Roblox picks a server for them."
+msgstr "Пока вы играете, в статусе есть кнопка. Друг, нажавший её, откроет страницу на komaruworld.github.io, которая запустит Roblox в той же игре. Точно на ваш сервер кнопка ведёт, только если вы сами зашли прямо на него, например присоединившись к другу; иначе сервер для друга выберет Roblox."
 
-msgid "The button never contains private server access codes. “Public servers only” decides whether it also appears on private and reserved servers."
-msgstr "Кода доступа к приватному серверу в кнопке никогда нет. Появится ли она на приватных и зарезервированных серверах, решает «Только публичные серверы»."
+msgid "The button never contains private server access codes. “Public servers only” decides whether it also appears when you joined through a private-server or other access link."
+msgstr "Кода доступа к приватному серверу в кнопке никогда нет. Появится ли она, если вы зашли по ссылке с кодом доступа (например, на приватный сервер), решает «Только публичные серверы»."
 
 msgid "Public servers only"
 msgstr "Только публичные серверы"
@@ -1945,14 +1988,14 @@ msgstr "Только публичные серверы"
 msgid "Turn on “Let friends join” to use this"
 msgstr "Сначала включите «Разрешить друзьям присоединяться»"
 
-msgid "No join button on private or reserved servers"
-msgstr "На приватных и зарезервированных серверах кнопки нет"
+msgid "No join button when you joined through a private-server or other access link"
+msgstr "Нет кнопки, если вы зашли по ссылке с кодом доступа, например на приватный сервер"
 
-msgid "The join button also appears on private and reserved servers"
-msgstr "Кнопка есть и на приватных и зарезервированных серверах"
+msgid "The join button also appears when you joined through an access link"
+msgstr "Кнопка есть, даже если вы зашли по ссылке с кодом доступа"
 
-msgid "When on, the join button is left out while you are on a private server, a reserved server (some experiences use them for matches) or a server you joined through a link."
-msgstr "Когда включено, кнопки нет, пока вы на приватном сервере, на зарезервированном (некоторые игры используют их для матчей) или на сервере, куда вы вошли по ссылке."
+msgid "When on, the join button is left out when you joined through a private server, a reserved-server invitation or another link with an access code. Mocktail does not see teleports inside an experience, so after one the button still points at the place and server you first joined."
+msgstr "Когда включено, кнопки нет, если вы зашли на приватный сервер, по приглашению на зарезервированный сервер или по другой ссылке с кодом доступа. Телепорты внутри игры Mocktail не видит, поэтому после телепорта кнопка всё ещё ведёт в то место и на тот сервер, куда вы зашли сначала."
 
 msgid "When off, friends see the button there too. It carries the experience and the server, never an access code, so it mostly tells them where you are."
 msgstr "Когда выключено, друзья видят кнопку и там. В ней только игра и сервер, без кода доступа, так что она в основном показывает, где вы."
@@ -1996,8 +2039,8 @@ msgstr "Пусто: в этой сборке нет своего приложе�
 msgid "Empty: Mocktail's application, %s"
 msgstr "Пусто: приложение Mocktail, %s"
 
-msgid "Discord shows the name and artwork of this Discord application as the game you are playing. Leave it empty to use the application bundled with Mocktail."
-msgstr "Discord показывает название и картинку этого приложения Discord как игру, в которую вы играете. Оставьте поле пустым, чтобы использовать приложение, встроенное в Mocktail."
+msgid "Discord shows this application's name as the game you are playing, and its artwork only when the experience's icon is unavailable. Leave it empty to use the application bundled with Mocktail."
+msgstr "Discord показывает название этого приложения как игру, в которую вы играете, а его картинку — только если значок игры недоступен. Оставьте поле пустым, чтобы использовать приложение, встроенное в Mocktail."
 
 msgid "Only enter the ID of an application you created in Discord's developer portal: 17 to 20 digits. With a wrong ID Discord shows nothing."
 msgstr "Указывайте только ID приложения, которое вы сами создали на портале разработчиков Discord: от 17 до 20 цифр. С неверным ID Discord ничего не покажет."
@@ -2029,14 +2072,14 @@ msgstr "Сертификат Fleasion %s не найден, поэтому Mockt
 msgid "Fleasion is a separate tool that swaps Roblox assets (sounds, textures and more) through a local HTTPS proxy with its own certificate authority. With this on, Mocktail adds Fleasion's certificate to the ones Roblox trusts, so the replaced assets load, without changing any Roblox files."
 msgstr "Fleasion — отдельная программа, которая подменяет ассеты Roblox (звуки, текстуры и не только) через локальный HTTPS-прокси со своим центром сертификации. Когда это включено, Mocktail добавляет сертификат Fleasion к тем, которым доверяет Roblox, и подменённые ассеты загружаются — без изменения файлов Roblox."
 
-msgid "At each start Mocktail combines your system's certificates with Fleasion's into a file in its cache folder and uses it for every connection. Start Fleasion before you press Play."
-msgstr "При каждом запуске Mocktail объединяет системные сертификаты с сертификатом Fleasion в файл в своей папке кеша и использует его для всех подключений. Запускайте Fleasion до того, как нажмёте «Играть»."
+msgid "At each start Mocktail adds Fleasion's certificate to your system's certificates (or to your custom CA bundle) in a file in its cache folder, which Roblox, Mocktail's sign-in checks and the Discord lookups then trust. Roblox downloads and the website sign-in window keep the system's certificates. Start Fleasion before you press Play."
+msgstr "При каждом запуске Mocktail объединяет сертификат Fleasion с системными сертификатами (или с вашим набором сертификатов) в файл в своей папке кеша; этому файлу доверяют Roblox, проверки входа Mocktail и запросы для статуса в Discord. Скачивание Roblox и окно входа через сайт по-прежнему используют системные сертификаты. Запускайте Fleasion до того, как нажмёте «Играть»."
 
-msgid "Only turn this on if you use Fleasion and trust your copy of it: whatever holds its certificate can read and change Roblox's encrypted traffic. Turn it off when you stop using Fleasion."
-msgstr "Включайте, только если пользуетесь Fleasion и доверяете своей копии: владелец его сертификата может читать и менять зашифрованный трафик Roblox. Выключите, когда перестанете пользоваться Fleasion."
+msgid "Only turn this on if you use Fleasion and trust your copy of it: whoever has Fleasion's private key (ca.key) can read and change Roblox's encrypted traffic, including your sign-in. Turn it off when you stop using Fleasion."
+msgstr "Включайте, только если пользуетесь Fleasion и доверяете своей копии: тот, у кого есть закрытый ключ Fleasion (ca.key), может читать и менять зашифрованный трафик Roblox, включая ваш вход. Выключите, когда перестанете пользоваться Fleasion."
 
-msgid "It cannot be combined with the system proxy, nor with a manual proxy other than Fleasion's own. Without a readable certificate Mocktail stops at start and says why."
-msgstr "Нельзя сочетать с системным прокси и с прокси, заданным вручную, если это не прокси самого Fleasion. Если сертификат не читается, Mocktail остановится при запуске и объяснит причину."
+msgid "It cannot be combined with the system proxy, nor with a manual proxy other than Fleasion's own. Without a readable, currently valid CA certificate from Fleasion, Mocktail stops at start and says why."
+msgstr "Нельзя сочетать с системным прокси и с прокси, заданным вручную, если это не прокси самого Fleasion. Если сертификат Fleasion не читается или сейчас недействителен, Mocktail остановится при запуске и объяснит причину."
 
 msgid "Fleasion's folder on this computer: %s"
 msgstr "Папка Fleasion на этом компьютере: %s"
@@ -2155,8 +2198,8 @@ msgstr "Вторая строка статуса на любом этапе. Е�
 msgid "Unknown experience name"
 msgstr "Название неизвестной игры"
 
-msgid "Used as the experience's name while you play when Roblox's web API did not return one, for example without internet access."
-msgstr "Подставляется вместо названия игры, если веб-API Roblox его не вернул — например, без доступа к интернету."
+msgid "Used as the experience's name while you play when Mocktail could not look it up on Roblox's web API, for example when that lookup times out."
+msgstr "Подставляется вместо названия игры, если Mocktail не смог узнать его через веб-API Roblox — например, когда запрос не уложился во время."
 
 msgid "Join button"
 msgstr "Кнопка «Присоединиться»"
@@ -2222,8 +2265,8 @@ msgstr "Новые версии сначала проверяются; если 
 msgid "Off: Roblox stays at the installed version"
 msgstr "Выключено: Roblox остаётся на установленной версии"
 
-msgid "At each start Mocktail asks APKPure for the newest Roblox for Android. A new version gets a matching compatibility profile and must pass two test starts with your graphics backend, in a separate profile, before it replaces the current one."
-msgstr "При каждом запуске Mocktail узнаёт у APKPure, какая версия Roblox для Android самая новая. Новая версия получает подходящий профиль совместимости и должна пройти два пробных запуска с вашим графическим движком в отдельном профиле — только тогда она заменит текущую."
+msgid "At each start Mocktail asks APKPure for the newest Roblox for Android. A new version is matched to a known compatibility profile, or gets one derived for it, and must pass a test start with your graphics backend (two for a derived profile), in a separate profile, before it replaces the current one."
+msgstr "При каждом запуске Mocktail узнаёт у APKPure, какая версия Roblox для Android самая новая. Новая версия получает известный профиль совместимости или выведенный специально для неё и должна пройти пробный запуск с вашим графическим движком (с выведенным профилем — два) в отдельном профиле — только тогда она заменит текущую."
 
 msgid "If a test fails, you keep playing the version that works. Checking and testing add some time to a start; the progress window shows it."
 msgstr "Если проверка не пройдена, вы продолжаете играть на рабочей версии. Проверка и пробные запуски немного удлиняют запуск; их ход видно в окне прогресса."
@@ -2261,14 +2304,8 @@ msgstr "Прокси: укажите порт от 1 до 65535"
 msgid "No proxy"
 msgstr "Без прокси"
 
-msgid "Connect directly"
-msgstr "Подключаться напрямую"
-
 msgid "System proxy"
 msgstr "Системный прокси"
-
-msgid "Use the desktop's proxy setting, read at every start"
-msgstr "Брать прокси из настроек рабочего стола при каждом запуске"
 
 msgid "Manual"
 msgstr "Вручную"
@@ -2279,11 +2316,14 @@ msgstr "HTTP-прокси с хостом и портом ниже"
 msgid "Proxy"
 msgstr "Прокси"
 
-msgid "Mocktail and Roblox connect directly"
-msgstr "Mocktail и Roblox подключаются напрямую"
+msgid "Roblox connects directly; Mocktail's own requests follow an https_proxy variable if your environment sets one"
+msgstr "Roblox подключается напрямую; собственные запросы Mocktail учитывают переменную https_proxy, если она задана"
 
-msgid "The desktop's proxy, read at every start"
-msgstr "Прокси из настроек рабочего стола, при каждом запуске"
+msgid "Roblox connects directly"
+msgstr "Roblox подключается напрямую"
+
+msgid "The system's proxy configuration, read at every start"
+msgstr "Системные настройки прокси, которые читаются при каждом запуске"
 
 msgid "The HTTP proxy below"
 msgstr "HTTP-прокси, указанный ниже"
@@ -2291,11 +2331,11 @@ msgstr "HTTP-прокси, указанный ниже"
 msgid "Which proxy Roblox's own web requests, Mocktail's sign-in, the web sign-in window and the Discord status lookups use. Roblox downloads and update checks do not use it."
 msgstr "Через какой прокси идут веб-запросы самого Roblox, вход в аккаунт в Mocktail, окно входа через браузер и запросы для статуса в Discord. Скачивание Roblox и проверка обновлений его не используют."
 
-msgid "• No proxy: connect directly."
-msgstr "• Без прокси: подключение напрямую."
+msgid "• No proxy: Roblox connects directly. Mocktail's own requests and Roblox downloads still honour an https_proxy or ALL_PROXY variable, and the website sign-in window your desktop's proxy, if you have one."
+msgstr "• Без прокси: Roblox подключается напрямую. Собственные запросы Mocktail и скачивание Roblox всё равно учитывают переменные https_proxy и ALL_PROXY, а окно входа через сайт — прокси рабочего стола, если он у вас настроен."
 
-msgid "• System proxy: at every start Mocktail asks the desktop which proxy to use for roblox.com (HTTP, HTTPS or SOCKS5), so a changing port is followed. Proxies that need a password are not supported, and Mocktail stops at start when the desktop's proxy cannot be used."
-msgstr "• Системный прокси: при каждом запуске Mocktail спрашивает у рабочего стола, какой прокси использовать для roblox.com (HTTP, HTTPS или SOCKS5), поэтому меняющийся порт тоже подхватывается. Прокси с паролем не поддерживаются; если системный прокси использовать нельзя, Mocktail остановится при запуске."
+msgid "• System proxy: at every start Mocktail asks GLib which proxy to use for roblox.com (GNOME or KDE proxy settings, a PAC file, or the https_proxy variable), so a changing port is followed. Use an HTTP proxy: Roblox itself gets only the host and port, so SOCKS5 and HTTPS proxies may not work for it. Proxies that need a password are not supported, and Mocktail stops at start when the proxy cannot be used. Without glib-networking this always means a direct connection."
+msgstr "• Системный прокси: при каждом запуске Mocktail спрашивает у GLib, какой прокси использовать для roblox.com (настройки прокси GNOME или KDE, PAC-файл или переменная https_proxy), поэтому меняющийся порт тоже подхватывается. Используйте HTTP-прокси: сам Roblox получает только хост и порт, так что прокси SOCKS5 и HTTPS могут у него не работать. Прокси с паролем не поддерживаются; если прокси использовать нельзя, Mocktail остановится при запуске. Без glib-networking это всегда означает прямое подключение."
 
 msgid "• Manual: an HTTP proxy at the host and port below."
 msgstr "• Вручную: HTTP-прокси с хостом и портом ниже."
@@ -2345,20 +2385,20 @@ msgstr "Свой набор сертификатов (CA)"
 msgid "Empty: your system's certificates"
 msgstr "Пусто: системные сертификаты"
 
-msgid "Mocktail and Roblox trust only the certificates in this file"
-msgstr "Mocktail и Roblox доверяют только сертификатам из этого файла"
+msgid "Roblox and Mocktail's own requests trust only the certificates in this file"
+msgstr "Roblox и собственные запросы Mocktail доверяют только сертификатам из этого файла"
 
 msgid "This file does not exist, so Mocktail will not start"
 msgstr "Такого файла нет, поэтому Mocktail не запустится"
 
-msgid "A PEM file of certificate authorities that Mocktail and Roblox trust for HTTPS instead of the system's list. You only need it on a company or school network that inspects HTTPS with its own certificate; the file must then also hold the usual public authorities."
-msgstr "PEM-файл с центрами сертификации, которым Mocktail и Roblox доверяют для HTTPS вместо системного списка. Нужен только в сети компании или учебного заведения, которая проверяет HTTPS своим сертификатом; тогда в файле должны быть и обычные публичные центры."
+msgid "A PEM file of certificate authorities that Roblox, Mocktail's sign-in checks and the Discord lookups trust for HTTPS instead of the system's list. Roblox downloads, update checks and the website sign-in window still use the system's list, so on a network that inspects HTTPS also add its certificate to the system. The file must also hold the usual public authorities."
+msgstr "PEM-файл с центрами сертификации, которым Roblox, проверки входа Mocktail и запросы для статуса в Discord доверяют для HTTPS вместо системного списка. Скачивание Roblox, проверка обновлений и окно входа через сайт по-прежнему используют системный список, поэтому в сети, которая проверяет HTTPS, добавьте её сертификат и в систему. В файле должны быть и обычные публичные центры сертификации."
 
 msgid "Mocktail reads the file at every start and never changes it, not even during Roblox updates. With Fleasion on, Fleasion's certificate is added to it."
 msgstr "Mocktail читает файл при каждом запуске и никогда его не меняет, даже при обновлении Roblox. Если включён Fleasion, к нему добавляется сертификат Fleasion."
 
-msgid "Only use a file you trust: any authority in it can pose as any website to Mocktail and Roblox. If the file cannot be read, Mocktail stops at start."
-msgstr "Используйте только файл, которому доверяете: любой центр сертификации из него может выдать себя за любой сайт для Mocktail и Roblox. Если файл не читается, Mocktail остановится при запуске."
+msgid "Only use a file you trust: any authority in it can pose as any website to Roblox and Mocktail. If the file cannot be read, Mocktail stops at start."
+msgstr "Используйте только файл, которому доверяете: любой центр сертификации из него может выдать себя за любой сайт для Roblox и Mocktail. Если файл не читается, Mocktail остановится при запуске."
 
 msgid "That is a private key, not a certificate file"
 msgstr "Это закрытый ключ, а не файл сертификатов"
@@ -2372,8 +2412,8 @@ msgstr "Обновления"
 msgid "Mocktail downloads Roblox for you and keeps a working copy"
 msgstr "Mocktail сам скачивает Roblox и хранит рабочую копию"
 
-msgid "How Mocktail and Roblox reach the internet"
-msgstr "Как Mocktail и Roblox выходят в интернет"
+msgid "Which proxy Roblox and Mocktail's sign-in use"
+msgstr "Через какой прокси работают Roblox и вход в Mocktail"
 
 msgid "mocktail_updater was not found next to this window"
 msgstr "mocktail_updater не найден рядом с этим окном"
@@ -2471,8 +2511,8 @@ msgstr "%s — самая новая версия"
 msgid "Asks APKPure, where Mocktail downloads Roblox from, which version of Roblox for Android is the newest. Nothing is downloaded or installed here."
 msgstr "Спрашивает у APKPure, откуда Mocktail скачивает Roblox, какая версия Roblox для Android самая новая. Здесь ничего не скачивается и не устанавливается."
 
-msgid "With automatic updates on, Mocktail does that when Roblox starts: it tests a new version in two separate test runs with your graphics backend and switches to it only if both pass."
-msgstr "При включённом автоматическом обновлении это делается при запуске Roblox: Mocktail проверяет новую версию в двух отдельных пробных запусках с вашим графическим движком и переходит на неё, только если оба прошли успешно."
+msgid "With automatic updates on, Mocktail does that when Roblox starts: it tests a new version with your graphics backend in a separate test run (two for a version Mocktail does not know yet) and switches to it only if they pass."
+msgstr "При включённом автоматическом обновлении это делается при запуске Roblox: Mocktail проверяет новую версию с вашим графическим движком в отдельном пробном запуске (версию, которую Mocktail ещё не знает, — в двух) и переходит на неё, только если проверка пройдена."
 
 msgid "This needs an internet connection. Like Roblox downloads, it does not use the proxy from Network & Updates."
 msgstr "Нужен доступ к интернету. Как и скачивание Roblox, проверка не использует прокси из раздела «Сеть и обновления»."
@@ -2559,11 +2599,11 @@ msgstr "Перечитать fflags.json"
 msgid "More Fast Flags actions"
 msgstr "Другие действия с Fast Flags"
 
-msgid "Use with caution: Roblox ignores most flags that are not on its allowlist"
-msgstr "Осторожно: Roblox игнорирует большинство флагов не из своего белого списка"
+msgid "Use with caution: a wrong flag can make Roblox unstable, and many flags do nothing in the current Roblox version."
+msgstr "Осторожно: неудачный флаг может сделать Roblox нестабильным, а многие флаги в текущей версии Roblox ничего не делают."
 
-msgid "Saved to fflags.json with the other settings. Where Mocktail sets a flag itself, its own value wins."
-msgstr "Сохраняются в fflags.json вместе с остальными настройками. Если Mocktail сам задаёт флаг, побеждает его значение."
+msgid "Saved to fflags.json with the other settings. Where Mocktail sets a flag itself, its value wins, or Mocktail refuses to start when the two disagree on a value it checks."
+msgstr "Сохраняются в fflags.json вместе с остальными настройками. Если Mocktail сам задаёт флаг, побеждает его значение, а если значения расходятся там, где Mocktail это проверяет, он не запустится."
 
 msgid "fflags.json does not exist yet; add a flag and save first"
 msgstr "fflags.json пока нет; сначала добавьте флаг и сохраните"
@@ -2628,8 +2668,8 @@ msgstr[2] "%d флагов конфликтуют с вашими настрой
 msgid "Fast Flags are Roblox's internal switches. Mocktail passes the flags in fflags.json to Roblox at every start, but its own settings come first: a flag Mocktail sets itself is ignored or, when the values disagree on something Mocktail checks, stops Roblox from starting."
 msgstr "Fast Flags — внутренние переключатели Roblox. Mocktail передаёт флаги из fflags.json в Roblox при каждом запуске, но его собственные настройки важнее: флаг, который Mocktail задаёт сам, игнорируется, а если значения расходятся там, где Mocktail это проверяет, Roblox не запустится."
 
-msgid "Since September 2025 Roblox applies only flags on its allowlist and quietly ignores most others."
-msgstr "С сентября 2025 года Roblox применяет только флаги из своего белого списка, а большинство остальных молча игнорирует."
+msgid "Roblox's Windows and Mac clients have accepted only allowlisted flags from local files since September 2025. Mocktail hands these flags to the Android client the same way it passes its own, but whether a flag still does anything depends on the Roblox version; many are unused or removed over time."
+msgstr "С сентября 2025 года клиенты Roblox для Windows и Mac принимают из локальных файлов только флаги из белого списка. Mocktail передаёт эти флаги клиенту для Android тем же способом, что и свои, но действует ли флаг, зависит от версии Roblox: многие со временем перестают использоваться или исчезают."
 
 msgid "A wrong flag can make Roblox unstable or stop it from starting; remove it if Roblox misbehaves. Most players never need any."
 msgstr "Неудачный флаг может сделать Roblox нестабильным или не дать ему запуститься; если Roblox ведёт себя странно, удалите флаг. Большинству игроков флаги вообще не нужны."
@@ -2700,8 +2740,8 @@ msgstr "Показывать это окно при запуске"
 msgid "Opens before Roblox when you start Mocktail from its icon"
 msgstr "Открывается перед Roblox, когда вы запускаете Mocktail значком"
 
-msgid "Roblox starts directly; open this window with the shortcut's “Mocktail Settings” action"
-msgstr "Roblox запускается сразу; это окно открывает действие ярлыка «Настройки Mocktail»"
+msgid "Roblox starts directly; run mocktail --launcher, or use the “Mocktail Settings” shortcut action where your launcher offers it, to come back"
+msgstr "Roblox запускается сразу; чтобы вернуться сюда, выполните mocktail --launcher или выберите действие ярлыка «Настройки Mocktail», если меню приложений его показывает"
 
 msgid "When on, starting Mocktail from its icon or with the mocktail command opens this window first, and Play starts Roblox."
 msgstr "Когда включено, запуск Mocktail значком или командой mocktail сначала открывает это окно, а Roblox запускает кнопка «Играть»."
@@ -2709,17 +2749,21 @@ msgstr "Когда включено, запуск Mocktail значком или
 msgid "Joining a game from the Roblox website never opens it, and neither do Mocktail's own update test runs."
 msgstr "При входе в игру с сайта Roblox окно не открывается, как и при пробных запусках Mocktail во время обновления."
 
-msgid "When off, right-click the Mocktail icon and choose “Mocktail Settings” (or run mocktail --launcher) to come back here; “Play now” (mocktail --play) always skips this window."
-msgstr "Когда выключено, щёлкните значок Mocktail правой кнопкой и выберите «Настройки Mocktail» (или выполните mocktail --launcher), чтобы вернуться сюда; «Играть сразу» (mocktail --play) всегда пропускает это окно."
+msgid "When off, run mocktail --launcher to come back here. Desktops that show shortcut actions (right-click in GNOME, KDE and most docks) also offer “Mocktail Settings”, unless your own copy of the shortcut predates it. “Play now” (mocktail --play) always skips this window."
+msgstr "Когда выключено, вернуться сюда можно командой mocktail --launcher. Рабочие столы, которые показывают действия ярлыков (правый щелчок в GNOME, KDE и большинстве доков), предлагают и «Настройки Mocktail» — если только ваша копия ярлыка не старше этого действия. «Играть сразу» (mocktail --play) всегда пропускает это окно."
 
 msgid "If config.yaml has an error, the window opens anyway so you can fix it."
 msgstr "Если в config.yaml ошибка, окно всё равно откроется, чтобы её можно было исправить."
 
+#, c-format
+msgid "Your own copy of the Mocktail shortcut (%s) has no “Mocktail Settings” action; run mocktail --launcher to come back here."
+msgstr "В вашей копии ярлыка Mocktail (%s) нет действия «Настройки Mocktail»; чтобы вернуться сюда, выполните mocktail --launcher."
+
 msgid "Details…"
-msgstr "Подробнее…"
+msgstr "Подробности…"
 
 msgid "Overriding variables"
-msgstr "Переопределяющие переменные"
+msgstr "Действующие переменные"
 
 msgid "None: every setting comes from config.yaml"
 msgstr "Нет: все настройки берутся из config.yaml"
@@ -2737,7 +2781,7 @@ msgid "Environment variables such as SDL_VIDEODRIVER or MOCKTAIL_VSYNC win over 
 msgstr "Переменные окружения, такие как SDL_VIDEODRIVER или MOCKTAIL_VSYNC, важнее config.yaml, поэтому значение из ярлыка или терминала молча заменяет показанную здесь настройку. Строки, на которые они влияют, помечены значком ENV."
 
 msgid "Details lists each variable, its value (secrets hidden) and where it probably comes from."
-msgstr "В «Подробнее» перечислены все переменные, их значения (секреты скрыты) и откуда они, скорее всего, взялись."
+msgstr "«Подробности…» показывают каждую переменную, её значение (секреты скрыты) и откуда она, скорее всего, взялась."
 
 msgid "To stop them for good, remove them where they are set: Clean Up below for the desktop shortcut, or your shell's profile."
 msgstr "Чтобы избавиться от них насовсем, уберите их там, где они заданы: в ярлыке — кнопкой «Очистить» ниже, или в профиле командной оболочки."
@@ -2751,8 +2795,8 @@ msgstr "Перенести в настройки"
 msgid "Keep their values in config.yaml and ignore them for this launch"
 msgstr "Сохранить их значения в config.yaml и не учитывать переменные в этом запуске"
 
-msgid "Copies each variable's value into the matching setting, so this launch behaves the same but the settings show and control it. The variables are left out of this launch; they come back on the next start until you remove them from the shortcut or terminal."
-msgstr "Копирует значение каждой переменной в соответствующую настройку: этот запуск пройдёт так же, но теперь его видно и можно менять в настройках. В этом запуске переменные не используются; при следующем они вернутся, пока вы не уберёте их из ярлыка или терминала."
+msgid "Copies each variable's value into the matching setting, so the settings show and control it, and leaves the variables out of this launch. A value that has no matching setting is only left out (Details lists them), so that setting falls back to config.yaml. The variables come back on the next start until you remove them from the shortcut or terminal."
+msgstr "Копирует значение каждой переменной в соответствующую настройку, чтобы его было видно и можно было менять в настройках, а сами переменные в этом запуске не использует. Значение, для которого нет подходящей настройки, просто не учитывается (такие перечислены в «Подробностях»), и эта настройка берётся из config.yaml. При следующем запуске переменные вернутся, пока вы не уберёте их из ярлыка или терминала."
 
 msgid "Save to keep the moved values."
 msgstr "Сохраните, чтобы перенесённые значения остались."
@@ -2818,7 +2862,7 @@ msgid "Files"
 msgstr "Файлы"
 
 msgid "Where Mocktail keeps settings, Roblox and logs"
-msgstr "Где Mocktail хранит настройки, Roblox и логи"
+msgstr "Где Mocktail хранит настройки, Roblox и журналы"
 
 msgid "Settings file"
 msgstr "Файл настроек"
@@ -2832,17 +2876,18 @@ msgstr "Если изменить файл, пока это окно откры�
 msgid "Data folder"
 msgstr "Папка данных"
 
-msgid "Roblox itself (the installed versions), its app data such as caches, and your saved sign-ins."
-msgstr "Сам Roblox (установленные версии), данные приложения вроде кешей и ваши сохранённые входы в аккаунты."
+#, c-format
+msgid "Roblox itself (the installed versions), its app data and settings, and your saved sign-ins. Caches and downloads are kept in %s."
+msgstr "Сам Roblox (установленные версии), его данные и настройки, а также ваши сохранённые входы. Кеши и загрузки хранятся в %s."
 
 msgid "Do not share this folder: it holds your sign-in sessions."
-msgstr "Не передавайте эту папку другим: в ней ваши сессии входа."
+msgstr "Не передавайте эту папку другим: в ней ваши сеансы входа."
 
 msgid "Logs folder"
-msgstr "Папка логов"
+msgstr "Папка журналов"
 
 msgid "latest.log and one log per start in sessions/. Attach latest.log when you report a problem."
-msgstr "latest.log и по логу на каждый запуск в sessions/. Прикладывайте latest.log к сообщению о проблеме."
+msgstr "latest.log и по журналу на каждый запуск в sessions/. Прикладывайте latest.log к сообщению о проблеме."
 
 # About page (about_page.cc).
 msgid "%d × %d at %d %% (%d × %d pixels)"
@@ -2896,8 +2941,8 @@ msgstr "без XWayland"
 msgid "The display system and desktop this window runs in. The game window can use Wayland or, through XWayland, X11; the Display page decides which."
 msgstr "Графическая система и рабочий стол, в которых работает это окно. Окно игры может использовать Wayland или X11 через XWayland; что именно, решает раздел «Экран и окно»."
 
-msgid "On NVIDIA with Vulkan the automatic choice is X11 through XWayland, because NVIDIA's native Wayland path can hang."
-msgstr "На NVIDIA с Vulkan автоматически выбирается X11 через XWayland, потому что нативный Wayland у NVIDIA может зависать."
+msgid "With NVIDIA's own driver and the direct Vulkan backend, the automatic choice is X11 through XWayland, because NVIDIA's native Wayland path can hang or lose the display. On a scaled screen the game then renders at 100 % and the compositor enlarges it, and native resolution has no effect; Display › Display server can choose Wayland instead."
+msgstr "С фирменным драйвером NVIDIA и движком Vulkan автоматический выбор — X11 через XWayland: в нативном Wayland драйвер NVIDIA может зависать или терять связь с экраном. На масштабированном экране игра тогда рисуется в масштабе 100 %, композитор её растягивает, а чёткое изображение не действует; выбрать Wayland можно в разделе «Экран и окно» › «Графический сервер»."
 
 msgid "Graphics card"
 msgstr "Видеокарта"
@@ -2908,11 +2953,14 @@ msgstr "Видеокарта не найдена"
 msgid "Vulkan driver: %s"
 msgstr "Драйвер Vulkan: %s"
 
+msgid "Vulkan driver: from the Flatpak runtime"
+msgstr "Драйвер Vulkan: из среды выполнения Flatpak"
+
 msgid "No Vulkan driver found"
 msgstr "Драйвер Vulkan не найден"
 
-msgid "The graphics cards in /sys/class/drm with their kernel drivers, named the way Mocktail's session log names them, and the Vulkan driver Roblox would use."
-msgstr "Видеокарты из /sys/class/drm с их драйверами ядра — так же, как их называет журнал сеанса Mocktail, — и драйвер Vulkan, который использовал бы Roblox."
+msgid "The graphics cards in /sys/class/drm with their kernel drivers, named as in Mocktail's session log, and the Vulkan driver Mocktail would choose for the game (a VK_DRIVER_FILES you set yourself wins)."
+msgstr "Видеокарты из /sys/class/drm с их драйверами ядра — под теми же названиями, что и в журнале сеанса Mocktail, — и драйвер Vulkan, который Mocktail выбрал бы для игры (если вы сами задали VK_DRIVER_FILES, действует он)."
 
 msgid "The Graphics page recommends a graphics backend from this."
 msgstr "По этим данным раздел «Графика» советует графический движок."
@@ -2938,8 +2986,8 @@ msgstr "ядер: %d, потоков: %d"
 msgid "%.1f GiB of memory"
 msgstr "%.1f ГиБ памяти"
 
-msgid "The Performance page sizes Roblox's worker threads from the physical cores when multithreaded rendering or throughput mode is on."
-msgstr "Раздел «Производительность» подбирает число рабочих потоков Roblox по физическим ядрам, когда включены многопоточный рендеринг или режим пропускной способности."
+msgid "At start Mocktail sizes Roblox's worker threads from the physical cores when Physics workers is Throughput (the default), or Automatic with multithreaded rendering on."
+msgstr "При запуске Mocktail рассчитывает число рабочих потоков Roblox по физическим ядрам, если в «Потоках физики» выбрана «Пропускная способность» (по умолчанию) или «Автоматически» с включённым многопоточным рендерингом."
 
 msgid "Copy diagnostic info"
 msgstr "Скопировать диагностику"
@@ -2954,13 +3002,13 @@ msgid "It holds no sign-in data, no values of environment variables, no proxy ad
 msgstr "В ней нет данных для входа, значений переменных окружения, адреса прокси и текстов для Discord. Вставьте её в сообщение как есть."
 
 msgid "Open logs folder"
-msgstr "Открыть папку логов"
+msgstr "Открыть папку журналов"
 
 msgid "latest.log is the log of the last start"
-msgstr "latest.log — лог последнего запуска"
+msgstr "latest.log — журнал последнего запуска"
 
 msgid "Each start of Roblox writes a log in sessions/, and latest.log points at the newest one. Attach it when you report a problem."
-msgstr "Каждый запуск Roblox пишет лог в sessions/, а latest.log указывает на самый новый. Прикладывайте его к сообщению о проблеме."
+msgstr "Каждый запуск Roblox пишет журнал в sessions/, а latest.log указывает на самый новый. Прикладывайте его к сообщению о проблеме."
 
 msgid "Play Roblox on Linux. Mocktail is an independent community project. It is not affiliated with Roblox Corporation or VinegarHQ, and the Roblox client is not included."
 msgstr "Играйте в Roblox на Linux. Mocktail — независимый проект сообщества. Он не связан с Roblox Corporation или VinegarHQ, и клиент Roblox в него не входит."
