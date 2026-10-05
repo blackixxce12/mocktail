@@ -87,6 +87,17 @@ class ConfigDocument {
   // (mode 0600) unless a backup already exists.
   bool Save(const std::filesystem::path& path, std::string* error);
 
+  // Save() for an edit that replaces the whole file (restoring a backup,
+  // resetting to defaults): the BackupPath() copy is from before the first
+  // save and usually older than what is replaced, so the file as it was
+  // loaded is first kept whole next to it, at
+  // "<path>.<label>-<YYYYMMDD-HHMMSS>" (mode 0600, never over an existing
+  // file), and *kept names it. A missing or blank file keeps nothing and
+  // leaves *kept empty.
+  bool SaveKeepingCopy(const std::filesystem::path& path,
+                       std::string_view label, std::filesystem::path* kept,
+                       std::string* error);
+
   const std::string& bytes() const { return bytes_; }
   FileIdentity identity() const { return identity_; }
   bool HasUnsavedChanges() const { return bytes_ != disk_bytes_; }

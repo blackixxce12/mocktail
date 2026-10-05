@@ -304,6 +304,12 @@ msgstr "В пикселях X11: на этом масштабированном 
 msgid "Settings saved"
 msgstr "Настройки сохранены"
 
+msgid "Settings saved; the old config.yaml is kept next to it"
+msgstr "Настройки сохранены; прежний config.yaml лежит рядом"
+
+msgid "Open Folder"
+msgstr "Открыть папку"
+
 msgid "Reload config.yaml?"
 msgstr "Перечитать config.yaml?"
 
@@ -404,6 +410,9 @@ msgstr "она пуста или не читается"
 
 msgid "config.yaml restored from the backup"
 msgstr "config.yaml восстановлен из копии"
+
+msgid "Backup restored; the replaced config.yaml is kept next to it"
+msgstr "Копия восстановлена; заменённый config.yaml лежит рядом"
 
 #, c-format
 msgid "config.yaml was not changed: %s"
@@ -578,8 +587,8 @@ msgstr "Перед сбросом настроек исправьте config.yam
 msgid "Reset all settings?"
 msgstr "Сбросить все настройки?"
 
-msgid "config.yaml is replaced by Mocktail's defaults, including your comments in it, when you save. A copy of the file as it was before the settings window first saved it is kept as config.yaml.launcher-backup."
-msgstr "При сохранении config.yaml будет заменён настройками Mocktail по умолчанию — вместе с вашими комментариями. Копия файла в том виде, каким он был до первой записи из окна настроек, хранится как config.yaml.launcher-backup."
+msgid "config.yaml is replaced by Mocktail's defaults, including your comments in it, when you save. The file it replaces stays next to it as config.yaml.before-reset- with the date and time added."
+msgstr "При сохранении config.yaml будет заменён настройками Mocktail по умолчанию — вместе с вашими комментариями. Прежний файл останется рядом под именем config.yaml.before-reset- с датой и временем."
 
 msgid "_Reset"
 msgstr "_Сбросить"

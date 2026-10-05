@@ -737,10 +737,10 @@ void LauncherWindow::ConfirmResetAll() {
   }
   AdwDialog* dialog = adw_alert_dialog_new(
       _("Reset all settings?"),
+      // SettingsDraft::Save keeps the replaced file after ReplaceAll.
       _("config.yaml is replaced by Mocktail's defaults, including your "
-        "comments in it, when you save. A copy of the file as it was before "
-        "the settings window first saved it is kept as "
-        "config.yaml.launcher-backup."));
+        "comments in it, when you save. The file it replaces stays next to "
+        "it as config.yaml.before-reset- with the date and time added."));
   AdwAlertDialog* alert = ADW_ALERT_DIALOG(dialog);
   adw_alert_dialog_add_responses(alert, "cancel", _("_Cancel"), "reset",
                                  _("_Reset"), nullptr);

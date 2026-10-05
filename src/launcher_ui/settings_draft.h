@@ -74,8 +74,11 @@ class SettingsDraft {
 
   // The working copy through the real loader (see ConfigDocument).
   bool Validate(std::string* error) const;
-  // Validates and publishes the working copy (ConfigDocument::Save).
-  bool Save(std::string* error);
+  // Validates and publishes the working copy (ConfigDocument::Save). After
+  // ReplaceAll() the file it replaces is kept first, as
+  // config.yaml.before-reset-<time>, and *kept (when given) names it;
+  // otherwise *kept is left empty.
+  bool Save(std::string* error, std::filesystem::path* kept = nullptr);
   // Reads the file again, dropping unsaved changes.
   bool Reload(std::string* error);
   // The file on disk is no longer the one last loaded or saved.
@@ -86,8 +89,10 @@ class SettingsDraft {
   // Writes `bytes` over the file right away and reloads it; works in the
   // read-only state too (restore the launcher backup of a broken file).
   // The bytes must pass the loader, and the file must still be the one
-  // last loaded.
-  bool RestoreBytes(std::string bytes, std::string* error);
+  // last loaded. A file that is not blank is kept first, as
+  // config.yaml.before-restore-<time>, and *kept (when given) names it.
+  bool RestoreBytes(std::string bytes, std::string* error,
+                    std::filesystem::path* kept = nullptr);
   const std::string& working_bytes() const { return working_.bytes(); }
 
  private:
@@ -100,6 +105,8 @@ class SettingsDraft {
   launcher::ConfigDocument working_;
   launcher::ConfigDocument template_;
   std::set<std::string, std::less<>> touched_;
+  // ReplaceAll() since the last load, save or discard.
+  bool replaced_all_ = false;
   std::string load_error_;
   int load_error_line_ = 0;
   mutable std::map<std::string, std::optional<std::string>, std::less<>>

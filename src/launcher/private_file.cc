@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
+#include <string>
 #include <vector>
 
 namespace mocktail::launcher {
@@ -318,6 +320,41 @@ bool CreateExclusiveFile(const std::filesystem::path& path,
   }
   *created = true;
   return true;
+}
+
+bool KeepCopyBeside(const std::filesystem::path& file, std::string_view label,
+                    std::string_view bytes, std::filesystem::path* kept,
+                    std::string* error) {
+  constexpr mode_t kPrivateMode = S_IRUSR | S_IWUSR;
+  // Enough for a few saves within one second.
+  constexpr int kMaximumAttempts = 100;
+  std::array<char, 32> stamp{};
+  const std::time_t now = std::time(nullptr);
+  std::tm local = {};
+  if (localtime_r(&now, &local) == nullptr ||
+      std::strftime(stamp.data(), stamp.size(), "%Y%m%d-%H%M%S", &local) ==
+          0) {
+    *error = "cannot read the clock to name a copy of " + file.string();
+    return false;
+  }
+  const std::string base =
+      file.string() + "." + std::string(label) + "-" + stamp.data();
+  for (int attempt = 1; attempt <= kMaximumAttempts; ++attempt) {
+    const std::filesystem::path candidate =
+        attempt == 1 ? base : base + "-" + std::to_string(attempt);
+    bool created = false;
+    if (!CreateExclusiveFile(candidate, bytes, kPrivateMode, &created,
+                             error)) {
+      return false;
+    }
+    if (created) {
+      *kept = candidate;
+      return SyncDirectory(
+          file.has_parent_path() ? file.parent_path() : ".", error);
+    }
+  }
+  *error = "cannot find a free name for a copy of " + file.string();
+  return false;
 }
 
 }  // namespace internal

@@ -49,6 +49,14 @@ bool CreateExclusiveFile(const std::filesystem::path& path,
 
 bool SyncDirectory(const std::filesystem::path& directory, std::string* error);
 
+// Keeps `bytes`, a file's contents before an edit replaces them whole, next
+// to it as "<file>.<label>-<YYYYMMDD-HHMMSS>" (local time), created like
+// CreateExclusiveFile with mode 0600; "-2", "-3", ... are added while the
+// name is taken. *kept receives the path.
+bool KeepCopyBeside(const std::filesystem::path& file, std::string_view label,
+                    std::string_view bytes, std::filesystem::path* kept,
+                    std::string* error);
+
 }  // namespace mocktail::launcher::internal
 
 #endif  // MOCKTAIL_LAUNCHER_PRIVATE_FILE_H_

@@ -1368,6 +1368,72 @@ TEST_F(LauncherConfigDocumentFileTest, SavesPrivatelyAndKeepsOneBackup) {
   EXPECT_EQ(ReadFile(file_), original);
 }
 
+// A whole-file replacement keeps the file it replaces, every time, next to
+// it; the one-time backup does not cover edits made after it.
+TEST_F(LauncherConfigDocumentFileTest, KeepsTheFileAWholeReplacementReplaces) {
+  const std::string original = Fixture();
+  WriteFile(file_, original);
+  std::string error;
+  std::vector<std::filesystem::path> kept;
+  for (int round = 0; round < 2; ++round) {
+    ConfigDocument document;
+    ASSERT_TRUE(ConfigDocument::Load(file_, &document, &error)) << error;
+    const std::string before = document.bytes();
+    document.ReplaceAll(std::string(runtime::DefaultRuntimeConfigYaml()) +
+                        "# round " + std::to_string(round) + "\n");
+    std::filesystem::path copy;
+    ASSERT_TRUE(document.SaveKeepingCopy(file_, "before-reset", &copy, &error))
+        << error;
+    EXPECT_EQ(copy.parent_path(), file_.parent_path());
+    EXPECT_EQ(copy.filename().string().rfind("config.yaml.before-reset-", 0),
+              0U)
+        << copy;
+    EXPECT_EQ(ReadFile(copy), before);
+    EXPECT_EQ(FileMode(copy), 0600);
+    EXPECT_EQ(ReadFile(file_), document.bytes());
+    kept.push_back(copy);
+  }
+  // Two in the same second get different names.
+  EXPECT_NE(kept[0], kept[1]);
+  EXPECT_EQ(ReadFile(kept[0]), original);
+
+  // A refused save keeps nothing.
+  ConfigDocument stale;
+  ASSERT_TRUE(ConfigDocument::Load(file_, &stale, &error)) << error;
+  WriteFile(file_, original);
+  stale.ReplaceAll(original);
+  std::filesystem::path copy;
+  EXPECT_FALSE(stale.SaveKeepingCopy(file_, "before-reset", &copy, &error));
+  EXPECT_TRUE(copy.empty());
+
+  // A missing or blank file holds nothing to keep.
+  const std::filesystem::path blank = temporary_.path() / "blank.yaml";
+  WriteFile(blank, " \n");
+  ConfigDocument empty;
+  ASSERT_TRUE(ConfigDocument::Load(blank, &empty, &error)) << error;
+  empty.ReplaceAll(std::string(runtime::DefaultRuntimeConfigYaml()));
+  ASSERT_TRUE(empty.SaveKeepingCopy(blank, "before-restore", &copy, &error))
+      << error;
+  EXPECT_TRUE(copy.empty());
+  ConfigDocument missing;
+  ASSERT_TRUE(ConfigDocument::Load(temporary_.path() / "new.yaml", &missing,
+                                   &error))
+      << error;
+  ASSERT_TRUE(missing.SaveKeepingCopy(temporary_.path() / "new.yaml",
+                                      "before-reset", &copy, &error))
+      << error;
+  EXPECT_TRUE(copy.empty());
+  std::size_t copies = 0;
+  for (const auto& entry :
+       std::filesystem::directory_iterator(temporary_.path())) {
+    if (entry.path().filename().string().find(".before-") !=
+        std::string::npos) {
+      ++copies;
+    }
+  }
+  EXPECT_EQ(copies, 2U);
+}
+
 TEST_F(LauncherConfigDocumentFileTest, RefusesFilesChangedSinceLoading) {
   const std::string original = Fixture();
   WriteFile(file_, original);

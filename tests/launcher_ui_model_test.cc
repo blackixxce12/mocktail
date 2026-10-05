@@ -76,6 +76,23 @@ std::string ReadFile(const std::filesystem::path& path) {
                      std::istreambuf_iterator<char>());
 }
 
+// Files in `directory` whose names start with `prefix`.
+std::vector<std::filesystem::path> FilesStartingWith(
+    const std::filesystem::path& directory, std::string_view prefix) {
+  std::vector<std::filesystem::path> files;
+  for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+    if (entry.path().filename().string().rfind(prefix, 0) == 0) {
+      files.push_back(entry.path());
+    }
+  }
+  return files;
+}
+
+std::filesystem::perms Permissions(const std::filesystem::path& path) {
+  return std::filesystem::status(path).permissions() &
+         std::filesystem::perms::all;
+}
+
 constexpr char kUserConfig[] =
     "version: 1\n"
     "device: pc-windows-11\n"
@@ -230,6 +247,73 @@ TEST(SettingsDraftTest, RestoresABackupOverABrokenFile) {
   EXPECT_FALSE(draft.read_only());
   EXPECT_EQ(draft.Get("graphics.vsync"), "off");
   EXPECT_EQ(ReadFile(file), kUserConfig);
+}
+
+// Restore Backup writes the copy kept before the window first saved over
+// config.yaml, possibly weeks old. The broken file it replaces still holds
+// the user's later edits and comments, so it is kept whole next to it.
+TEST(SettingsDraftTest, KeepsTheFileARestoreReplaces) {
+  TemporaryDirectory temporary;
+  const std::string edited =
+      std::string(kUserConfig) + "# Мои заметки\nnetwork: [\n";
+  const std::filesystem::path file = temporary.Write("config.yaml", edited);
+  SettingsDraft draft;
+  ASSERT_TRUE(draft.Load(file));
+  ASSERT_TRUE(draft.read_only());
+  std::string error;
+  ASSERT_TRUE(draft.RestoreBytes(kUserConfig, &error)) << error;
+  EXPECT_EQ(ReadFile(file), kUserConfig);
+  const std::vector<std::filesystem::path> kept =
+      FilesStartingWith(temporary.path(), "config.yaml.before-restore-");
+  ASSERT_EQ(kept.size(), 1U);
+  EXPECT_EQ(ReadFile(kept.front()), edited);
+  EXPECT_EQ(Permissions(kept.front()), std::filesystem::perms::owner_read |
+                                           std::filesystem::perms::owner_write);
+
+  // An empty file holds nothing to keep (Use Defaults).
+  TemporaryDirectory empty;
+  const std::filesystem::path blank = empty.Write("config.yaml", "\n");
+  ASSERT_TRUE(draft.Load(blank));
+  ASSERT_TRUE(draft.RestoreBytes(
+      std::string(runtime::DefaultRuntimeConfigYaml()), &error))
+      << error;
+  EXPECT_TRUE(FilesStartingWith(empty.path(), "config.yaml.before-").empty());
+}
+
+// Reset All replaces the whole file on Save. The one-time launcher backup
+// is from before the window first saved; the file as it is now is kept.
+TEST(SettingsDraftTest, KeepsTheFileAResetReplaces) {
+  TemporaryDirectory temporary;
+  const std::filesystem::path file =
+      temporary.Write("config.yaml", kUserConfig);
+  SettingsDraft draft;
+  ASSERT_TRUE(draft.Load(file));
+  std::string error;
+  ASSERT_TRUE(draft.Set("graphics.vsync", "on", launcher::ScalarKind::kEnum,
+                        &error));
+  ASSERT_TRUE(draft.Save(&error)) << error;
+  const std::string before_reset = ReadFile(file);
+  ASSERT_TRUE(draft.ReplaceAll(std::string(runtime::DefaultRuntimeConfigYaml()),
+                               &error));
+  ASSERT_TRUE(draft.Save(&error)) << error;
+  EXPECT_EQ(ReadFile(file), runtime::DefaultRuntimeConfigYaml());
+  std::vector<std::filesystem::path> kept =
+      FilesStartingWith(temporary.path(), "config.yaml.before-reset-");
+  ASSERT_EQ(kept.size(), 1U);
+  EXPECT_EQ(ReadFile(kept.front()), before_reset);
+
+  // Later saves of single settings keep nothing more, and neither does a
+  // reset that was undone.
+  ASSERT_TRUE(draft.Set("graphics.vsync", "off", launcher::ScalarKind::kEnum,
+                        &error));
+  ASSERT_TRUE(draft.Save(&error)) << error;
+  ASSERT_TRUE(draft.ReplaceAll(kUserConfig, &error));
+  draft.Discard();
+  ASSERT_TRUE(draft.Set("graphics.vsync", "on", launcher::ScalarKind::kEnum,
+                        &error));
+  ASSERT_TRUE(draft.Save(&error)) << error;
+  kept = FilesStartingWith(temporary.path(), "config.yaml.before-");
+  EXPECT_EQ(kept.size(), 1U);
 }
 
 TEST(SettingsDraftTest, NoticesAFileChangedOnDisk) {

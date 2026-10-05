@@ -502,7 +502,8 @@ bool LauncherContext::SaveInternal(bool quiet) {
   const bool size_changed =
       draft_.IsChanged("window.width") || draft_.IsChanged("window.height");
   std::string error;
-  if (draft_.HasChanges() && !draft_.Save(&error)) {
+  std::filesystem::path kept;
+  if (draft_.HasChanges() && !draft_.Save(&error, &kept)) {
     if (draft_.ChangedOnDisk()) {
       Toast(Format(_("Settings were not saved: %s"), error.c_str()),
             _("Reload"), [this] { Reload(); });
@@ -538,7 +539,15 @@ bool LauncherContext::SaveInternal(bool quiet) {
     }
   }
   NotifySettingChanged("");
-  if (!quiet) Toast(_("Settings saved"));
+  if (quiet) return true;
+  if (kept.empty()) {
+    Toast(_("Settings saved"));
+  } else {
+    // Reset All replaced the whole file (SettingsDraft::Save).
+    Toast(_("Settings saved; the old config.yaml is kept next to it"),
+          _("Open Folder"),
+          [this] { OpenPath(options_.config_file.parent_path()); });
+  }
   return true;
 }
 
@@ -798,7 +807,11 @@ void LauncherContext::ShowConfigErrorDialog() {
               {"restore", [this, backup] {
                  std::string error;
                  const std::string bytes = ReadSmallFile(backup, 1024U * 1024U);
-                 if (bytes.empty() || !draft_.RestoreBytes(bytes, &error)) {
+                 // The broken file may hold edits made long after the
+                 // backup; RestoreBytes keeps it next to it.
+                 std::filesystem::path kept;
+                 if (bytes.empty() ||
+                     !draft_.RestoreBytes(bytes, &error, &kept)) {
                    Toast(Format(_("The backup could not be restored: %s"),
                                 error.empty() ? _("it is empty or unreadable")
                                               : error.c_str()));
@@ -807,7 +820,15 @@ void LauncherContext::ShowConfigErrorDialog() {
                  UpdateConfigBanners();
                  ForgetDroppedMove();
                  NotifySettingChanged("");
-                 Toast(_("config.yaml restored from the backup"));
+                 if (kept.empty()) {
+                   Toast(_("config.yaml restored from the backup"));
+                 } else {
+                   Toast(_("Backup restored; the replaced config.yaml is "
+                           "kept next to it"),
+                         _("Open Folder"), [this] {
+                           OpenPath(options_.config_file.parent_path());
+                         });
+                 }
                }}});
   adw_dialog_present(dialog, GTK_WIDGET(window()));
 }

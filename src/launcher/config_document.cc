@@ -5,6 +5,7 @@
 #include <yaml.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <functional>
 #include <map>
@@ -1290,6 +1291,26 @@ bool ConfigDocument::Save(const std::filesystem::path& path,
   identity_ = published;
   disk_bytes_ = bytes_;
   return true;
+}
+
+bool ConfigDocument::SaveKeepingCopy(const std::filesystem::path& path,
+                                     std::string_view label,
+                                     std::filesystem::path* kept,
+                                     std::string* error) {
+  kept->clear();
+  if (!Validate(error) ||
+      !internal::VerifyUnchanged(path, identity_, disk_bytes_,
+                                 kMaximumConfigBytes, error)) {
+    return false;
+  }
+  const bool blank = std::all_of(
+      disk_bytes_.begin(), disk_bytes_.end(),
+      [](unsigned char character) { return std::isspace(character) != 0; });
+  if (identity_.exists && !blank &&
+      !internal::KeepCopyBeside(path, label, disk_bytes_, kept, error)) {
+    return false;
+  }
+  return Save(path, error);
 }
 
 }  // namespace mocktail::launcher

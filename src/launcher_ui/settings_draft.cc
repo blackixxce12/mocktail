@@ -15,6 +15,10 @@ namespace {
 
 constexpr char kReadOnlyError[] =
     "config.yaml has to be fixed before settings can be changed";
+// The names of the copies kept before the whole file is replaced
+// (ConfigDocument::SaveKeepingCopy).
+constexpr char kResetCopyLabel[] = "before-reset";
+constexpr char kRestoreCopyLabel[] = "before-restore";
 
 launcher::FileIdentity CurrentIdentity(const std::filesystem::path& path) {
   launcher::FileIdentity identity;
@@ -102,6 +106,7 @@ void SettingsDraft::Adopt(launcher::ConfigDocument document) {
   saved_ = document;
   working_ = std::move(document);
   touched_.clear();
+  replaced_all_ = false;
   load_error_.clear();
   load_error_line_ = 0;
   InvalidateCache();
@@ -203,6 +208,7 @@ bool SettingsDraft::HasChanges() const {
 void SettingsDraft::Discard() {
   working_ = saved_;
   touched_.clear();
+  replaced_all_ = false;
   InvalidateCache();
 }
 
@@ -210,7 +216,8 @@ bool SettingsDraft::Validate(std::string* error) const {
   return working_.Validate(error);
 }
 
-bool SettingsDraft::Save(std::string* error) {
+bool SettingsDraft::Save(std::string* error, std::filesystem::path* kept) {
+  if (kept != nullptr) kept->clear();
   if (read_only()) {
     if (error != nullptr) *error = kReadOnlyError;
     return false;
@@ -219,11 +226,18 @@ bool SettingsDraft::Save(std::string* error) {
     if (error != nullptr) *error = "no config.yaml path";
     return false;
   }
-  if (!working_.Save(path_, error)) {
+  std::filesystem::path copy;
+  const bool saved =
+      replaced_all_
+          ? working_.SaveKeepingCopy(path_, kResetCopyLabel, &copy, error)
+          : working_.Save(path_, error);
+  if (!saved) {
     return false;
   }
+  if (kept != nullptr) *kept = std::move(copy);
   saved_ = working_;
   touched_.clear();
+  replaced_all_ = false;
   saved_cache_.clear();
   return true;
 }
@@ -246,20 +260,25 @@ bool SettingsDraft::ReplaceAll(std::string bytes, std::string* error) {
     return false;
   }
   working_.ReplaceAll(std::move(bytes));
+  replaced_all_ = true;
   InvalidateCache();
   return true;
 }
 
-bool SettingsDraft::RestoreBytes(std::string bytes, std::string* error) {
+bool SettingsDraft::RestoreBytes(std::string bytes, std::string* error,
+                                 std::filesystem::path* kept) {
+  if (kept != nullptr) kept->clear();
   if (path_.empty()) {
     if (error != nullptr) *error = "no config.yaml path";
     return false;
   }
   launcher::ConfigDocument document = saved_;
   document.ReplaceAll(std::move(bytes));
-  if (!document.Save(path_, error)) {
+  std::filesystem::path copy;
+  if (!document.SaveKeepingCopy(path_, kRestoreCopyLabel, &copy, error)) {
     return false;
   }
+  if (kept != nullptr) *kept = std::move(copy);
   Adopt(std::move(document));
   ClassifyLoadError();
   return true;
