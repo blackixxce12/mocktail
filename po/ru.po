@@ -334,11 +334,11 @@ msgid "Fix config.yaml before moving variables into settings"
 msgstr "Перед переносом переменных в настройки исправьте config.yaml"
 
 #, c-format
-msgid "%d value moved into settings; the variables are ignored for this launch"
-msgid_plural "%d values moved into settings; the variables are ignored for this launch"
-msgstr[0] "%d значение перенесено в настройки; в этом запуске переменные не учитываются"
-msgstr[1] "%d значения перенесены в настройки; в этом запуске переменные не учитываются"
-msgstr[2] "%d значений перенесено в настройки; в этом запуске переменные не учитываются"
+msgid "%d value moved into settings"
+msgid_plural "%d values moved into settings"
+msgstr[0] "%d значение перенесено в настройки"
+msgstr[1] "%d значения перенесены в настройки"
+msgstr[2] "%d значений перенесено в настройки"
 
 #, c-format
 msgid "config.yaml has an error on line %d: %s"

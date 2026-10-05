@@ -33,7 +33,7 @@ class LauncherWindow final : public LauncherShell {
   void Present();
   GtkWidget* widget() const { return window_; }
   // The window content (what the self-test renders).
-  GtkWidget* content() const { return toast_overlay_; }
+  GtkWidget* content() const { return content_; }
   GtkWidget* page(Section section) const;
   Section current_section() const { return current_; }
   bool collapsed() const;
@@ -77,6 +77,9 @@ class LauncherWindow final : public LauncherShell {
 
   LauncherContext* context_;
   GtkWidget* window_ = nullptr;
+  // The outer toolbar view: the split view and the launch bar under it.
+  GtkWidget* content_ = nullptr;
+  // Around the split view only, so toasts float above the launch bar.
   GtkWidget* toast_overlay_ = nullptr;
   GtkWidget* split_view_ = nullptr;
   GtkWidget* sidebar_ = nullptr;

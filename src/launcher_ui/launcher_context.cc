@@ -639,11 +639,13 @@ void LauncherContext::MoveEnvironmentIntoSettings() {
   UpdateEnvironmentBanner();
   NotifySettingChanged("");
   const int moved = static_cast<int>(report.imported.size());
-  Toast(Format(ngettext("%d value moved into settings; the variables are "
-                        "ignored for this launch",
-                        "%d values moved into settings; the variables are "
-                        "ignored for this launch",
-                        moved),
+  // One short line: a toast never wraps, and a narrow window cut the old
+  // "…; the variables are ignored for this launch" in the middle. Both
+  // places that move them (the environment dialog's text and the Advanced
+  // page's "Move into settings" row) already say the variables are ignored
+  // for this launch.
+  Toast(Format(ngettext("%d value moved into settings",
+                        "%d values moved into settings", moved),
                moved));
 }
 

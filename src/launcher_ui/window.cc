@@ -68,15 +68,17 @@ LauncherWindow::LauncherWindow(AdwApplication* application,
   adw_navigation_split_view_set_show_content(
       ADW_NAVIGATION_SPLIT_VIEW(split_view_), TRUE);
 
-  GtkWidget* outer = adw_toolbar_view_new();
-  adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(outer), split_view_);
-  adw_toolbar_view_add_bottom_bar(ADW_TOOLBAR_VIEW(outer), BuildLaunchBar());
-  adw_toolbar_view_set_bottom_bar_style(ADW_TOOLBAR_VIEW(outer),
-                                        ADW_TOOLBAR_RAISED_BORDER);
+  // Toasts sit over the pages, just above the launch bar: around the whole
+  // window they covered the account chip, the status and Save, and in a
+  // narrow window Play itself.
   toast_overlay_ = adw_toast_overlay_new();
-  adw_toast_overlay_set_child(ADW_TOAST_OVERLAY(toast_overlay_), outer);
-  adw_application_window_set_content(ADW_APPLICATION_WINDOW(window_),
-                                     toast_overlay_);
+  adw_toast_overlay_set_child(ADW_TOAST_OVERLAY(toast_overlay_), split_view_);
+  content_ = adw_toolbar_view_new();
+  adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(content_), toast_overlay_);
+  adw_toolbar_view_add_bottom_bar(ADW_TOOLBAR_VIEW(content_), BuildLaunchBar());
+  adw_toolbar_view_set_bottom_bar_style(ADW_TOOLBAR_VIEW(content_),
+                                        ADW_TOOLBAR_RAISED_BORDER);
+  adw_application_window_set_content(ADW_APPLICATION_WINDOW(window_), content_);
 
   InstallBreakpoint();
   InstallActions(application);
