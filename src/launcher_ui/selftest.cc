@@ -591,15 +591,23 @@ guint Selftest::RenderHint(const std::string& key) {
   // The scrolled window's content, so text below its fold is rendered too.
   GtkWidget* child =
       popover != nullptr ? gtk_popover_get_child(popover) : nullptr;
+  std::string name = key;
+  for (char& c : name) {
+    if (!g_ascii_isalnum(c)) c = '-';
+  }
   if (child != nullptr && GTK_IS_SCROLLED_WINDOW(child)) {
+    // How tall the text may get here (bindings.cc HintContentHeight) and
+    // how tall the popover is, for checking short screens.
+    Note("hint_" + name + "_height",
+         "{\"max_text\": " +
+             std::to_string(gtk_scrolled_window_get_max_content_height(
+                 GTK_SCROLLED_WINDOW(child))) +
+             ", \"popover\": " +
+             std::to_string(gtk_widget_get_height(GTK_WIDGET(popover))) + "}");
     child = gtk_scrolled_window_get_child(GTK_SCROLLED_WINDOW(child));
   }
   if (child != nullptr && GTK_IS_VIEWPORT(child)) {
     child = gtk_viewport_get_child(GTK_VIEWPORT(child));
-  }
-  std::string name = key;
-  for (char& c : name) {
-    if (!g_ascii_isalnum(c)) c = '-';
   }
   const std::filesystem::path path = out_dir_ / ("hint-" + name + ".png");
   std::string detail;

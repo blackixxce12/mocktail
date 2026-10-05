@@ -17,6 +17,14 @@ namespace {
 
 constexpr char kBindingKey[] = "mocktail-binding";
 constexpr int kPopoverWidthChars = 52;
+// The tallest a hint's text gets before it scrolls, on a screen with room.
+constexpr int kPopoverMaxContentHeight = 460;
+// The shortest it is ever made, so a few lines always show.
+constexpr int kPopoverMinContentHeight = 160;
+// What a popover adds around its scrolled text: the box's margins (2 x 6),
+// the contents' padding (style.cc, 2 x 8), the arrow, the shadow, and a
+// little room from the screen's edge.
+constexpr int kPopoverChrome = 64;
 
 std::vector<std::string> SplitParagraphs(const std::string& text) {
   std::vector<std::string> paragraphs;
@@ -101,6 +109,53 @@ void OnHintPopoverShown(GtkWidget* popover, gpointer) {
         return G_SOURCE_REMOVE;
       },
       g_object_ref(popover));
+}
+
+// How tall the hint text of the popover opening at `anchor` may be.
+//
+// A popover's surface is placed by the compositor (an xdg_popup on Wayland,
+// GDK's own layout on X11): GTK asks it to flip to the other side of the
+// button when there is no room, but a popover taller than the room on both
+// sides is neither flipped nor shrunk everywhere. labwc and X11 then let it
+// run off the bottom of the screen, where its last paragraphs could never
+// be scrolled into view, and on a screen about 540 px tall (1080p at 200 %)
+// the tallest hint did not open at all. Whatever the compositor does, the
+// popover fits on the roomier side of the button when it is no taller than
+// that side: half of the monitor (less the button), and at least the room
+// above or below the button inside the window, which lies on the monitor.
+int HintContentHeight(GtkWidget* anchor) {
+  int room = 0;
+  // Not allocated yet when the page holding it was only just shown.
+  const int anchor_height = gtk_widget_get_height(anchor);
+  GtkRoot* root = gtk_widget_get_root(anchor);
+  graphene_rect_t bounds;
+  if (root != nullptr && anchor_height > 0 &&
+      gtk_widget_compute_bounds(anchor, GTK_WIDGET(root), &bounds)) {
+    const float top = graphene_rect_get_y(&bounds);
+    const float below =
+        static_cast<float>(gtk_widget_get_height(GTK_WIDGET(root))) - top -
+        graphene_rect_get_height(&bounds);
+    // Only while the button is inside the window: one on a page that was
+    // only just shown, or scrolled out of view, still has its old place.
+    if (top >= 0 && below >= 0) room = static_cast<int>(std::max(top, below));
+  }
+  GtkNative* native = gtk_widget_get_native(anchor);
+  GdkSurface* surface =
+      native != nullptr ? gtk_native_get_surface(native) : nullptr;
+  GdkMonitor* monitor = surface != nullptr
+                            ? gdk_display_get_monitor_at_surface(
+                                  gtk_widget_get_display(anchor), surface)
+                            : nullptr;
+  if (monitor != nullptr) {
+    GdkRectangle geometry = {};
+    gdk_monitor_get_geometry(monitor, &geometry);
+    if (geometry.height > 0) {
+      room = std::max(room, (geometry.height - anchor_height) / 2);
+    }
+  }
+  if (room <= 0) return kPopoverMaxContentHeight;
+  return std::clamp(room - kPopoverChrome, kPopoverMinContentHeight,
+                    kPopoverMaxContentHeight);
 }
 
 // ---- RowBinding
@@ -380,15 +435,16 @@ class RowBinding {
         GTK_MENU_BUTTON(button),
         [](GtkMenuButton* menu_button, gpointer data) {
           static_cast<RowBinding*>(data)->FillPopover(
-              gtk_menu_button_get_popover(menu_button));
+              gtk_menu_button_get_popover(menu_button),
+              HintContentHeight(GTK_WIDGET(menu_button)));
         },
         this, nullptr);
     return button;
   }
 
   // Rebuilt every time the popover opens, so it shows the current value,
-  // machine and environment.
-  void FillPopover(GtkPopover* popover) {
+  // machine and environment. The text scrolls beyond `max_height`.
+  void FillPopover(GtkPopover* popover, int max_height) {
     const std::string value = Effective();
     GtkWidget* box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     gtk_widget_set_margin_top(box, 6);
@@ -501,7 +557,7 @@ class RowBinding {
     gtk_scrolled_window_set_propagate_natural_width(
         GTK_SCROLLED_WINDOW(scroller), TRUE);
     gtk_scrolled_window_set_max_content_height(GTK_SCROLLED_WINDOW(scroller),
-                                               460);
+                                               max_height);
     gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroller), box);
     gtk_popover_set_child(popover, scroller);
   }
