@@ -497,6 +497,14 @@ VideoDriverChoice ResolveConfiguredVideoDriverChoice() {
   input.has_x11_display = GetEnvNonEmpty("DISPLAY") != nullptr;
   input.uses_direct_vulkan = ShouldUseNativeVulkanBackend();
   input.has_nvidia_kernel_driver = HasNvidiaKernelDriver();
+  // The loader reads VK_DRIVER_FILES first; VK_ICD_FILENAMES is the older
+  // name it falls back to.
+  const char* driver_files = GetEnvNonEmpty("VK_DRIVER_FILES");
+  if (driver_files == nullptr) {
+    driver_files = GetEnvNonEmpty("VK_ICD_FILENAMES");
+  }
+  input.vulkan_drivers_exclude_nvidia =
+      driver_files != nullptr && VulkanDriverFilesExcludeNvidia(driver_files);
   return ResolveVideoDriverChoice(input);
 }
 

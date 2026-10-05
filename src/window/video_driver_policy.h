@@ -24,13 +24,25 @@ struct VideoDriverPolicyInput {
   bool has_x11_display = false;
   bool uses_direct_vulkan = false;
   bool has_nvidia_kernel_driver = false;
+  // The pinned Vulkan drivers cannot reach an NVIDIA card, as when
+  // engine.gpu puts the game on the integrated GPU of a hybrid laptop.
+  bool vulkan_drivers_exclude_nvidia = false;
 };
 
 // Resolves the SDL video backend before SDL_Init. An explicit SDL driver is
 // always authoritative. NVIDIA's direct Vulkan WSI uses X11/XWayland by
 // default when both display transports are available to avoid native Wayland
 // WSI hangs and explicit-sync protocol errors that disconnect the display.
+// A loaded NVIDIA kernel driver does not count while the pinned Vulkan
+// drivers exclude NVIDIA: the game then presents through another vendor's
+// WSI.
 VideoDriverChoice ResolveVideoDriverChoice(const VideoDriverPolicyInput& input);
+
+// True when `driver_files` (VK_DRIVER_FILES or VK_ICD_FILENAMES, a
+// colon-separated manifest list) names only .json manifests whose paths do
+// not mention nvidia. Empty lists, directories and anything else that does
+// not say which driver it is count as possibly NVIDIA.
+bool VulkanDriverFilesExcludeNvidia(std::string_view driver_files);
 
 const char* VideoDriverChoiceName(VideoDriverChoice choice);
 

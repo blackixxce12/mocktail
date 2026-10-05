@@ -19,7 +19,8 @@ VideoDriverChoice ResolveVideoDriverChoice(
     return VideoDriverChoice::kX11;
   }
   if (input.uses_direct_vulkan && input.has_nvidia_kernel_driver &&
-      input.has_wayland_session && input.has_x11_display) {
+      !input.vulkan_drivers_exclude_nvidia && input.has_wayland_session &&
+      input.has_x11_display) {
     return VideoDriverChoice::kNvidiaDirectVulkanX11;
   }
   if (input.prefer_wayland && input.has_wayland_session) {
@@ -39,6 +40,34 @@ const char* VideoDriverChoiceName(VideoDriverChoice choice) {
       return nullptr;
   }
   return nullptr;
+}
+
+bool VulkanDriverFilesExcludeNvidia(std::string_view driver_files) {
+  constexpr std::string_view kManifestSuffix = ".json";
+  bool named = false;
+  std::size_t begin = 0;
+  while (begin <= driver_files.size()) {
+    const std::size_t end = driver_files.find(':', begin);
+    const std::string_view entry = driver_files.substr(
+        begin, end == driver_files.npos ? driver_files.npos : end - begin);
+    if (!entry.empty()) {
+      const std::size_t slash = entry.rfind('/');
+      const std::string_view name =
+          slash == entry.npos ? entry : entry.substr(slash + 1);
+      if (name.size() <= kManifestSuffix.size() ||
+          name.substr(name.size() - kManifestSuffix.size()) !=
+              kManifestSuffix ||
+          entry.find("nvidia") != entry.npos) {
+        return false;
+      }
+      named = true;
+    }
+    if (end == driver_files.npos) {
+      break;
+    }
+    begin = end + 1;
+  }
+  return named;
 }
 
 bool HasNvidiaKernelDriver(const std::filesystem::path& proc_version,

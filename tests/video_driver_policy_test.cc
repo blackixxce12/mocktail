@@ -71,6 +71,44 @@ TEST(VideoDriverPolicyTest, KeepsWaylandForNonNvidiaAndNonDirectBackends) {
   EXPECT_EQ(ResolveVideoDriverChoice(input), VideoDriverChoice::kWayland);
 }
 
+TEST(VideoDriverPolicyTest, KeepsWaylandWhenVulkanCannotReachNvidia) {
+  // engine.gpu: integrated on an AMD or Intel + NVIDIA laptop: the NVIDIA
+  // kernel driver stays loaded, but the game renders and presents on the
+  // integrated GPU through Mesa's WSI.
+  VideoDriverPolicyInput input = NvidiaWaylandDirectVulkan();
+  input.vulkan_drivers_exclude_nvidia = true;
+
+  EXPECT_EQ(ResolveVideoDriverChoice(input), VideoDriverChoice::kWayland);
+
+  input.force_x11 = true;
+  EXPECT_EQ(ResolveVideoDriverChoice(input), VideoDriverChoice::kX11);
+}
+
+TEST(VideoDriverPolicyTest, ReadsWhetherPinnedVulkanDriversExcludeNvidia) {
+  for (const char* files : {
+           "/usr/share/vulkan/icd.d/radeon_icd.x86_64.json",
+           "/usr/share/vulkan/icd.d/intel_icd.x86_64.json:"
+           "/usr/share/vulkan/icd.d/intel_hasvk_icd.x86_64.json",
+           "radeon_icd.json",
+           ":/etc/vulkan/icd.d/radeon_icd.json:",
+       }) {
+    EXPECT_TRUE(VulkanDriverFilesExcludeNvidia(files)) << files;
+  }
+  for (const char* files : {
+           "",
+           ":",
+           "/usr/share/vulkan/icd.d/nvidia_icd.json",
+           "/usr/share/vulkan/icd.d/radeon_icd.x86_64.json:"
+           "/usr/share/vulkan/icd.d/nvidia_icd.json",
+           "/opt/nvidia/vulkan/icd.json",
+           "/usr/share/vulkan/icd.d",
+           "/usr/share/vulkan/icd.d/",
+           "radeon_icd.json.bak",
+       }) {
+    EXPECT_FALSE(VulkanDriverFilesExcludeNvidia(files)) << files;
+  }
+}
+
 TEST(VideoDriverPolicyTest, KeepsWaylandWhenXwaylandIsUnavailable) {
   VideoDriverPolicyInput input = NvidiaWaylandDirectVulkan();
   input.has_x11_display = false;
