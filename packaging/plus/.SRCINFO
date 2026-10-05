@@ -1,0 +1,56 @@
+pkgbase = mocktail-plus
+	pkgdesc = Android x86-64 Roblox compatibility runtime for Linux (unofficial Mocktail fork with a settings window and fixes)
+	pkgver = 1.0.4.plus.1
+	pkgrel = 1
+	url = https://github.com/blackixxce12/mocktail
+	arch = x86_64
+	license = Apache-2.0
+	makedepends = binutils
+	makedepends = cmake>=3.20
+	makedepends = gettext
+	makedepends = git
+	makedepends = lld
+	makedepends = ninja
+	makedepends = nlohmann-json
+	makedepends = pkgconf
+	depends = capstone
+	depends = curl
+	depends = fontconfig
+	depends = glib2
+	depends = glibc
+	depends = graphene
+	depends = gtk4
+	depends = hicolor-icon-theme
+	depends = libadwaita>=1:1.9
+	depends = libelf
+	depends = libgcc
+	depends = libglvnd
+	depends = libplacebo
+	depends = libpng
+	depends = libsoup3
+	depends = libstdc++
+	depends = libutf8proc
+	depends = libx11
+	depends = libyaml
+	depends = minizip
+	depends = openssl
+	depends = pango
+	depends = sdl3>=3.4
+	depends = sdl3_ttf
+	depends = vulkan-icd-loader
+	depends = wayland
+	depends = webkitgtk-6.0
+	depends = zlib
+	optdepends = gamemode: Feral GameMode integration
+	provides = mocktail=1.0.4.plus.1
+	conflicts = mocktail
+	conflicts = mocktail-bin
+	conflicts = mocktail-git
+	conflicts = mocktail-local
+	options = !debug
+	source = mocktail::git+https://github.com/blackixxce12/mocktail.git#tag=v1.0.4-plus.1
+	source = vulkan-headers-8d6039a455a7ecc7d2a592ff97f62db4e59b70bf.tar.gz::https://github.com/KhronosGroup/Vulkan-Headers/archive/8d6039a455a7ecc7d2a592ff97f62db4e59b70bf.tar.gz
+	sha256sums = SKIP
+	sha256sums = 54321019f1b98337d72a999ef94ad252006fb793ae1c53b50c8c2bed82901d23
+
+pkgname = mocktail-plus

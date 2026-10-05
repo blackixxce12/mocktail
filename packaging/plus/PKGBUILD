@@ -1,0 +1,105 @@
+# Maintainer: blackixxce12 <quickshell19 at gmail dot com>
+# Contributor: komaruworld <rtysus228 at gmail dot com>
+#
+# Mocktail Plus: an unofficial fork of Mocktail (github.com/komaruworld/mocktail)
+# whose tree already carries its fixes and the settings window, so nothing is
+# patched here. Release packages are built with build-release.sh next to this
+# file and published only as GitHub Release assets.
+
+pkgname=mocktail-plus
+pkgver=1.0.4.plus.1
+pkgrel=1
+_tag="v${pkgver/.plus./-plus.}" # 1.0.4.plus.1 -> v1.0.4-plus.1
+_vkh_commit=8d6039a455a7ecc7d2a592ff97f62db4e59b70bf # third_party/Vulkan-Headers gitlink (v1.4.356)
+pkgdesc='Android x86-64 Roblox compatibility runtime for Linux (unofficial Mocktail fork with a settings window and fixes)'
+arch=('x86_64')
+url='https://github.com/blackixxce12/mocktail'
+license=('Apache-2.0')
+depends=(
+  'capstone'
+  'curl'
+  'fontconfig'
+  'glib2'
+  'glibc'
+  'graphene'          # mocktail_launcher_ui
+  'gtk4'
+  'hicolor-icon-theme'
+  'libadwaita>=1:1.9' # mocktail_launcher_ui uses AdwSidebar (libadwaita 1.9)
+  'libelf'
+  'libgcc'            # libgcc_s.so.1
+  'libglvnd'
+  'libplacebo'
+  'libpng'
+  'libsoup3'
+  'libstdc++'
+  'libutf8proc'
+  'libx11'            # mocktail_webview_helper: WM_TRANSIENT_FOR on X11
+  'libyaml'
+  'minizip'
+  'openssl'
+  'pango'             # mocktail_launcher_ui
+  'sdl3>=3.4'
+  'sdl3_ttf'
+  'vulkan-icd-loader'
+  'wayland'           # dlopen()ed by the Wayland globals probe
+  'webkitgtk-6.0'
+  'zlib'
+)
+makedepends=(
+  'binutils'
+  'cmake>=3.20'
+  'gettext'           # msgfmt for po/*.po
+  'git'
+  'lld'
+  'ninja'
+  'nlohmann-json'
+  'pkgconf'
+)
+optdepends=('gamemode: Feral GameMode integration')
+provides=("mocktail=${pkgver}")
+conflicts=('mocktail' 'mocktail-bin' 'mocktail-git' 'mocktail-local')
+options=('!debug')
+source=(
+  "mocktail::git+${url}.git#tag=${_tag}"
+  "vulkan-headers-${_vkh_commit}.tar.gz::https://github.com/KhronosGroup/Vulkan-Headers/archive/${_vkh_commit}.tar.gz"
+)
+sha256sums=(
+  'SKIP'
+  '54321019f1b98337d72a999ef94ad252006fb793ae1c53b50c8c2bed82901d23'
+)
+
+prepare() {
+  cd mocktail
+
+  # The Vulkan-Headers submodule is vendored from a tarball pinned to the
+  # tree's gitlink, like upstream's own pacman/AppImage release builds.
+  # libjnivm is only used by tests, so MOCKTAIL_ENABLE_UPSTREAM_JNIVM=OFF
+  # below and it is not fetched.
+  local gitlink
+  gitlink=$(git rev-parse HEAD:third_party/Vulkan-Headers)
+  if [[ ${gitlink} != "${_vkh_commit}" ]]; then
+    error 'third_party/Vulkan-Headers points at %s, but _vkh_commit is %s' \
+      "${gitlink}" "${_vkh_commit}"
+    return 1
+  fi
+  cp -a "${srcdir}/Vulkan-Headers-${_vkh_commit}/." third_party/Vulkan-Headers/
+}
+
+build() {
+  cmake -S mocktail -B build -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_INSTALL_LIBDIR=lib \
+    -DMOCKTAIL_DEFAULT_COMPATIBILITY_MANIFEST=/usr/share/mocktail/metadata/roblox_compatibility.json \
+    -DMOCKTAIL_DEFAULT_SIGNING_TRUST_MANIFEST=/usr/share/mocktail/metadata/roblox_signing_certificates.json \
+    -DMOCKTAIL_ENABLE_UPSTREAM_JNIVM=OFF \
+    -DMOCKTAIL_BUILD_LAUNCHER_UI=ON \
+    -DBUILD_TESTING=OFF
+  cmake --build build
+}
+
+package() {
+  DESTDIR="${pkgdir}" cmake --install build
+  install -Dm644 mocktail/LICENSE \
+    "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}
