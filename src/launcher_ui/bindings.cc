@@ -364,6 +364,14 @@ class RowBinding {
       adw_action_row_add_suffix(ADW_ACTION_ROW(row_), widget);
     } else if (ADW_IS_EXPANDER_ROW(row_)) {
       adw_expander_row_add_suffix(ADW_EXPANDER_ROW(row_), widget);
+      // AdwExpanderRow puts a new suffix before the ones it has; keep them
+      // in the order they are added, the info button last.
+      GtkWidget* box = gtk_widget_get_parent(widget);
+      GtkWidget* last =
+          box != nullptr ? gtk_widget_get_last_child(box) : nullptr;
+      if (GTK_IS_BOX(box) && last != widget) {
+        gtk_box_reorder_child_after(GTK_BOX(box), widget, last);
+      }
     }
   }
   virtual void SetSubtitle(const std::string& markup) {

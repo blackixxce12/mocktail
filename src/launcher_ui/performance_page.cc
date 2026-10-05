@@ -568,7 +568,19 @@ class MemoryLimitRow {
 
   GtkWidget* Build() {
     expander_ = adw_expander_row_new();
-    adw_expander_row_set_show_enable_switch(ADW_EXPANDER_ROW(expander_), TRUE);
+    // AdwExpanderRow's own enable switch sits after the row's suffixes, so
+    // the info button DecorateRow adds came before it, unlike on every
+    // other row. A switch of our own, added first, keeps the info button
+    // last; it drives enable-expansion as the built-in one does.
+    GtkWidget* enable = gtk_switch_new();
+    gtk_widget_set_valign(enable, GTK_ALIGN_CENTER);
+    gtk_accessible_update_property(GTK_ACCESSIBLE(enable),
+                                   GTK_ACCESSIBLE_PROPERTY_LABEL,
+                                   _("Memory limit"), -1);
+    g_object_bind_property(
+        enable, "active", expander_, "enable-expansion",
+        GBindingFlags(G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE));
+    adw_expander_row_add_suffix(ADW_EXPANDER_ROW(expander_), enable);
     spin_ = adw_spin_row_new_with_range(0.5, 1024, 0.5);
     adw_spin_row_set_digits(ADW_SPIN_ROW(spin_), 1);
     adw_preferences_row_set_title(ADW_PREFERENCES_ROW(spin_), _("Limit"));
