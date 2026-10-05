@@ -1259,10 +1259,9 @@ msgstr "Интерфейс Roblox"
 msgid "How Roblox's own menus look"
 msgstr "Как выглядят меню самого Roblox"
 
-# Performance page.
 #, c-format
-msgid "%.1f GiB"
-msgstr "%.1f ГиБ"
+msgid "%s GiB"
+msgstr "%s ГиБ"
 
 msgid "Multithreaded rendering"
 msgstr "Многопоточный рендеринг"
@@ -3054,8 +3053,9 @@ msgstr "Процессор и память"
 msgid "%d cores, %d threads"
 msgstr "ядер: %d, потоков: %d"
 
-msgid "%.1f GiB of memory"
-msgstr "%.1f ГиБ памяти"
+#, c-format
+msgid "%s GiB of memory"
+msgstr "%s ГиБ памяти"
 
 msgid "At start Mocktail sizes Roblox's worker threads from the physical cores when Physics workers is Throughput (the default), or Automatic with multithreaded rendering on."
 msgstr "При запуске Mocktail рассчитывает число рабочих потоков Roblox по физическим ядрам, если в «Потоках физики» выбрана «Пропускная способность» (по умолчанию) или «Автоматически» с включённым многопоточным рендерингом."

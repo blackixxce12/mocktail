@@ -376,7 +376,7 @@ GtkWidget* BuildProcessorRow(LauncherContext* context) {
       if (!text.empty()) text += " · ";
       const double gib = static_cast<double>(machine.memory_bytes) /
                          (1024.0 * 1024.0 * 1024.0);
-      text += Format(_("%.1f GiB of memory"), gib);
+      text += Format(_("%s GiB of memory"), DecimalText(gib, 1).c_str());
     }
     return text.empty() ? std::string(_("Looking…")) : text;
   };

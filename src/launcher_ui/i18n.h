@@ -26,6 +26,11 @@ std::string InitTranslations(const char* argv0);
 // printf-style formatting for translated strings (g_strdup_vprintf).
 std::string Format(const char* format, ...) G_GNUC_PRINTF(1, 2);
 
+// `value` with `digits` decimals and the decimal separator of the user's
+// locale ("14,9" in Russian). main.cc keeps LC_NUMERIC at "C" for the
+// runtime's parsers, so "%.1f" always printed a point.
+std::string DecimalText(double value, int digits);
+
 }  // namespace mocktail::launcher_ui
 
 #endif  // MOCKTAIL_LAUNCHER_UI_I18N_H_

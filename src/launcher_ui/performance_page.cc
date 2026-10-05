@@ -1,5 +1,6 @@
 #include <unistd.h>
 
+#include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <cstdint>
@@ -47,7 +48,7 @@ std::optional<std::uint64_t> ParseMebibytes(std::string_view text) {
 }
 
 std::string GibibytesText(double gibibytes) {
-  return Format(_("%.1f GiB"), gibibytes);
+  return Format(_("%s GiB"), DecimalText(gibibytes, 1).c_str());
 }
 
 // What the session bus says about the GameMode daemon. libgamemode talks to
@@ -524,6 +525,27 @@ class MemoryLimitRow {
     adw_expander_row_add_suffix(ADW_EXPANDER_ROW(expander_), enable);
     spin_ = adw_spin_row_new_with_range(0.5, 1024, 0.5);
     adw_spin_row_set_digits(ADW_SPIN_ROW(spin_), 1);
+    // In the user's decimal separator, both ways ("6,5" in Russian): the
+    // spin button formats and parses with LC_NUMERIC, which is "C".
+    g_signal_connect(
+        spin_, "output", G_CALLBACK(+[](AdwSpinRow* row, gpointer) -> gboolean {
+          const std::string text = DecimalText(adw_spin_row_get_value(row), 1);
+          gtk_editable_set_text(GTK_EDITABLE(row), text.c_str());
+          return TRUE;
+        }),
+        nullptr);
+    g_signal_connect(
+        spin_, "input",
+        G_CALLBACK(+[](AdwSpinRow* row, double* value, gpointer) -> gint {
+          std::string text = gtk_editable_get_text(GTK_EDITABLE(row));
+          std::replace(text.begin(), text.end(), ',', '.');
+          char* end = nullptr;
+          const double parsed = g_ascii_strtod(text.c_str(), &end);
+          if (end == text.c_str()) return GTK_INPUT_ERROR;
+          *value = parsed;
+          return TRUE;
+        }),
+        nullptr);
     adw_preferences_row_set_title(ADW_PREFERENCES_ROW(spin_), _("Limit"));
     adw_action_row_set_subtitle(ADW_ACTION_ROW(spin_),
                                 _("GiB of resident memory plus swap"));

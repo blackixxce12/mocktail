@@ -1,7 +1,11 @@
 #include "launcher_ui/i18n.h"
 
+#include <langinfo.h>
+#include <locale.h>
+
 #include <clocale>
 #include <cstdarg>
+#include <cstdio>
 #include <filesystem>
 #include <string>
 #include <system_error>
@@ -98,6 +102,28 @@ std::string Format(const char* format, ...) {
   std::string result(text != nullptr ? text : "");
   g_free(text);
   return result;
+}
+
+std::string DecimalText(double value, int digits) {
+  // The separator of the locale the environment asks for, not of the
+  // process's LC_NUMERIC (main.cc sets "C").
+  static const std::string separator = [] {
+    std::string result = ".";
+    const locale_t user =
+        newlocale(LC_NUMERIC_MASK, "", static_cast<locale_t>(nullptr));
+    if (user != static_cast<locale_t>(nullptr)) {
+      const char* radix = nl_langinfo_l(RADIXCHAR, user);
+      if (radix != nullptr && radix[0] != '\0') result = radix;
+      freelocale(user);
+    }
+    return result;
+  }();
+  char buffer[64];
+  std::snprintf(buffer, sizeof(buffer), "%.*f", digits, value);
+  std::string text = buffer;
+  const std::size_t point = text.find('.');
+  if (point != std::string::npos) text.replace(point, 1, separator);
+  return text;
 }
 
 }  // namespace mocktail::launcher_ui
