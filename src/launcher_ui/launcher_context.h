@@ -264,8 +264,10 @@ class LauncherContext {
   // ---- navigation and files ------------------------------------------------
   void ShowSection(Section section);
   void Reveal(GtkWidget* widget);
-  // Opens a file or folder with the desktop's default application, through
-  // the portal when there is one and GIO otherwise; failures are toasts.
+  // Opens a file or folder with the desktop's default application: inside
+  // Flatpak or Snap through the OpenURI portal, otherwise through GIO with
+  // Mocktail's own variables left out of the application's environment
+  // (host_launch_environment.h). Failures are toasts.
   void OpenPath(const std::filesystem::path& path);
 
  private:

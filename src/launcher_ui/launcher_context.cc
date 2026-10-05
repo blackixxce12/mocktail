@@ -13,6 +13,7 @@
 #include "launcher_ui/i18n.h"
 #include "launcher_ui/setting_kinds.h"
 #include "runtime/environment.h"
+#include "runtime/host_launch_environment.h"
 #include "runtime/runtime_config_bootstrap.h"
 
 namespace mocktail::launcher_ui {
@@ -1004,31 +1005,84 @@ void LauncherContext::Reveal(GtkWidget* widget) {
 namespace {
 
 struct OpenRequest {
-  LauncherContext* context;
+  OpenRequest() = default;
+  OpenRequest(const OpenRequest&) = delete;
+  OpenRequest& operator=(const OpenRequest&) = delete;
+  ~OpenRequest() {
+    if (launch_context != nullptr) g_object_unref(launch_context);
+  }
+
+  LauncherContext* context = nullptr;
   std::string uri;
+  GAppLaunchContext* launch_context = nullptr;
 };
 
-void OnLaunched(GObject* source, GAsyncResult* result, gpointer data) {
+// The context GIO starts the application with: the display's, for the
+// startup or activation token, without Mocktail's own variables. The
+// application starts from this window's environment, which holds every
+// MOCKTAIL_* path and override mocktail passed in, the proxy
+// AccountsController set up for the window's own requests and, in the
+// portable bundle, the bundled library paths (host_launch_environment.h).
+// The WebView helper leaves them out of the browser it opens the same way.
+GAppLaunchContext* NewLaunchContext(GtkWindow* window) {
+  GdkDisplay* display = window != nullptr
+                            ? gtk_widget_get_display(GTK_WIDGET(window))
+                            : gdk_display_get_default();
+  GAppLaunchContext* context =
+      display != nullptr
+          ? G_APP_LAUNCH_CONTEXT(gdk_display_get_app_launch_context(display))
+          : g_app_launch_context_new();
+  runtime::RemoveMocktailEnvironment(context);
+  return context;
+}
+
+// Flatpak or Snap, as GDK tells them (gdk_running_in_sandbox): there only the
+// OpenURI portal reaches the host's applications, and the portal starts them
+// with the host's environment, not this window's.
+bool InSandbox() {
+  return g_file_test("/.flatpak-info", G_FILE_TEST_EXISTS) ||
+         g_getenv("SNAP") != nullptr;
+}
+
+bool Dismissed(const GError* error) {
+  return g_error_matches(error, G_IO_ERROR, G_IO_ERROR_CANCELLED) ||
+         g_error_matches(error, GTK_DIALOG_ERROR, GTK_DIALOG_ERROR_DISMISSED);
+}
+
+void OnLaunchedDirectly(GObject*, GAsyncResult* result, gpointer data) {
+  std::unique_ptr<OpenRequest> request(static_cast<OpenRequest*>(data));
+  GError* error = nullptr;
+  if (g_app_info_launch_default_for_uri_finish(result, &error)) return;
+  if (!Dismissed(error)) {
+    request->context->Toast(Format(_("Could not open %s: %s"),
+                                   request->uri.c_str(),
+                                   error != nullptr ? error->message : ""));
+  }
+  g_clear_error(&error);
+}
+
+// What GtkFileLauncher does when it uses no portal, with a launch context
+// that leaves Mocktail's variables out (GtkFileLauncher's own keeps them).
+void LaunchDirectly(std::unique_ptr<OpenRequest> request) {
+  OpenRequest* owned = request.release();
+  g_app_info_launch_default_for_uri_async(owned->uri.c_str(),
+                                          owned->launch_context, nullptr,
+                                          OnLaunchedDirectly, owned);
+}
+
+void OnLaunchedThroughPortal(GObject* source, GAsyncResult* result,
+                             gpointer data) {
   std::unique_ptr<OpenRequest> request(static_cast<OpenRequest*>(data));
   GError* error = nullptr;
   if (gtk_file_launcher_launch_finish(GTK_FILE_LAUNCHER(source), result,
                                       &error)) {
     return;
   }
-  const bool cancelled =
-      g_error_matches(error, G_IO_ERROR, G_IO_ERROR_CANCELLED) ||
-      g_error_matches(error, GTK_DIALOG_ERROR, GTK_DIALOG_ERROR_DISMISSED);
+  const bool dismissed = Dismissed(error);
   g_clear_error(&error);
-  if (cancelled) return;
-  // No portal or no handler through it: ask GIO directly.
-  if (g_app_info_launch_default_for_uri(request->uri.c_str(), nullptr,
-                                        &error)) {
-    return;
-  }
-  request->context->Toast(Format(_("Could not open %s: %s"),
-                                 request->uri.c_str(),
-                                 error != nullptr ? error->message : ""));
-  g_clear_error(&error);
+  if (dismissed) return;
+  // No handler through the portal: ask GIO directly.
+  LaunchDirectly(std::move(request));
 }
 
 }  // namespace
@@ -1039,11 +1093,19 @@ void LauncherContext::OpenPath(const std::filesystem::path& path) {
   }
   GFile* file = g_file_new_for_path(path.c_str());
   gchar* uri = g_file_get_uri(file);
-  auto* request = new OpenRequest{this, uri != nullptr ? uri : ""};
+  auto request = std::make_unique<OpenRequest>();
+  request->context = this;
+  request->uri = uri != nullptr ? uri : "";
+  request->launch_context = NewLaunchContext(window());
   g_free(uri);
-  GtkFileLauncher* launcher = gtk_file_launcher_new(file);
-  gtk_file_launcher_launch(launcher, window(), nullptr, OnLaunched, request);
-  g_object_unref(launcher);
+  if (InSandbox()) {
+    GtkFileLauncher* launcher = gtk_file_launcher_new(file);
+    gtk_file_launcher_launch(launcher, window(), nullptr,
+                             OnLaunchedThroughPortal, request.release());
+    g_object_unref(launcher);
+  } else {
+    LaunchDirectly(std::move(request));
+  }
   g_object_unref(file);
 }
 
