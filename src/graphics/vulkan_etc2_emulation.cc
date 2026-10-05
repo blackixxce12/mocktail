@@ -1314,6 +1314,8 @@ void VulkanEtc2Emulation::PrepareSubmit(const VkCommandBuffer* command_buffers,
     decoded_offset += upload->decoded;
     host_total += upload->target_bytes;
   }
+  ReleaseOversizedEtc2Scratch(&scratch_source);
+  ReleaseOversizedEtc2Scratch(&scratch_decoded);
   if (copied_uploads.empty()) {
     return;
   }

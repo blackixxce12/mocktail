@@ -67,4 +67,10 @@ bool Etc2DecodeTotalsMilestone(std::uint64_t before, std::uint64_t after) {
   return false;
 }
 
+void ReleaseOversizedEtc2Scratch(std::vector<std::uint8_t>* scratch) {
+  if (scratch != nullptr && scratch->capacity() > kEtc2ScratchKeepBytes) {
+    std::vector<std::uint8_t>().swap(*scratch);
+  }
+}
+
 }  // namespace mocktail::graphics

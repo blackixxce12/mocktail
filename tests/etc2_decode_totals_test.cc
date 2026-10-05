@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <vector>
 
 namespace mocktail::graphics {
 namespace {
@@ -48,6 +49,19 @@ TEST(Etc2DecodeTotalsTest, ReportsAtSixtyFourMebibytesAndEachDoubling) {
   EXPECT_TRUE(Etc2DecodeTotalsMilestone(500 * kMiB, 512 * kMiB));
   EXPECT_TRUE(Etc2DecodeTotalsMilestone(0, UINT64_MAX));
   EXPECT_FALSE(Etc2DecodeTotalsMilestone(UINT64_MAX - 1, UINT64_MAX));
+}
+
+TEST(Etc2DecodeTotalsTest, GivesBackScratchLargerThanTheKeepSize) {
+  std::vector<std::uint8_t> kept(kEtc2ScratchKeepBytes);
+  ReleaseOversizedEtc2Scratch(&kept);
+  EXPECT_EQ(kept.size(), kEtc2ScratchKeepBytes);
+
+  std::vector<std::uint8_t> burst(kEtc2ScratchKeepBytes + 1);
+  ReleaseOversizedEtc2Scratch(&burst);
+  EXPECT_TRUE(burst.empty());
+  EXPECT_EQ(burst.capacity(), 0U);
+
+  ReleaseOversizedEtc2Scratch(nullptr);
 }
 
 }  // namespace

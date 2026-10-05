@@ -1,8 +1,10 @@
 #ifndef MOCKTAIL_GRAPHICS_ETC2_DECODE_TOTALS_H_
 #define MOCKTAIL_GRAPHICS_ETC2_DECODE_TOTALS_H_
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace mocktail::graphics {
 
@@ -34,6 +36,14 @@ std::string FormatEtc2DecodeTotals(const Etc2DecodeTotals& totals);
 // doubling of it, so a session that never destroys its device still logs
 // its totals a few times.
 bool Etc2DecodeTotalsMilestone(std::uint64_t before, std::uint64_t after);
+
+// Decoding works in one scratch pair sized to the whole submit, and a
+// loading burst can put hundreds of MiB into a single submit. Scratch up to
+// this size stays for the next submit; anything larger is given back.
+inline constexpr std::size_t kEtc2ScratchKeepBytes = 32U * 1024U * 1024U;
+
+// Frees `scratch` when it holds more than kEtc2ScratchKeepBytes.
+void ReleaseOversizedEtc2Scratch(std::vector<std::uint8_t>* scratch);
 
 }  // namespace mocktail::graphics
 
