@@ -149,12 +149,18 @@ struct MachineProfile {
   // MOCKTAIL_WAYLAND_COMMIT_GUARD does not turn the surface-commit guard
   // off (wayland_surface_commit_guard.h SurfaceCommitGuardAllowed).
   bool surface_commit_guard = true;
+  // __NV_DISABLE_EXPLICIT_SYNC turns explicit sync off in NVIDIA's driver
+  // (video_driver_policy.h NvidiaExplicitSyncDisabled).
+  bool nvidia_explicit_sync_disabled = false;
   // Whether the compositor offers wp_linux_drm_syncobj_manager_v1 (explicit
   // sync). Asked, as the game asks it, only when the answer is the last
   // thing the NVIDIA rule needs (NeedsWaylandExplicitSyncProbe); unknown
   // otherwise and when the probe fails.
   window::WaylandExplicitSync wayland_explicit_sync =
       window::WaylandExplicitSync::kUnknown;
+  // The same probe found Hyprland's own globals (WaylandGlobals::hyprland);
+  // false when it did not run or failed.
+  bool hyprland_compositor = false;
   bool flatpak = false;
 
   int physical_cores = 0;
@@ -201,17 +207,22 @@ struct MachineProfile {
   // (graphics_launch_policy.h RendersOnIntelIntegratedGraphics).
   bool RendersOnIntelIntegratedGraphics(std::string_view gpu_preference) const;
   // What the game window's video driver policy reads with `backend` and
-  // `gpu_preference` (config.yaml graphics.backend and engine.gpu values),
-  // as window.cc ResolveConfiguredVideoDriverChoice gathers it, before the
-  // user's SDL_VIDEODRIVER or display.server, which the Display page
-  // handles itself.
+  // `gpu_preference` (config.yaml graphics.backend and engine.gpu values)
+  // and `unthrottled_presentation` (graphics.vsync and frame_rate_limit
+  // ask for a swapchain that does not wait for the display,
+  // recommendations.h Presentation::kUnthrottled), as window.cc
+  // ResolveConfiguredVideoDriverChoice gathers it, before the user's
+  // SDL_VIDEODRIVER or display.server, which the Display page handles
+  // itself.
   window::VideoDriverPolicyInput VideoDriverInput(
-      std::string_view backend, std::string_view gpu_preference) const;
+      std::string_view backend, std::string_view gpu_preference,
+      bool unthrottled_presentation) const;
   // What display.server: auto picks for the game window: "wayland" or
   // "x11", or empty when this session has neither. Mirrors
   // ResolveVideoDriverChoice.
   std::string AutomaticDisplayServer(std::string_view backend,
-                                     std::string_view gpu_preference) const;
+                                     std::string_view gpu_preference,
+                                     bool unthrottled_presentation) const;
   // display.server: auto is the NVIDIA rule's to decide: direct Vulkan on
   // the NVIDIA card with Wayland and XWayland both there
   // (NvidiaDirectVulkanRuleApplies).
@@ -222,10 +233,11 @@ struct MachineProfile {
   // `wayland_chosen`, display.server: wayland asks for Wayland, so the
   // Wayland preference does not count.
   window::NvidiaWaylandBlocker NvidiaNativeWaylandBlocker(
-      bool wayland_chosen = false) const;
+      bool unthrottled_presentation, bool wayland_chosen = false) const;
   // The NVIDIA rule keeps direct Vulkan on XWayland under display.server:
   // auto.
-  bool NvidiaDirectVulkanUsesX11(std::string_view gpu_preference) const;
+  bool NvidiaDirectVulkanUsesX11(std::string_view gpu_preference,
+                                 bool unthrottled_presentation) const;
   // Vendor names, discrete first: "NVIDIA", "AMD + Intel", "" if unknown.
   std::string GpuVendorsLabel() const;
   // The vendors of the discrete cards only: "NVIDIA", "Intel Arc".

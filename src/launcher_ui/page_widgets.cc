@@ -400,6 +400,11 @@ std::string DescribeNvidiaWaylandBlocker(const MachineProfile& machine,
                       "Wayland presentation needs; drivers 555 and newer have "
                       "it."),
                     machine.gpu.nvidia_driver_version.c_str());
+    case window::NvidiaWaylandBlocker::kExplicitSyncDisabled:
+      // kNvidiaDisableExplicitSyncVariable; NVIDIA 575.51.02 changelog.
+      return _(
+          "__NV_DISABLE_EXPLICIT_SYNC turns off explicit sync in NVIDIA's "
+          "driver, which NVIDIA's Wayland presentation needs.");
     case window::NvidiaWaylandBlocker::kOtherGpu:
       return _(
           "This computer has an Intel or AMD card beside the NVIDIA one, "
@@ -418,6 +423,18 @@ std::string DescribeNvidiaWaylandBlocker(const MachineProfile& machine,
           "The desktop does not offer explicit sync "
           "(wp_linux_drm_syncobj_manager_v1), which NVIDIA's Wayland "
           "presentation needs.");
+    case window::NvidiaWaylandBlocker::kVsyncOutsideHyprland:
+      // A FIFO swapchain sat in vkAcquireNextImageKHR for most of the time
+      // a test window was minimized on GNOME, an immediate one kept
+      // presenting (sandbox-bench syncrace gnome-min.out, video_driver_
+      // policy.h); the user's 92 Hyprland sessions ran clean (commit
+      // 275e8f7). recommendations.h Presentation::kUnthrottled.
+      return _(
+          "Frames may wait for the display here (vertical sync), and then "
+          "NVIDIA's Wayland presentation can stall the game while its window "
+          "is hidden, as a test on GNOME showed; only on Hyprland has it "
+          "proven safe so far. Vertical sync Off, or Automatic with the 240 "
+          "maximum frame rate, avoids the wait.");
     case window::NvidiaWaylandBlocker::kNone:
       break;
   }

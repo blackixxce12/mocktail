@@ -277,15 +277,20 @@ GtkWidget* BuildSessionRow(LauncherContext* context) {
       std::string("\n\n") +
       // video_driver_policy.h ResolveVideoDriverChoice: the NVIDIA kernel
       // driver (not nouveau), direct Vulkan on the NVIDIA card, both servers,
-      // and NvidiaNativeWaylandBlocker; research/graphics.md 2.2.
+      // and NvidiaNativeWaylandBlocker, whose last check is Hyprland or a
+      // swapchain that does not wait for the display (graphics.vsync off, or
+      // auto with unlimited); research/graphics.md 2.2.
       _("With NVIDIA's own driver and the direct Vulkan backend, the "
         "automatic choice is native Wayland only with driver 555 or newer, "
-        "a desktop that offers explicit sync and no Intel or AMD card beside "
-        "it; otherwise it is X11 through XWayland, because without explicit "
-        "sync NVIDIA's native Wayland presentation can hang or lose the "
-        "display. Through XWayland a scaled screen gets the game rendered at "
-        "100 % and enlarged by the compositor, and native resolution has no "
-        "effect; Display › Display server can choose Wayland instead.");
+        "a desktop that offers explicit sync, no Intel or AMD card beside it "
+        "and, except on Hyprland, frames that do not wait for the display "
+        "(Graphics › Vertical sync); otherwise it is X11 through XWayland, "
+        "because without explicit sync NVIDIA's native Wayland presentation "
+        "can hang or lose the display, and with vertical sync it can stall "
+        "while the game window is hidden. Through XWayland a scaled screen "
+        "gets the game rendered at 100 % and enlarged by the compositor, and "
+        "native resolution has no effect; Display › Display server can "
+        "choose Wayland instead.");
   return DecorateRow(context, row, std::move(spec));
 }
 

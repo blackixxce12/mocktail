@@ -53,10 +53,24 @@ std::string GpuPreference(const LauncherContext& context) {
   return context.GameValue("engine.gpu", "auto");
 }
 
+// graphics.vsync and frame_rate_limit: the NVIDIA rule takes native
+// Wayland outside Hyprland only for a swapchain that does not wait for the
+// display (video_driver_policy.h unthrottled_presentation).
+Presentation GamePresentation(const LauncherContext& context) {
+  return ResolvePresentation(
+      context.GameValue("graphics.vsync", "auto"),
+      context.GameValue("graphics.frame_rate_limit", "-1"));
+}
+
+bool Unthrottled(const LauncherContext& context) {
+  return GamePresentation(context) == Presentation::kUnthrottled;
+}
+
 DisplayServerChoice ServerChoice(const LauncherContext& context,
                                  std::string_view configured) {
   return ResolveDisplayServer(context.machine(), configured, Backend(context),
-                              GpuPreference(context));
+                              GpuPreference(context),
+                              GamePresentation(context));
 }
 
 // NVIDIA's direct Vulkan would present on native Wayland, and something the
@@ -65,11 +79,11 @@ DisplayServerChoice ServerChoice(const LauncherContext& context,
 bool NvidiaWaylandRisky(const LauncherContext& context) {
   const MachineProfile& machine = context.machine();
   if (!machine.detected) return false;
-  const window::VideoDriverPolicyInput input =
-      machine.VideoDriverInput(Backend(context), GpuPreference(context));
+  const window::VideoDriverPolicyInput input = machine.VideoDriverInput(
+      Backend(context), GpuPreference(context), Unthrottled(context));
   return input.uses_direct_vulkan && input.has_nvidia_kernel_driver &&
          !input.vulkan_drivers_exclude_nvidia &&
-         machine.NvidiaNativeWaylandBlocker(true) !=
+         machine.NvidiaNativeWaylandBlocker(Unthrottled(context), true) !=
              window::NvidiaWaylandBlocker::kNone;
 }
 
@@ -120,9 +134,12 @@ class DisplayPageState {
           } else if (key == kWidthKey || key == kHeightKey) {
             chosen_ = ConfigSize();
           }
+          // The game's display server also follows engine.gpu and, for
+          // NVIDIA, graphics.vsync and frame_rate_limit (ServerChoice).
           if (key.empty() || key == kWidthKey || key == kHeightKey ||
               key == kStartModeKey || key == kHighDpiKey || key == kServerKey ||
-              key == "graphics.backend") {
+              key == "graphics.backend" || key == "engine.gpu" ||
+              key == "graphics.vsync" || key == "graphics.frame_rate_limit") {
             RebuildSizes();
           }
         }));
@@ -938,13 +955,22 @@ GtkWidget* BuildDisplayServerRow(LauncherContext* context) {
       // NvidiaNativeWaylandBlocker: without explicit sync NVIDIA's Wayland
       // presentation has hung and lost the display; SDL's own surface
       // commits broke it too (upstream issue #186), which the surface-commit
-      // guard now prevents. With engine.gpu on another card the rule does
-      // not apply (vulkan_drivers_exclude_nvidia).
+      // guard now prevents. With vertical sync a FIFO swapchain sat in
+      // vkAcquireNextImageKHR for most of the time a test window was
+      // minimized on GNOME (sandbox-bench syncrace gnome-min.out);
+      // Hyprland ran 92 sessions clean (commit 275e8f7). Off, or auto with
+      // unlimited, is Presentation::kUnthrottled.
+      // With engine.gpu on another card the rule does not apply
+      // (vulkan_drivers_exclude_nvidia).
       _("• Automatic: Wayland when the desktop offers it. NVIDIA's driver "
         "with the Vulkan backend gets it only with driver 555 or newer, a "
-        "desktop that offers explicit sync and no Intel or AMD card beside "
-        "it; otherwise XWayland, because without explicit sync NVIDIA's "
-        "native Wayland presentation has hung and lost the display.") +
+        "desktop that offers explicit sync, no Intel or AMD card beside it "
+        "and, on desktops other than Hyprland, frames that do not wait for "
+        "the display (Vertical sync Off, or Automatic with the 240 maximum "
+        "frame rate); otherwise XWayland. Without explicit sync NVIDIA's "
+        "native Wayland presentation has hung and lost the display, and with "
+        "vertical sync it can stall the game while its window is hidden, as "
+        "a test on GNOME showed.") +
       "\n\n" +
       // research/graphics.md 3.3: pointer capture problems through XWayland
       // (upstream issue #135).
@@ -980,17 +1006,25 @@ GtkWidget* BuildDisplayServerRow(LauncherContext* context) {
       text += " ";
       text += _("NVIDIA's kernel driver is loaded.");
     }
-    const window::VideoDriverPolicyInput input =
-        machine.VideoDriverInput(Backend(ctx), GpuPreference(ctx));
+    const window::VideoDriverPolicyInput input = machine.VideoDriverInput(
+        Backend(ctx), GpuPreference(ctx), Unthrottled(ctx));
     if (machine.NvidiaRuleApplies(Backend(ctx), GpuPreference(ctx))) {
       const window::NvidiaWaylandBlocker blocker =
-          machine.NvidiaNativeWaylandBlocker();
+          machine.NvidiaNativeWaylandBlocker(Unthrottled(ctx));
       text += "\n\n";
       if (blocker == window::NvidiaWaylandBlocker::kNone) {
-        text += Format(_("With NVIDIA driver %s and explicit sync offered by "
-                         "the desktop, Automatic runs NVIDIA's Vulkan on "
-                         "native Wayland."),
-                       machine.gpu.nvidia_driver_version.c_str());
+        // NvidiaNativeWaylandBlocker: Hyprland, or frames that do not wait
+        // for the display.
+        text += machine.hyprland_compositor
+                    ? Format(_("With NVIDIA driver %s and explicit sync "
+                               "offered by Hyprland, Automatic runs NVIDIA's "
+                               "Vulkan on native Wayland."),
+                             machine.gpu.nvidia_driver_version.c_str())
+                    : Format(_("With NVIDIA driver %s, explicit sync offered "
+                               "by the desktop and frames that do not wait "
+                               "for the display, Automatic runs NVIDIA's "
+                               "Vulkan on native Wayland."),
+                             machine.gpu.nvidia_driver_version.c_str());
       } else {
         text += DescribeNvidiaWaylandBlocker(machine, blocker);
         text += " ";
@@ -1055,7 +1089,8 @@ GtkWidget* BuildDisplayServerRow(LauncherContext* context) {
         NvidiaWaylandRisky(ctx)) {
       const MachineProfile& machine = ctx.machine();
       return DescribeNvidiaWaylandBlocker(
-                 machine, machine.NvidiaNativeWaylandBlocker(true)) +
+                 machine, machine.NvidiaNativeWaylandBlocker(
+                              Unthrottled(ctx), true)) +
              " " + _("If the game freezes or closes, go back to Automatic.");
     }
     return std::string();

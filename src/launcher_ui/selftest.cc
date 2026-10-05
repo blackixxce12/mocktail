@@ -15,6 +15,7 @@
 #include "launcher_ui/bindings.h"
 #include "launcher_ui/i18n.h"
 #include "launcher_ui/page_dialogs.h"
+#include "launcher_ui/recommendations.h"
 #include "runtime/launcher_ui_launch.h"
 #include "runtime/runtime_config_bootstrap.h"
 #include "window/video_driver_policy.h"
@@ -342,6 +343,11 @@ guint Selftest::RecordWindow() {
   const std::string backend =
       context_->GameValue("graphics.backend", "direct-vulkan");
   const std::string gpu_preference = context_->GameValue("engine.gpu", "auto");
+  const bool unthrottled =
+      ResolvePresentation(
+          context_->GameValue("graphics.vsync", "auto"),
+          context_->GameValue("graphics.frame_rate_limit", "-1")) ==
+      Presentation::kUnthrottled;
   const char* explicit_sync = "unknown";
   if (machine.wayland_explicit_sync == window::WaylandExplicitSync::kOffered) {
     explicit_sync = "offered";
@@ -355,11 +361,14 @@ guint Selftest::RecordWindow() {
       {"nvidia_kernel_driver", machine.gpu.nvidia_kernel_driver},
       {"nvidia_driver_version", machine.gpu.nvidia_driver_version},
       {"explicit_sync", explicit_sync},
+      {"hyprland_compositor", machine.hyprland_compositor},
+      {"nvidia_explicit_sync_disabled", machine.nvidia_explicit_sync_disabled},
+      {"unthrottled_presentation", unthrottled},
       {"nvidia_rule", machine.NvidiaRuleApplies(backend, gpu_preference)},
       {"nvidia_wayland_blocker",
-       static_cast<int>(machine.NvidiaNativeWaylandBlocker())},
+       static_cast<int>(machine.NvidiaNativeWaylandBlocker(unthrottled))},
       {"automatic_display_server",
-       machine.AutomaticDisplayServer(backend, gpu_preference)},
+       machine.AutomaticDisplayServer(backend, gpu_preference, unthrottled)},
       {"desktop", machine.desktop},
       {"wayland", machine.wayland_available},
       {"x11", machine.x11_available},

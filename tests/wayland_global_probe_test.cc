@@ -173,6 +173,37 @@ TEST_F(WaylandGlobalProbeTest, ReportsACompositorWithoutExplicitSync) {
   EXPECT_FALSE(globals.pointer_warp);
 }
 
+TEST_F(WaylandGlobalProbeTest, TellsHyprlandByItsOwnGlobals) {
+  // As Hyprland lists them (sandbox-bench/tools/globals/hyprland.txt).
+  {
+    const auto [client, server] = SocketPair();
+    FakeCompositor compositor(
+        server,
+        {"wl_compositor", "hyprland_lock_notifier_v1",
+         "hyprland_surface_manager_v1", "xdg_wm_base"},
+        FakeCompositor::Behavior::kAnswer);
+    const WaylandGlobals globals =
+        ProbeWaylandGlobalsOnSocket(client, milliseconds(2000));
+    EXPECT_TRUE(globals.listed);
+    EXPECT_TRUE(globals.hyprland);
+    EXPECT_FALSE(globals.drm_syncobj);
+  }
+
+  // KWin and GNOME offer explicit sync but nothing of Hyprland's; a name
+  // that only contains "hyprland" does not count either.
+  const auto [client, server] = SocketPair();
+  FakeCompositor compositor(
+      server,
+      {"wl_compositor", "wp_linux_drm_syncobj_manager_v1",
+       "org_kde_plasma_shell", "zwp_hyprland_like_v1", "hyprland"},
+      FakeCompositor::Behavior::kAnswer);
+  const WaylandGlobals globals =
+      ProbeWaylandGlobalsOnSocket(client, milliseconds(2000));
+  EXPECT_TRUE(globals.listed);
+  EXPECT_TRUE(globals.drm_syncobj);
+  EXPECT_FALSE(globals.hyprland);
+}
+
 TEST_F(WaylandGlobalProbeTest, GivesUpOnASilentCompositorAtTheTimeout) {
   const auto [client, server] = SocketPair();
   FakeCompositor compositor(server, {}, FakeCompositor::Behavior::kSilent);

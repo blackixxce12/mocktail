@@ -98,10 +98,14 @@ void OnGlobal(void* data, void* /*registry*/, std::uint32_t /*name*/,
   if (interface == nullptr) {
     return;
   }
+  constexpr char kHyprlandPrefix[] = "hyprland_";
   if (std::strcmp(interface, "wp_linux_drm_syncobj_manager_v1") == 0) {
     state->globals.drm_syncobj = true;
   } else if (std::strcmp(interface, "wp_pointer_warp_v1") == 0) {
     state->globals.pointer_warp = true;
+  } else if (std::strncmp(interface, kHyprlandPrefix,
+                          sizeof(kHyprlandPrefix) - 1) == 0) {
+    state->globals.hyprland = true;
   }
 }
 

@@ -321,6 +321,9 @@ CanaryResult RunReadinessCanary(const CanaryOptions& options) {
            "MESA_LOADER_DRIVER_OVERRIDE",
            "DRI_PRIME",
            "__NV_PRIME_RENDER_OFFLOAD",
+           // NVIDIA's driver reads it, and so does the window's
+           // display-server choice (video_driver_policy.h).
+           "__NV_DISABLE_EXPLICIT_SYNC",
            "__VK_LAYER_NV_optimus",
            "__GLX_VENDOR_LIBRARY_NAME",
            // engine.nvidia_shader_mt, published by ApplyGraphicsLaunchPolicy,

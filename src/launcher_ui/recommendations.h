@@ -213,11 +213,14 @@ struct DisplayServerChoice {
 };
 
 // `configured`, `backend` and `gpu_preference` are the config.yaml values
-// of display.server, graphics.backend and engine.gpu.
+// of display.server, graphics.backend and engine.gpu; `presentation` is
+// ResolvePresentation of graphics.vsync and frame_rate_limit, which the
+// NVIDIA rule reads too.
 DisplayServerChoice ResolveDisplayServer(const MachineProfile& machine,
                                          std::string_view configured,
                                          std::string_view backend,
-                                         std::string_view gpu_preference);
+                                         std::string_view gpu_preference,
+                                         Presentation presentation);
 
 // Mocktail's suggestion when the memory limit is switched on: 3/16 of the
 // RAM (6 GiB of 32, as config/mocktail.example.yaml suggests), at least

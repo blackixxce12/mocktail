@@ -455,13 +455,17 @@ TEST_F(MachineProfileTest, DetectsAnNvidiaWaylandLaptop) {
   // without an answer from the compositor it keeps XWayland.
   EXPECT_EQ(profile.wayland_explicit_sync,
             window::WaylandExplicitSync::kUnknown);
-  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(),
+  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(false),
             window::NvidiaWaylandBlocker::kExplicitSyncUnknown);
-  EXPECT_TRUE(profile.NvidiaDirectVulkanUsesX11("auto"));
-  EXPECT_EQ(profile.AutomaticDisplayServer("direct-vulkan", "auto"), "x11");
-  EXPECT_EQ(profile.AutomaticDisplayServer("vulkan", "auto"), "x11");
-  EXPECT_EQ(profile.AutomaticDisplayServer("opengl", "auto"), "wayland");
-  EXPECT_EQ(profile.AutomaticDisplayServer("angle-vulkan", "auto"), "wayland");
+  EXPECT_TRUE(profile.NvidiaDirectVulkanUsesX11("auto", false));
+  EXPECT_TRUE(profile.NvidiaDirectVulkanUsesX11("auto", true));
+  EXPECT_EQ(profile.AutomaticDisplayServer("direct-vulkan", "auto", false),
+            "x11");
+  EXPECT_EQ(profile.AutomaticDisplayServer("vulkan", "auto", false), "x11");
+  EXPECT_EQ(profile.AutomaticDisplayServer("opengl", "auto", false),
+            "wayland");
+  EXPECT_EQ(profile.AutomaticDisplayServer("angle-vulkan", "auto", false),
+            "wayland");
   EXPECT_EQ(RecommendGraphicsBackend(profile).value, "direct-vulkan");
   EXPECT_EQ(RecommendGraphicsBackend(profile).reason,
             BackendRecommendationReason::kVulkanDriver);
@@ -484,8 +488,9 @@ TEST_F(MachineProfileTest, DetectsAMachineWithoutVulkan) {
   EXPECT_FALSE(profile.has_vulkan_driver());
   EXPECT_FALSE(profile.angle.has_value());
   EXPECT_FALSE(profile.gamemode_library);
-  EXPECT_FALSE(profile.NvidiaDirectVulkanUsesX11("auto"));
-  EXPECT_EQ(profile.AutomaticDisplayServer("direct-vulkan", "auto"), "x11");
+  EXPECT_FALSE(profile.NvidiaDirectVulkanUsesX11("auto", false));
+  EXPECT_EQ(profile.AutomaticDisplayServer("direct-vulkan", "auto", false),
+            "x11");
   EXPECT_EQ(RecommendGraphicsBackend(profile).value, "opengl");
   EXPECT_EQ(RecommendGraphicsBackend(profile).reason,
             BackendRecommendationReason::kNoVulkanDriver);
@@ -493,15 +498,23 @@ TEST_F(MachineProfileTest, DetectsAMachineWithoutVulkan) {
             BackendRecommendationReason::kUnknown);
 }
 
+// A Vulkan driver manifest in the loader's format naming `library`.
+std::string VulkanManifest(std::string_view library) {
+  return "{\"file_format_version\": \"1.0.1\", \"ICD\": {\"library_path\": \"" +
+         std::string(library) + "\", \"api_version\": \"1.4.328\"}}\n";
+}
+
 // window.cc ResolveNvidiaWaylandEvidence: native Wayland for NVIDIA's
-// direct Vulkan with driver 555 or newer, the commit guard, NVIDIA alone,
-// and a compositor that offers explicit sync; XWayland otherwise.
+// direct Vulkan with driver 555 or newer, the commit guard, NVIDIA alone, a
+// compositor that offers explicit sync, and Hyprland or frames that do not
+// wait for the display; XWayland otherwise.
 TEST_F(MachineProfileTest, FollowsTheNvidiaWaylandRule) {
   AddGpu(1, "0x10de");
   root_.Write("proc/driver/nvidia/version",
               "NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  "
               "615.71.09  Release Build\nGCC version:  gcc 16.1.1\n");
-  root_.Write("usr/share/vulkan/icd.d/nvidia_icd.json", "{}");
+  root_.Write("usr/share/vulkan/icd.d/nvidia_icd.json",
+              VulkanManifest("libGLX_nvidia.so.0"));
   std::unordered_map<std::string, std::string> variables = {
       {"WAYLAND_DISPLAY", "wayland-1"},
       {"XDG_RUNTIME_DIR", "/run/user/1000"},
@@ -517,43 +530,96 @@ TEST_F(MachineProfileTest, FollowsTheNvidiaWaylandRule) {
     return globals;
   };
 
+  // KWin or GNOME: explicit sync, but not Hyprland. Native Wayland only
+  // for frames that do not wait for the display.
   MachineProfile profile =
       DetectMachineProfile(MapEnvironment(variables), probe);
   EXPECT_EQ(probes, 1);
   EXPECT_EQ(profile.gpu.nvidia_driver_version, "615.71.09");
   EXPECT_EQ(profile.wayland_explicit_sync,
             window::WaylandExplicitSync::kOffered);
+  EXPECT_FALSE(profile.hyprland_compositor);
   EXPECT_TRUE(profile.NvidiaRuleApplies("direct-vulkan", "auto"));
-  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(),
+  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(true),
             window::NvidiaWaylandBlocker::kNone);
-  EXPECT_FALSE(profile.NvidiaDirectVulkanUsesX11("auto"));
-  EXPECT_EQ(profile.AutomaticDisplayServer("direct-vulkan", "auto"), "wayland");
-  DisplayServerChoice choice =
-      ResolveDisplayServer(profile, "auto", "direct-vulkan", "auto");
+  EXPECT_FALSE(profile.NvidiaDirectVulkanUsesX11("auto", true));
+  EXPECT_EQ(profile.AutomaticDisplayServer("direct-vulkan", "auto", true),
+            "wayland");
+  DisplayServerChoice choice = ResolveDisplayServer(
+      profile, "auto", "direct-vulkan", "auto", Presentation::kUnthrottled);
   EXPECT_EQ(choice.server, "wayland");
+  EXPECT_EQ(choice.reason, DisplayServerReason::kNvidiaVulkanWayland);
+  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(false),
+            window::NvidiaWaylandBlocker::kVsyncOutsideHyprland);
+  EXPECT_TRUE(profile.NvidiaDirectVulkanUsesX11("auto", false));
+  for (const Presentation presentation :
+       {Presentation::kSynchronized, Presentation::kDriverDefault}) {
+    choice = ResolveDisplayServer(profile, "auto", "direct-vulkan", "auto",
+                                  presentation);
+    EXPECT_EQ(choice.server, "x11");
+    EXPECT_EQ(choice.reason, DisplayServerReason::kNvidiaVulkanX11);
+  }
+  // display.server: wayland still gets Wayland, with the risk named.
+  choice = ResolveDisplayServer(profile, "wayland", "direct-vulkan", "auto",
+                                Presentation::kSynchronized);
+  EXPECT_EQ(choice.server, "wayland");
+  EXPECT_EQ(choice.reason, DisplayServerReason::kChosen);
+  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(false, true),
+            window::NvidiaWaylandBlocker::kVsyncOutsideHyprland);
+
+  // Hyprland: native Wayland whatever the presentation.
+  globals.hyprland = true;
+  profile = DetectMachineProfile(MapEnvironment(variables), probe);
+  EXPECT_TRUE(profile.hyprland_compositor);
+  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(false),
+            window::NvidiaWaylandBlocker::kNone);
+  EXPECT_EQ(profile.AutomaticDisplayServer("direct-vulkan", "auto", false),
+            "wayland");
+  choice = ResolveDisplayServer(profile, "auto", "direct-vulkan", "auto",
+                                Presentation::kSynchronized);
   EXPECT_EQ(choice.reason, DisplayServerReason::kNvidiaVulkanWayland);
 
   // A compositor without explicit sync, or none that answers.
   globals.drm_syncobj = false;
   profile = DetectMachineProfile(MapEnvironment(variables), probe);
-  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(),
+  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(true),
             window::NvidiaWaylandBlocker::kCompositorWithoutExplicitSync);
-  EXPECT_EQ(profile.AutomaticDisplayServer("direct-vulkan", "auto"), "x11");
-  choice = ResolveDisplayServer(profile, "auto", "direct-vulkan", "auto");
+  EXPECT_EQ(profile.AutomaticDisplayServer("direct-vulkan", "auto", true),
+            "x11");
+  choice = ResolveDisplayServer(profile, "auto", "direct-vulkan", "auto",
+                                Presentation::kUnthrottled);
   EXPECT_EQ(choice.reason, DisplayServerReason::kNvidiaVulkanX11);
   globals.listed = false;
   profile = DetectMachineProfile(MapEnvironment(variables), probe);
-  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(),
+  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(true),
             window::NvidiaWaylandBlocker::kExplicitSyncUnknown);
+  EXPECT_FALSE(profile.hyprland_compositor);
   globals.listed = true;
   globals.drm_syncobj = true;
+  globals.hyprland = false;
+
+  // __NV_DISABLE_EXPLICIT_SYNC: XWayland, without asking the compositor.
+  probes = 0;
+  variables["__NV_DISABLE_EXPLICIT_SYNC"] = "1";
+  profile = DetectMachineProfile(MapEnvironment(variables), probe);
+  EXPECT_EQ(probes, 0);
+  EXPECT_TRUE(profile.nvidia_explicit_sync_disabled);
+  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(true),
+            window::NvidiaWaylandBlocker::kExplicitSyncDisabled);
+  EXPECT_EQ(profile.AutomaticDisplayServer("direct-vulkan", "auto", true),
+            "x11");
+  variables["__NV_DISABLE_EXPLICIT_SYNC"] = "0";
+  profile = DetectMachineProfile(MapEnvironment(variables), probe);
+  EXPECT_FALSE(profile.nvidia_explicit_sync_disabled);
+  EXPECT_EQ(probes, 1);
+  variables.erase("__NV_DISABLE_EXPLICIT_SYNC");
 
   // The commit guard turned off: XWayland, without asking the compositor.
   probes = 0;
   variables["MOCKTAIL_WAYLAND_COMMIT_GUARD"] = "off";
   profile = DetectMachineProfile(MapEnvironment(variables), probe);
   EXPECT_EQ(probes, 0);
-  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(),
+  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(true),
             window::NvidiaWaylandBlocker::kCommitGuardOff);
   variables.erase("MOCKTAIL_WAYLAND_COMMIT_GUARD");
 
@@ -561,9 +627,9 @@ TEST_F(MachineProfileTest, FollowsTheNvidiaWaylandRule) {
   // wayland would still have everything it needs.
   variables["MOCKTAIL_PREFER_WAYLAND"] = "0";
   profile = DetectMachineProfile(MapEnvironment(variables), probe);
-  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(),
-            window::NvidiaWaylandBlocker::kWaylandNotPreferred);
   EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(true),
+            window::NvidiaWaylandBlocker::kWaylandNotPreferred);
+  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(true, true),
             window::NvidiaWaylandBlocker::kNone);
   variables.erase("MOCKTAIL_PREFER_WAYLAND");
 
@@ -574,23 +640,36 @@ TEST_F(MachineProfileTest, FollowsTheNvidiaWaylandRule) {
   profile = DetectMachineProfile(MapEnvironment(variables), probe);
   EXPECT_EQ(probes, 0);
   EXPECT_EQ(profile.gpu.nvidia_driver_version, "550.144.03");
-  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(),
+  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(true),
             window::NvidiaWaylandBlocker::kDriverWithoutExplicitSync);
   root_.Write("sys/module/nvidia/version", "560.35.03\n");
 
   // Intel graphics beside the NVIDIA card: XWayland, unless engine.gpu puts
-  // the game on the Intel card, where the NVIDIA rule does not apply.
+  // the game on the Intel card, whose manifest names ANV: the NVIDIA rule
+  // does not apply there.
   AddGpu(0, "0x8086");
+  root_.Write("usr/share/vulkan/icd.d/intel_icd.x86_64.json",
+              VulkanManifest("libvulkan_intel.so"));
+  profile = DetectMachineProfile(MapEnvironment(variables), probe);
+  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(true),
+            window::NvidiaWaylandBlocker::kOtherGpu);
+  EXPECT_EQ(profile.AutomaticDisplayServer("direct-vulkan", "auto", true),
+            "x11");
+  EXPECT_FALSE(profile.NvidiaRuleApplies("direct-vulkan", "integrated"));
+  EXPECT_EQ(
+      profile.AutomaticDisplayServer("direct-vulkan", "integrated", false),
+      "wayland");
+  choice = ResolveDisplayServer(profile, "", "direct-vulkan", "integrated",
+                                Presentation::kSynchronized);
+  EXPECT_EQ(choice.reason, DisplayServerReason::kWaylandSession);
+
+  // A manifest that does not say which driver it loads may be NVIDIA's.
   root_.Write("usr/share/vulkan/icd.d/intel_icd.x86_64.json", "{}");
   profile = DetectMachineProfile(MapEnvironment(variables), probe);
-  EXPECT_EQ(profile.NvidiaNativeWaylandBlocker(),
-            window::NvidiaWaylandBlocker::kOtherGpu);
-  EXPECT_EQ(profile.AutomaticDisplayServer("direct-vulkan", "auto"), "x11");
-  EXPECT_FALSE(profile.NvidiaRuleApplies("direct-vulkan", "integrated"));
-  EXPECT_EQ(profile.AutomaticDisplayServer("direct-vulkan", "integrated"),
-            "wayland");
-  choice = ResolveDisplayServer(profile, "", "direct-vulkan", "integrated");
-  EXPECT_EQ(choice.reason, DisplayServerReason::kWaylandSession);
+  EXPECT_TRUE(profile.NvidiaRuleApplies("direct-vulkan", "integrated"));
+  EXPECT_EQ(
+      profile.AutomaticDisplayServer("direct-vulkan", "integrated", true),
+      "x11");
 }
 
 TEST_F(MachineProfileTest, TellsIntegratedGraphicsByTheirPciPlace) {
@@ -1061,45 +1140,86 @@ TEST(GamePagesTest, ExplainsTheDisplayServer) {
   machine.gpu.nvidia_kernel_driver = true;
   // Nothing is known about the driver: the NVIDIA rule keeps XWayland.
   DisplayServerChoice choice =
-      ResolveDisplayServer(machine, "auto", "direct-vulkan", "auto");
+      ResolveDisplayServer(machine, "auto", "direct-vulkan", "auto",
+                           Presentation::kUnthrottled);
   EXPECT_EQ(choice.server, "x11");
   EXPECT_EQ(choice.reason, DisplayServerReason::kNvidiaVulkanX11);
-  choice = ResolveDisplayServer(machine, "auto", "opengl", "auto");
+  choice = ResolveDisplayServer(machine, "auto", "opengl", "auto",
+                                Presentation::kDriverDefault);
   EXPECT_EQ(choice.server, "wayland");
   EXPECT_EQ(choice.reason, DisplayServerReason::kWaylandSession);
-  choice = ResolveDisplayServer(machine, "wayland", "direct-vulkan", "");
+  choice = ResolveDisplayServer(machine, "wayland", "direct-vulkan", "",
+                                Presentation::kDriverDefault);
   EXPECT_EQ(choice.server, "wayland");
   EXPECT_EQ(choice.reason, DisplayServerReason::kChosen);
 
-  // Driver 555 or newer on the only card, and explicit sync: Wayland.
+  // Driver 555 or newer on the only card and explicit sync: Wayland for
+  // frames that do not wait for the display, or on Hyprland.
   runtime::HostGpu card;
   card.vendor = kNvidiaPciVendor;
   machine.gpu.cards = {card};
   machine.gpu.nvidia_driver_version = "615.71.09";
   machine.wayland_explicit_sync = window::WaylandExplicitSync::kOffered;
-  choice = ResolveDisplayServer(machine, "", "direct-vulkan", "");
+  choice = ResolveDisplayServer(machine, "", "direct-vulkan", "",
+                                Presentation::kUnthrottled);
   EXPECT_EQ(choice.server, "wayland");
   EXPECT_EQ(choice.reason, DisplayServerReason::kNvidiaVulkanWayland);
-  // Drivers the user pinned that leave NVIDIA out: the rule does not apply.
+  choice = ResolveDisplayServer(machine, "", "direct-vulkan", "",
+                                Presentation::kSynchronized);
+  EXPECT_EQ(choice.server, "x11");
+  EXPECT_EQ(choice.reason, DisplayServerReason::kNvidiaVulkanX11);
+  machine.hyprland_compositor = true;
+  choice = ResolveDisplayServer(machine, "", "direct-vulkan", "",
+                                Presentation::kSynchronized);
+  EXPECT_EQ(choice.server, "wayland");
+  EXPECT_EQ(choice.reason, DisplayServerReason::kNvidiaVulkanWayland);
+  machine.nvidia_explicit_sync_disabled = true;
+  choice = ResolveDisplayServer(machine, "", "direct-vulkan", "",
+                                Presentation::kUnthrottled);
+  EXPECT_EQ(choice.reason, DisplayServerReason::kNvidiaVulkanX11);
+  machine.nvidia_explicit_sync_disabled = false;
+
+  // Drivers the user pinned that leave NVIDIA out, as their manifest says:
+  // the rule does not apply.
+  TemporaryDirectory manifests;
   machine.wayland_explicit_sync = window::WaylandExplicitSync::kAbsent;
   machine.vulkan_source = VulkanDriverSource::kUser;
   machine.user_vulkan_drivers =
-      "/usr/share/vulkan/icd.d/radeon_icd.x86_64.json";
-  choice = ResolveDisplayServer(machine, "auto", "direct-vulkan", "auto");
+      manifests.Write("radeon_icd.x86_64.json",
+                      VulkanManifest("libvulkan_radeon.so"))
+          .string();
+  choice = ResolveDisplayServer(machine, "auto", "direct-vulkan", "auto",
+                                Presentation::kSynchronized);
   EXPECT_EQ(choice.server, "wayland");
   EXPECT_EQ(choice.reason, DisplayServerReason::kWaylandSession);
+  // A manifest that names NVIDIA's driver under another name does not.
+  machine.user_vulkan_drivers =
+      manifests.Write("radeon_icd.json", VulkanManifest("libGLX_nvidia.so.0"))
+          .string();
+  choice = ResolveDisplayServer(machine, "auto", "direct-vulkan", "auto",
+                                Presentation::kSynchronized);
+  EXPECT_EQ(choice.server, "x11");
+  EXPECT_EQ(choice.reason, DisplayServerReason::kNvidiaVulkanX11);
 
   // A chosen server the session lacks falls back to automatic.
+  machine.user_vulkan_drivers =
+      manifests.Write("radeon_icd.x86_64.json",
+                      VulkanManifest("libvulkan_radeon.so"))
+          .string();
   machine.x11_available = false;
-  choice = ResolveDisplayServer(machine, "x11", "direct-vulkan", "auto");
+  choice = ResolveDisplayServer(machine, "x11", "direct-vulkan", "auto",
+                                Presentation::kSynchronized);
   EXPECT_EQ(choice.server, "wayland");
   EXPECT_EQ(choice.reason, DisplayServerReason::kChosenUnavailable);
   machine.wayland_available = false;
   machine.x11_available = true;
-  choice = ResolveDisplayServer(machine, "", "opengl", "auto");
+  choice = ResolveDisplayServer(machine, "", "opengl", "auto",
+                                Presentation::kSynchronized);
   EXPECT_EQ(choice.server, "x11");
   EXPECT_EQ(choice.reason, DisplayServerReason::kX11Only);
-  EXPECT_EQ(ResolveDisplayServer(MachineProfile{}, "auto", "", "").reason,
+  EXPECT_EQ(ResolveDisplayServer(MachineProfile{}, "auto", "", "",
+                                 Presentation::kDriverDefault)
+                .reason,
             DisplayServerReason::kUnknown);
 }
 

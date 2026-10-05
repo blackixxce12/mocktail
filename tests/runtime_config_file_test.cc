@@ -182,9 +182,10 @@ TEST(RuntimeConfigBootstrapTest,
             "high_dpi: false",
            "# or x11. auto prefers Wayland. NVIDIA with direct Vulkan gets it "
            "only with\n  # driver 555 or newer, a desktop that offers explicit "
-           "sync and no second\n  # GPU, and X11 (XWayland) otherwise. "
-           "SDL_VIDEODRIVER, when set, still takes\n  # precedence.\n  "
-           "server: auto",
+           "sync, no second GPU\n  # and, outside Hyprland, graphics.vsync "
+           "off (or auto with frame_rate_limit\n  # unlimited), and X11 "
+           "(XWayland) otherwise. SDL_VIDEODRIVER, when set,\n  # still takes "
+           "precedence.\n  server: auto",
            "# String (default: remember): window state at start: remember (the "
            "mode the\n  # last session ended in), windowed, maximized, or "
            "fullscreen.\n  start_mode: remember",

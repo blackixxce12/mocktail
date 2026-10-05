@@ -15,6 +15,12 @@ struct WaylandGlobals {
   bool drm_syncobj = false;
   // wp_pointer_warp_v1: without it SDL commits the surface to warp.
   bool pointer_warp = false;
+  // A global from Hyprland's own protocols (hyprland_*, hyprland-protocols):
+  // the compositor is Hyprland. Of the eight compositors in the sandbox
+  // bench (Hyprland, KWin, GNOME, niri, cosmic-comp, Wayfire, river, labwc)
+  // only Hyprland lists one; it lists eight, hyprland_surface_manager_v1
+  // among them (sandbox-bench/tools/globals, 2026-10-04).
+  bool hyprland = false;
 };
 
 // libwayland-client.so.0 loaded with everything the probe needs.

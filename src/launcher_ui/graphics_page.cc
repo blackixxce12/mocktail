@@ -160,16 +160,21 @@ GtkWidget* BuildGraphicsBackendRow(LauncherContext* context) {
           _("No ANGLE libraries were found, so “ANGLE on Vulkan” is not "
             "available.");
     }
-    if (machine.NvidiaDirectVulkanUsesX11(gpu_preference)) {
-      // video_driver_policy.h ResolveVideoDriverChoice and
-      // NvidiaNativeWaylandBlocker.
+    // video_driver_policy.h ResolveVideoDriverChoice and
+    // NvidiaNativeWaylandBlocker, which read graphics.vsync and
+    // frame_rate_limit too.
+    const bool unthrottled =
+        ResolvePresentation(ctx.GameValue("graphics.vsync", "auto"),
+                            ctx.GameValue("graphics.frame_rate_limit", "-1")) ==
+        Presentation::kUnthrottled;
+    if (machine.NvidiaDirectVulkanUsesX11(gpu_preference, unthrottled)) {
       text += "\n\n";
       text +=
           _("With Vulkan on NVIDIA, the automatic display server runs the "
             "game through XWayland here.");
       text += " ";
       text += DescribeNvidiaWaylandBlocker(
-          machine, machine.NvidiaNativeWaylandBlocker());
+          machine, machine.NvidiaNativeWaylandBlocker(unthrottled));
       text += " ";
       text += _("Display › Display server can change that.");
     }
@@ -965,7 +970,15 @@ GtkWidget* BuildVsyncRow(LauncherContext* context) {
       _("On Wayland a window only tears when the compositor allows it; on "
         "Hyprland that takes general:allow_tearing plus an “immediate” window "
         "rule for the game. Otherwise Off still shows whole frames, just "
-        "with less waiting.");
+        "with less waiting.") +
+      "\n\n" +
+      // video_driver_policy.h NvidiaNativeWaylandBlocker
+      // kVsyncOutsideHyprland: unthrottled_presentation is Off, or
+      // Automatic with unlimited (Presentation::kUnthrottled).
+      _("With NVIDIA's driver and the Vulkan backend on a Wayland desktop "
+        "other than Hyprland, the automatic display server picks native "
+        "Wayland only when frames do not wait for the display: Off, or "
+        "Automatic with the 240 maximum frame rate.");
   const auto describe = [](const LauncherContext& ctx,
                            const std::string& value) -> std::string {
     if (value == "on") {

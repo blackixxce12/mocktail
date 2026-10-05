@@ -522,12 +522,18 @@ void ResolveNvidiaWaylandEvidence(ConfiguredVideoDriver* resolved) {
     }
   }
   input.surface_commit_guard = SurfaceCommitGuardAllowed();
+  input.nvidia_explicit_sync_disabled = NvidiaExplicitSyncDisabled(
+      std::getenv(kNvidiaDisableExplicitSyncVariable));
+  // graphics.vsync and frame_rate_limit, exported before the game window
+  // opens; the Vulkan adapter picks its present mode from the same policy.
+  input.unthrottled_presentation = UnthrottledPresentationRequested();
   if (NeedsWaylandExplicitSyncProbe(input)) {
     const WaylandGlobals globals = ProbeWaylandGlobals(kWaylandProbeTimeout);
     input.wayland_explicit_sync =
         !globals.listed      ? WaylandExplicitSync::kUnknown
         : globals.drm_syncobj ? WaylandExplicitSync::kOffered
                               : WaylandExplicitSync::kAbsent;
+    input.hyprland_compositor = globals.listed && globals.hyprland;
   }
 }
 
@@ -565,54 +571,30 @@ void LogNvidiaVideoDriverChoice(const ConfiguredVideoDriver& resolved) {
                             ? "(unknown)"
                             : resolved.nvidia_driver_version.c_str();
   if (resolved.choice == VideoDriverChoice::kNvidiaDirectVulkanWayland) {
+    // NvidiaNativeWaylandBlocker: explicit sync, and Hyprland or a
+    // swapchain that does not wait for the display.
     fprintf(stderr,
             "  [window] NVIDIA %s direct Vulkan on Wayland: the compositor "
-            "offers explicit sync (wp_linux_drm_syncobj_manager_v1); using the "
-            "native Wayland WSI with the surface-commit guard; set "
+            "offers explicit sync (wp_linux_drm_syncobj_manager_v1) and %s; "
+            "using the native Wayland WSI with the surface-commit guard; set "
             "display.server: x11 or SDL_VIDEODRIVER=x11 to override\n",
-            version);
+            version,
+            resolved.input.hyprland_compositor
+                ? "is Hyprland"
+                : "the swapchain does not wait for the display "
+                  "(vertical sync off: immediate, else mailbox)");
     return;
   }
   if (resolved.choice != VideoDriverChoice::kNvidiaDirectVulkanX11) {
     return;
   }
-  std::string reason;
-  switch (NvidiaNativeWaylandBlocker(resolved.input)) {
-    case NvidiaWaylandBlocker::kWaylandNotPreferred:
-      reason = "MOCKTAIL_PREFER_WAYLAND=0";
-      break;
-    case NvidiaWaylandBlocker::kCommitGuardOff:
-      reason = "the surface-commit guard is off "
-               "(MOCKTAIL_WAYLAND_COMMIT_GUARD=0)";
-      break;
-    case NvidiaWaylandBlocker::kDriverVersionUnknown:
-      reason = "NVIDIA driver version unknown";
-      break;
-    case NvidiaWaylandBlocker::kDriverWithoutExplicitSync:
-      reason = std::string("driver ") + version + " has no explicit sync; " +
-               std::to_string(kNvidiaExplicitSyncDriverMajor) +
-               " or newer needed";
-      break;
-    case NvidiaWaylandBlocker::kOtherGpu:
-      reason = "NVIDIA with another GPU";
-      break;
-    case NvidiaWaylandBlocker::kNoNvidiaGpuListed:
-      reason = "no NVIDIA card under /sys/class/drm";
-      break;
-    case NvidiaWaylandBlocker::kExplicitSyncUnknown:
-      reason = "the Wayland registry probe failed";
-      break;
-    case NvidiaWaylandBlocker::kCompositorWithoutExplicitSync:
-      reason = "the compositor has no wp_linux_drm_syncobj_manager_v1";
-      break;
-    case NvidiaWaylandBlocker::kNone:
-      break;
-  }
   fprintf(stderr,
           "  [window] NVIDIA direct Vulkan on Wayland session: using "
           "X11/XWayland WSI (%s); set display.server: wayland or "
           "SDL_VIDEODRIVER=wayland to override\n",
-          reason.c_str());
+          NvidiaWaylandBlockerReason(NvidiaNativeWaylandBlocker(resolved.input),
+                                     resolved.nvidia_driver_version)
+              .c_str());
 }
 
 std::vector<std::string_view> AvailableSdlVideoDrivers() {

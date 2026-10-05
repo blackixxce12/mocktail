@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mocktail\n"
 "Report-Msgid-Bugs-To: https://github.com/komaruworld/mocktail/issues\n"
-"PO-Revision-Date: 2026-10-05 05:00+0400\n"
+"PO-Revision-Date: 2026-10-05 16:28+0400\n"
 "Last-Translator: Mocktail Project Authors\n"
 "Language-Team: Russian\n"
 "Language: ru\n"
@@ -802,6 +802,9 @@ msgstr "• Выкл.: кадры выводятся сразу, как толь
 msgid "On Wayland a window only tears when the compositor allows it; on Hyprland that takes general:allow_tearing plus an “immediate” window rule for the game. Otherwise Off still shows whole frames, just with less waiting."
 msgstr "В Wayland картинка в окне рвётся, только если это разрешает композитор: в Hyprland для этого нужны general:allow_tearing и правило окна «immediate» для игры. Иначе и в режиме «Выкл.» показываются целые кадры, просто с меньшим ожиданием."
 
+msgid "With NVIDIA's driver and the Vulkan backend on a Wayland desktop other than Hyprland, the automatic display server picks native Wayland only when frames do not wait for the display: Off, or Automatic with the 240 maximum frame rate."
+msgstr "С драйвером NVIDIA и движком Vulkan на рабочем столе Wayland, кроме Hyprland, автоматический выбор графического сервера даёт нативный Wayland, только если кадры не ждут экран: при «Выкл.» или при «Автоматически» с ограничением FPS «240 (максимум)»."
+
 msgid "Waits for the display: no tearing, a little more latency"
 msgstr "Ждёт экран: без разрывов, задержка чуть больше"
 
@@ -1099,8 +1102,8 @@ msgstr "Графический сервер"
 msgid "Whether the game window talks to your desktop through Wayland or through X11, which on a Wayland desktop means XWayland. The change applies the next time Roblox starts, also to the test runs of automatic updates."
 msgstr "Через что окно игры работает с рабочим столом: через Wayland или через X11, то есть на рабочем столе Wayland через XWayland. Изменение вступит в силу при следующем запуске Roblox и коснётся также тестовых запусков автоматического обновления."
 
-msgid "• Automatic: Wayland when the desktop offers it. NVIDIA's driver with the Vulkan backend gets it only with driver 555 or newer, a desktop that offers explicit sync and no Intel or AMD card beside it; otherwise XWayland, because without explicit sync NVIDIA's native Wayland presentation has hung and lost the display."
-msgstr "• Автоматически: Wayland, если рабочий стол его предлагает. Драйвер NVIDIA с движком Vulkan получает его, только если версия драйвера 555 или новее, рабочий стол предлагает явную синхронизацию (explicit sync) и рядом нет видеокарты Intel или AMD; иначе — XWayland, потому что без явной синхронизации драйвер NVIDIA в нативном Wayland зависал и терял связь с экраном."
+msgid "• Automatic: Wayland when the desktop offers it. NVIDIA's driver with the Vulkan backend gets it only with driver 555 or newer, a desktop that offers explicit sync, no Intel or AMD card beside it and, on desktops other than Hyprland, frames that do not wait for the display (Vertical sync Off, or Automatic with the 240 maximum frame rate); otherwise XWayland. Without explicit sync NVIDIA's native Wayland presentation has hung and lost the display, and with vertical sync it can stall the game while its window is hidden, as a test on GNOME showed."
+msgstr "• Автоматически: Wayland, если рабочий стол его предлагает. Драйвер NVIDIA с движком Vulkan получает его, только если версия драйвера 555 или новее, рабочий стол предлагает явную синхронизацию (explicit sync), рядом нет видеокарты Intel или AMD, а вне Hyprland ещё и кадры не ждут экран (вертикальная синхронизация «Выкл.» или «Автоматически» при ограничении FPS «240 (максимум)»); иначе — XWayland. Без явной синхронизации драйвер NVIDIA в нативном Wayland зависал и терял связь с экраном, а с вертикальной синхронизацией он может останавливать игру, пока её окно скрыто, — это показала проверка в GNOME."
 
 msgid "• Wayland: the native path, sharp on scaled screens with native resolution. Where Automatic keeps NVIDIA's Vulkan on XWayland it is the riskier choice, but worth a try when the mouse or camera misbehaves through XWayland."
 msgstr "• Wayland: нативный путь, чёткий на масштабированных экранах с чётким изображением. Там, где «Автоматически» оставляет Vulkan на NVIDIA в XWayland, это более рискованный выбор, но его стоит попробовать, если через XWayland капризничают мышь или камера."
@@ -1127,8 +1130,11 @@ msgid "NVIDIA's kernel driver is loaded."
 msgstr "Загружен драйвер ядра NVIDIA."
 
 #, c-format
-msgid "With NVIDIA driver %s and explicit sync offered by the desktop, Automatic runs NVIDIA's Vulkan on native Wayland."
-msgstr "С драйвером NVIDIA %s и явной синхронизацией, которую предлагает рабочий стол, «Автоматически» запускает Vulkan на NVIDIA в нативном Wayland."
+msgid "With NVIDIA driver %s and explicit sync offered by Hyprland, Automatic runs NVIDIA's Vulkan on native Wayland."
+msgstr "С драйвером NVIDIA %s и явной синхронизацией, которую предлагает Hyprland, «Автоматически» запускает Vulkan на NVIDIA в нативном Wayland."
+
+msgid "With NVIDIA driver %s, explicit sync offered by the desktop and frames that do not wait for the display, Automatic runs NVIDIA's Vulkan on native Wayland."
+msgstr "С драйвером NVIDIA %s, явной синхронизацией, которую предлагает рабочий стол, и кадрами, которые не ждут экран, «Автоматически» запускает Vulkan на NVIDIA в нативном Wayland."
 
 msgid "So Automatic runs NVIDIA's Vulkan through XWayland."
 msgstr "Поэтому «Автоматически» запускает Vulkan на NVIDIA через XWayland."
@@ -2301,6 +2307,9 @@ msgstr "Не удалось узнать версию драйвера NVIDIA, �
 msgid "NVIDIA driver %s lacks explicit sync, which NVIDIA's Wayland presentation needs; drivers 555 and newer have it."
 msgstr "В драйвере NVIDIA %s нет явной синхронизации (explicit sync), которая нужна NVIDIA для вывода кадров в Wayland; она есть в драйверах 555 и новее."
 
+msgid "__NV_DISABLE_EXPLICIT_SYNC turns off explicit sync in NVIDIA's driver, which NVIDIA's Wayland presentation needs."
+msgstr "__NV_DISABLE_EXPLICIT_SYNC отключает в драйвере NVIDIA явную синхронизацию (explicit sync), которая нужна NVIDIA для вывода кадров в Wayland."
+
 msgid "This computer has an Intel or AMD card beside the NVIDIA one, and NVIDIA's Wayland presentation is untested there."
 msgstr "Кроме NVIDIA, на этом компьютере есть видеокарта Intel или AMD, а вывод кадров NVIDIA в Wayland в такой связке не проверен."
 
@@ -2312,6 +2321,9 @@ msgstr "Не удалось узнать у рабочего стола, пре�
 
 msgid "The desktop does not offer explicit sync (wp_linux_drm_syncobj_manager_v1), which NVIDIA's Wayland presentation needs."
 msgstr "Рабочий стол не предлагает явную синхронизацию (wp_linux_drm_syncobj_manager_v1), которая нужна NVIDIA для вывода кадров в Wayland."
+
+msgid "Frames may wait for the display here (vertical sync), and then NVIDIA's Wayland presentation can stall the game while its window is hidden, as a test on GNOME showed; only on Hyprland has it proven safe so far. Vertical sync Off, or Automatic with the 240 maximum frame rate, avoids the wait."
+msgstr "Здесь кадры могут ждать экран (вертикальная синхронизация), и тогда вывод кадров NVIDIA в Wayland может останавливать игру, пока её окно скрыто, — это показала проверка в GNOME; надёжным он пока оказался только в Hyprland. Вертикальная синхронизация «Выкл.» или «Автоматически» при ограничении FPS «240 (максимум)» убирает это ожидание."
 
 # Network & Updates page (network_updates_page.cc, network_updates_status.cc).
 msgid "Update Roblox automatically"
@@ -2999,8 +3011,8 @@ msgstr "без XWayland"
 msgid "The display system and desktop this window runs in. The game window can use Wayland or, through XWayland, X11; the Display page decides which."
 msgstr "Графическая система и рабочий стол, в которых работает это окно. Окно игры может использовать Wayland или X11 через XWayland; что именно, решает раздел «Экран и окно»."
 
-msgid "With NVIDIA's own driver and the direct Vulkan backend, the automatic choice is native Wayland only with driver 555 or newer, a desktop that offers explicit sync and no Intel or AMD card beside it; otherwise it is X11 through XWayland, because without explicit sync NVIDIA's native Wayland presentation can hang or lose the display. Through XWayland a scaled screen gets the game rendered at 100 % and enlarged by the compositor, and native resolution has no effect; Display › Display server can choose Wayland instead."
-msgstr "С фирменным драйвером NVIDIA и движком Vulkan автоматический выбор — нативный Wayland, только если версия драйвера 555 или новее, рабочий стол предлагает явную синхронизацию (explicit sync) и рядом нет видеокарты Intel или AMD; иначе — X11 через XWayland, потому что без явной синхронизации драйвер NVIDIA в нативном Wayland может зависать или терять связь с экраном. Через XWayland на масштабированном экране игра рисуется в масштабе 100 %, композитор её растягивает, а чёткое изображение не действует; выбрать Wayland можно в разделе «Экран и окно» › «Графический сервер»."
+msgid "With NVIDIA's own driver and the direct Vulkan backend, the automatic choice is native Wayland only with driver 555 or newer, a desktop that offers explicit sync, no Intel or AMD card beside it and, except on Hyprland, frames that do not wait for the display (Graphics › Vertical sync); otherwise it is X11 through XWayland, because without explicit sync NVIDIA's native Wayland presentation can hang or lose the display, and with vertical sync it can stall while the game window is hidden. Through XWayland a scaled screen gets the game rendered at 100 % and enlarged by the compositor, and native resolution has no effect; Display › Display server can choose Wayland instead."
+msgstr "С фирменным драйвером NVIDIA и движком Vulkan автоматический выбор — нативный Wayland, только если версия драйвера 555 или новее, рабочий стол предлагает явную синхронизацию (explicit sync), рядом нет видеокарты Intel или AMD, а вне Hyprland ещё и кадры не ждут экран («Графика» › «Вертикальная синхронизация»); иначе — X11 через XWayland, потому что без явной синхронизации драйвер NVIDIA в нативном Wayland может зависать или терять связь с экраном, а с вертикальной синхронизацией — останавливать игру, пока её окно скрыто. Через XWayland на масштабированном экране игра рисуется в масштабе 100 %, композитор её растягивает, а чёткое изображение не действует; выбрать Wayland можно в разделе «Экран и окно» › «Графический сервер»."
 
 msgid "Graphics card"
 msgstr "Видеокарта"

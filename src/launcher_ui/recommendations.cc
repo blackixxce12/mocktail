@@ -258,7 +258,8 @@ std::optional<std::string> RecommendHighDpi(const MachineProfile& machine,
 DisplayServerChoice ResolveDisplayServer(const MachineProfile& machine,
                                          std::string_view configured,
                                          std::string_view backend,
-                                         std::string_view gpu_preference) {
+                                         std::string_view gpu_preference,
+                                         Presentation presentation) {
   if (!machine.detected) return {};
   const bool chosen_wayland = configured == "wayland";
   const bool chosen_x11 = configured == "x11";
@@ -272,7 +273,8 @@ DisplayServerChoice ResolveDisplayServer(const MachineProfile& machine,
   if (backend.empty()) backend = "direct-vulkan";
   if (gpu_preference.empty()) gpu_preference = "auto";
   DisplayServerChoice choice;
-  choice.server = machine.AutomaticDisplayServer(backend, gpu_preference);
+  choice.server = machine.AutomaticDisplayServer(
+      backend, gpu_preference, presentation == Presentation::kUnthrottled);
   if (chosen_wayland || chosen_x11) {
     choice.reason = DisplayServerReason::kChosenUnavailable;
   } else if (choice.server.empty()) {

@@ -616,6 +616,8 @@ target_link_libraries(mocktail_launcher_ui_model
     Mocktail::LauncherUiLaunch
   PRIVATE
     PkgConfig::GIO
+    # video_driver_policy.cc reads Vulkan driver manifests.
+    nlohmann_json::nlohmann_json
     ${CMAKE_DL_LIBS}
 )
 

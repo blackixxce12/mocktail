@@ -437,7 +437,8 @@ std::string GpuCardName(const runtime::HostGpu& card) {
 }
 
 window::VideoDriverPolicyInput MachineProfile::VideoDriverInput(
-    std::string_view backend, std::string_view gpu_preference) const {
+    std::string_view backend, std::string_view gpu_preference,
+    bool unthrottled_presentation) const {
   window::VideoDriverPolicyInput input;
   input.prefer_wayland = prefer_wayland;
   input.has_wayland_session = wayland_available;
@@ -463,14 +464,18 @@ window::VideoDriverPolicyInput MachineProfile::VideoDriverInput(
     }
   }
   input.surface_commit_guard = surface_commit_guard;
+  input.nvidia_explicit_sync_disabled = nvidia_explicit_sync_disabled;
+  input.unthrottled_presentation = unthrottled_presentation;
   input.wayland_explicit_sync = wayland_explicit_sync;
+  input.hyprland_compositor = hyprland_compositor;
   return input;
 }
 
 std::string MachineProfile::AutomaticDisplayServer(
-    std::string_view backend, std::string_view gpu_preference) const {
-  switch (window::ResolveVideoDriverChoice(
-      VideoDriverInput(backend, gpu_preference))) {
+    std::string_view backend, std::string_view gpu_preference,
+    bool unthrottled_presentation) const {
+  switch (window::ResolveVideoDriverChoice(VideoDriverInput(
+      backend, gpu_preference, unthrottled_presentation))) {
     case window::VideoDriverChoice::kWayland:
     case window::VideoDriverChoice::kNvidiaDirectVulkanWayland:
       return "wayland";
@@ -488,22 +493,23 @@ std::string MachineProfile::AutomaticDisplayServer(
 
 bool MachineProfile::NvidiaRuleApplies(std::string_view backend,
                                        std::string_view gpu_preference) const {
+  // Whether the rule applies does not depend on presentation.
   return window::NvidiaDirectVulkanRuleApplies(
-      VideoDriverInput(backend, gpu_preference));
+      VideoDriverInput(backend, gpu_preference, false));
 }
 
 window::NvidiaWaylandBlocker MachineProfile::NvidiaNativeWaylandBlocker(
-    bool wayland_chosen) const {
+    bool unthrottled_presentation, bool wayland_chosen) const {
   window::VideoDriverPolicyInput input =
-      VideoDriverInput("direct-vulkan", "auto");
+      VideoDriverInput("direct-vulkan", "auto", unthrottled_presentation);
   if (wayland_chosen) input.prefer_wayland = true;
   return window::NvidiaNativeWaylandBlocker(input);
 }
 
 bool MachineProfile::NvidiaDirectVulkanUsesX11(
-    std::string_view gpu_preference) const {
-  return window::ResolveVideoDriverChoice(
-             VideoDriverInput("direct-vulkan", gpu_preference)) ==
+    std::string_view gpu_preference, bool unthrottled_presentation) const {
+  return window::ResolveVideoDriverChoice(VideoDriverInput(
+             "direct-vulkan", gpu_preference, unthrottled_presentation)) ==
          window::VideoDriverChoice::kNvidiaDirectVulkanX11;
 }
 
@@ -645,6 +651,10 @@ MachineProfile DetectMachineProfile(const runtime::Environment& environment,
       environment.Get("MOCKTAIL_WAYLAND_COMMIT_GUARD");
   profile.surface_commit_guard = window::SurfaceCommitGuardAllowed(
       guard.has_value() ? guard->c_str() : nullptr);
+  const std::optional<std::string> explicit_sync =
+      environment.Get(window::kNvidiaDisableExplicitSyncVariable);
+  profile.nvidia_explicit_sync_disabled = window::NvidiaExplicitSyncDisabled(
+      explicit_sync.has_value() ? explicit_sync->c_str() : nullptr);
   profile.flatpak = NonEmpty(environment, "FLATPAK_ID") ||
                     Exists(Under(probe.root, "/.flatpak-info"));
   profile.physical_cores = probe.physical_cores ? probe.physical_cores() : 0;
@@ -687,10 +697,11 @@ MachineProfile DetectMachineProfile(const runtime::Environment& environment,
   }
   // window.cc asks the compositor only when its answer is all the NVIDIA
   // rule still needs; so does the settings window, for direct Vulkan on the
-  // NVIDIA card whatever graphics.backend and engine.gpu say now, and with
-  // the Wayland preference on, as display.server: wayland would have it.
+  // NVIDIA card whatever graphics.backend, engine.gpu and graphics.vsync
+  // say now, and with the Wayland preference on, as display.server:
+  // wayland would have it.
   window::VideoDriverPolicyInput nvidia =
-      profile.VideoDriverInput("direct-vulkan", "auto");
+      profile.VideoDriverInput("direct-vulkan", "auto", false);
   nvidia.vulkan_drivers_exclude_nvidia = false;
   nvidia.prefer_wayland = true;
   if (window::NeedsWaylandExplicitSyncProbe(nvidia) && probe.wayland_globals) {
@@ -699,6 +710,7 @@ MachineProfile DetectMachineProfile(const runtime::Environment& environment,
         !globals.listed       ? window::WaylandExplicitSync::kUnknown
         : globals.drm_syncobj ? window::WaylandExplicitSync::kOffered
                               : window::WaylandExplicitSync::kAbsent;
+    profile.hyprland_compositor = globals.listed && globals.hyprland;
   }
   profile.detected = true;
   return profile;

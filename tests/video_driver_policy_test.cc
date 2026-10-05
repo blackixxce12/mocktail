@@ -32,15 +32,56 @@ VideoDriverPolicyInput NvidiaWaylandDirectVulkan() {
 }
 
 // Everything the native Wayland path needs: driver 555 or newer, a single
-// NVIDIA card, the surface-commit guard and a compositor with explicit sync.
+// NVIDIA card, the surface-commit guard and a compositor with explicit sync,
+// here Hyprland, where vertical sync does not count.
 VideoDriverPolicyInput NvidiaReadyForNativeWayland() {
   VideoDriverPolicyInput input = NvidiaWaylandDirectVulkan();
   input.nvidia_driver_major = 615;
   input.nvidia_gpu_count = 1;
   input.surface_commit_guard = true;
   input.wayland_explicit_sync = WaylandExplicitSync::kOffered;
+  input.hyprland_compositor = true;
   return input;
 }
+
+// A temporary directory for Vulkan driver manifests.
+class TemporaryManifests final {
+ public:
+  TemporaryManifests() {
+    char pattern[] = "/tmp/mocktail_vulkan_manifests_XXXXXX";
+    const char* created = mkdtemp(pattern);
+    if (created != nullptr) root_ = created;
+  }
+  ~TemporaryManifests() {
+    std::error_code error;
+    std::filesystem::remove_all(root_, error);
+  }
+  TemporaryManifests(const TemporaryManifests&) = delete;
+  TemporaryManifests& operator=(const TemporaryManifests&) = delete;
+
+  // Writes `text` at `relative` and returns the absolute path.
+  std::string Write(const std::string& relative, const std::string& text) {
+    const std::filesystem::path path = root_ / relative;
+    std::filesystem::create_directories(path.parent_path());
+    std::ofstream(path) << text;
+    return path.string();
+  }
+
+  // A manifest in the Vulkan loader's format naming `library`.
+  std::string Manifest(const std::string& relative,
+                       const std::string& library) {
+    return Write(relative,
+                 "{\n  \"file_format_version\": \"1.0.1\",\n"
+                 "  \"ICD\": {\n    \"library_path\": \"" +
+                     library +
+                     "\",\n    \"api_version\": \"1.4.328\"\n  }\n}\n");
+  }
+
+  const std::filesystem::path& root() const { return root_; }
+
+ private:
+  std::filesystem::path root_;
+};
 
 TEST(VideoDriverPolicyTest, UsesXwaylandForNvidiaDirectVulkanByDefault) {
   // Nothing known about the driver or the compositor yet.
@@ -130,6 +171,107 @@ TEST(VideoDriverPolicyTest, KeepsXwaylandWhenWaylandIsNotPreferred) {
             NvidiaWaylandBlocker::kWaylandNotPreferred);
   EXPECT_EQ(ResolveVideoDriverChoice(input),
             VideoDriverChoice::kNvidiaDirectVulkanX11);
+}
+
+// With vertical sync, NVIDIA's Wayland presentation can stall
+// vkAcquireNextImageKHR while the window is hidden (seen on GNOME); only
+// Hyprland has run long native Wayland sessions with it.
+TEST(VideoDriverPolicyTest, NeedsHyprlandOrUnthrottledFramesForWayland) {
+  VideoDriverPolicyInput input = NvidiaReadyForNativeWayland();
+  input.hyprland_compositor = false;
+  EXPECT_EQ(NvidiaNativeWaylandBlocker(input),
+            NvidiaWaylandBlocker::kVsyncOutsideHyprland);
+  EXPECT_EQ(ResolveVideoDriverChoice(input),
+            VideoDriverChoice::kNvidiaDirectVulkanX11);
+  EXPECT_STREQ(VideoDriverChoiceName(ResolveVideoDriverChoice(input)), "x11");
+
+  // graphics.vsync off, or auto with an unlimited frame rate.
+  input.unthrottled_presentation = true;
+  EXPECT_EQ(NvidiaNativeWaylandBlocker(input), NvidiaWaylandBlocker::kNone);
+  EXPECT_EQ(ResolveVideoDriverChoice(input),
+            VideoDriverChoice::kNvidiaDirectVulkanWayland);
+
+  // Hyprland, whatever the presentation.
+  input.unthrottled_presentation = false;
+  input.hyprland_compositor = true;
+  EXPECT_EQ(NvidiaNativeWaylandBlocker(input), NvidiaWaylandBlocker::kNone);
+  EXPECT_EQ(ResolveVideoDriverChoice(input),
+            VideoDriverChoice::kNvidiaDirectVulkanWayland);
+
+  // Explicit sync is still the first question: an unthrottled swapchain
+  // does not make up for a compositor without it, and the probe that also
+  // tells Hyprland apart still runs.
+  input = NvidiaReadyForNativeWayland();
+  input.hyprland_compositor = false;
+  input.unthrottled_presentation = true;
+  input.wayland_explicit_sync = WaylandExplicitSync::kAbsent;
+  EXPECT_EQ(NvidiaNativeWaylandBlocker(input),
+            NvidiaWaylandBlocker::kCompositorWithoutExplicitSync);
+  input.wayland_explicit_sync = WaylandExplicitSync::kUnknown;
+  input.unthrottled_presentation = false;
+  EXPECT_TRUE(NeedsWaylandExplicitSyncProbe(input));
+  input.unthrottled_presentation = true;
+  EXPECT_TRUE(NeedsWaylandExplicitSyncProbe(input));
+
+  // An explicit display server and SDL_VIDEODRIVER still win.
+  VideoDriverPolicyInput chosen = NvidiaReadyForNativeWayland();
+  chosen.hyprland_compositor = false;
+  chosen.force_wayland = true;
+  EXPECT_EQ(ResolveVideoDriverChoice(chosen), VideoDriverChoice::kWayland);
+  chosen.force_wayland = false;
+  chosen.force_x11 = true;
+  chosen.unthrottled_presentation = true;
+  EXPECT_EQ(ResolveVideoDriverChoice(chosen), VideoDriverChoice::kX11);
+  chosen.force_x11 = false;
+  chosen.has_explicit_sdl_driver = true;
+  EXPECT_EQ(ResolveVideoDriverChoice(chosen), VideoDriverChoice::kSdlDefault);
+}
+
+TEST(VideoDriverPolicyTest, HonoursNvidiaDisableExplicitSync) {
+  EXPECT_FALSE(NvidiaExplicitSyncDisabled(nullptr));
+  EXPECT_FALSE(NvidiaExplicitSyncDisabled(""));
+  EXPECT_FALSE(NvidiaExplicitSyncDisabled("0"));
+  for (const char* value : {"1", "true", "yes", "2"}) {
+    EXPECT_TRUE(NvidiaExplicitSyncDisabled(value)) << value;
+  }
+
+  VideoDriverPolicyInput input = NvidiaReadyForNativeWayland();
+  input.unthrottled_presentation = true;
+  input.nvidia_explicit_sync_disabled = true;
+  EXPECT_EQ(NvidiaNativeWaylandBlocker(input),
+            NvidiaWaylandBlocker::kExplicitSyncDisabled);
+  EXPECT_EQ(ResolveVideoDriverChoice(input),
+            VideoDriverChoice::kNvidiaDirectVulkanX11);
+  // Without explicit sync the compositor's answer cannot help.
+  input.wayland_explicit_sync = WaylandExplicitSync::kUnknown;
+  EXPECT_FALSE(NeedsWaylandExplicitSyncProbe(input));
+  // display.server: wayland still wins.
+  input.force_wayland = true;
+  EXPECT_EQ(ResolveVideoDriverChoice(input), VideoDriverChoice::kWayland);
+}
+
+TEST(VideoDriverPolicyTest, NamesWhyXwaylandWasKept) {
+  EXPECT_EQ(NvidiaWaylandBlockerReason(NvidiaWaylandBlocker::kNone, "615.71"),
+            "");
+  EXPECT_EQ(NvidiaWaylandBlockerReason(
+                NvidiaWaylandBlocker::kDriverWithoutExplicitSync, "550.120"),
+            "driver 550.120 has no explicit sync; 555 or newer needed");
+  EXPECT_EQ(NvidiaWaylandBlockerReason(
+                NvidiaWaylandBlocker::kDriverWithoutExplicitSync, ""),
+            "driver (unknown) has no explicit sync; 555 or newer needed");
+  const std::string disabled = NvidiaWaylandBlockerReason(
+      NvidiaWaylandBlocker::kExplicitSyncDisabled, "615.71");
+  EXPECT_NE(disabled.find("__NV_DISABLE_EXPLICIT_SYNC"), std::string::npos)
+      << disabled;
+  const std::string vsync = NvidiaWaylandBlockerReason(
+      NvidiaWaylandBlocker::kVsyncOutsideHyprland, "615.71");
+  for (const char* word : {"vertical sync", "vkAcquireNextImageKHR",
+                           "Hyprland", "graphics.vsync: off",
+                           "frame_rate_limit: unlimited"}) {
+    EXPECT_NE(vsync.find(word), std::string::npos) << vsync;
+  }
+  // The game window wraps the reason in parentheses.
+  EXPECT_EQ(vsync.find_first_of("()"), std::string::npos) << vsync;
 }
 
 TEST(VideoDriverPolicyTest, ExplicitChoicesBeatTheNvidiaEvidence) {
@@ -268,26 +410,96 @@ TEST(VideoDriverPolicyTest, KeepsWaylandWhenVulkanCannotReachNvidia) {
   EXPECT_EQ(ResolveVideoDriverChoice(input), VideoDriverChoice::kX11);
 }
 
+TEST(VideoDriverPolicyTest, ClassifiesVulkanDriversByTheirLibrary) {
+  // nvidia-utils 615.71.09 and NVK.
+  for (const char* nvidia :
+       {"libGLX_nvidia.so.0", "/usr/lib/libGLX_nvidia.so.0",
+        "libvulkan_nouveau.so", "/opt/nvidia/lib64/libnvidia-vulkan.so"}) {
+    EXPECT_EQ(ClassifyVulkanDriverLibrary(nvidia), VulkanDriverReach::kNvidia)
+        << nvidia;
+  }
+  // Mesa's RADV, ANV and HasVK, by name or by path, and AMDVLK.
+  for (const char* other :
+       {"libvulkan_radeon.so", "/usr/lib64/libvulkan_radeon.so",
+        "libvulkan_intel.so", "../lib/libvulkan_intel_hasvk.so",
+        "/usr/lib/amdvlk64.so", "amdvlk32.so"}) {
+    EXPECT_EQ(ClassifyVulkanDriverLibrary(other),
+              VulkanDriverReach::kOtherVendor)
+        << other;
+  }
+  // Anything else may run an NVIDIA card: lavapipe, a renamed copy, a
+  // directory that only looks like another vendor's.
+  for (const char* unknown :
+       {"", "/", "libvulkan_lvp.so", "libvulkan_radeon.so.1",
+        "libvulkan_radeon.so/", "/usr/lib/libvulkan_radeon.so.d/libvk.so",
+        "libvk_swiftshader.so", "LIBVULKAN_RADEON.SO"}) {
+    EXPECT_EQ(ClassifyVulkanDriverLibrary(unknown),
+              VulkanDriverReach::kUnknown)
+        << unknown;
+  }
+}
+
 TEST(VideoDriverPolicyTest, ReadsWhetherPinnedVulkanDriversExcludeNvidia) {
-  for (const char* files : {
-           "/usr/share/vulkan/icd.d/radeon_icd.x86_64.json",
-           "/usr/share/vulkan/icd.d/intel_icd.x86_64.json:"
-           "/usr/share/vulkan/icd.d/intel_hasvk_icd.x86_64.json",
-           "radeon_icd.json",
-           ":/etc/vulkan/icd.d/radeon_icd.json:",
+  TemporaryManifests manifests;
+  ASSERT_FALSE(manifests.root().empty());
+  const std::string radeon =
+      manifests.Manifest("radeon_icd.x86_64.json", "libvulkan_radeon.so");
+  const std::string intel = manifests.Manifest(
+      "intel_icd.x86_64.json", "/usr/lib/libvulkan_intel.so");
+  const std::string hasvk = manifests.Manifest("intel_hasvk_icd.x86_64.json",
+                                               "libvulkan_intel_hasvk.so");
+  // The manifest decides, not its name or folder.
+  const std::string nvidia_renamed =
+      manifests.Manifest("custom_icd.json", "libGLX_nvidia.so.0");
+  const std::string radeon_in_nvidia_folder =
+      manifests.Manifest("nvidia-off/radeon_icd.json", "libvulkan_radeon.so");
+  const std::string nvk =
+      manifests.Manifest("nouveau_icd.x86_64.json", "libvulkan_nouveau.so");
+  const std::string lavapipe =
+      manifests.Manifest("lvp_icd.x86_64.json", "libvulkan_lvp.so");
+  const std::string no_icd =
+      manifests.Write("empty_icd.json", "{\"file_format_version\": \"1.0.1\"}");
+  const std::string not_json =
+      manifests.Write("broken_icd.json", "\"ICD\": libvulkan_radeon.so");
+  const std::string library_not_text = manifests.Write(
+      "number_icd.json", "{\"ICD\": {\"library_path\": 42}}");
+  const std::string oversized = manifests.Write(
+      "huge_icd.json", "{\"ICD\": {\"library_path\": \"libvulkan_radeon.so\"}, "
+                       "\"padding\": \"" +
+                           std::string(70 * 1024, 'x') + "\"}");
+  const std::string missing = (manifests.root() / "missing.json").string();
+  const std::string folder = (manifests.root() / "nvidia-off").string();
+
+  EXPECT_EQ(ReadVulkanDriverManifestReach(radeon),
+            VulkanDriverReach::kOtherVendor);
+  EXPECT_EQ(ReadVulkanDriverManifestReach(nvidia_renamed),
+            VulkanDriverReach::kNvidia);
+  EXPECT_EQ(ReadVulkanDriverManifestReach(lavapipe),
+            VulkanDriverReach::kUnknown);
+
+  for (const std::string& files : {
+           radeon,
+           intel + ":" + hasvk,
+           radeon_in_nvidia_folder,
+           ":" + radeon + ":",
        }) {
     EXPECT_TRUE(VulkanDriverFilesExcludeNvidia(files)) << files;
   }
-  for (const char* files : {
-           "",
-           ":",
-           "/usr/share/vulkan/icd.d/nvidia_icd.json",
-           "/usr/share/vulkan/icd.d/radeon_icd.x86_64.json:"
-           "/usr/share/vulkan/icd.d/nvidia_icd.json",
-           "/opt/nvidia/vulkan/icd.json",
-           "/usr/share/vulkan/icd.d",
-           "/usr/share/vulkan/icd.d/",
-           "radeon_icd.json.bak",
+  for (const std::string& files : {
+           std::string(),
+           std::string(":"),
+           nvidia_renamed,
+           radeon + ":" + nvidia_renamed,
+           nvk,
+           lavapipe,
+           no_icd,
+           not_json,
+           library_not_text,
+           oversized,
+           missing,
+           radeon + ":" + missing,
+           folder,
+           folder + "/",
        }) {
     EXPECT_FALSE(VulkanDriverFilesExcludeNvidia(files)) << files;
   }
