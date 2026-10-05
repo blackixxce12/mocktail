@@ -25,11 +25,13 @@ run_profile() {
 
   echo "[matrix] ${name}" | tee "${summary}"
   set +e
+  # --play: DISPLAY and WAYLAND_DISPLAY stay, so the settings window
+  # (launcher.show_on_start) would otherwise wait for Play until the timeout.
   timeout -s "${TIMEOUT_SIGNAL}" "${TIMEOUT_SECONDS}s" env \
     SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-dummy}" \
     ROBLOX_LIB_PATH="${LIBROBLOX}" \
     "$@" \
-    "${BINARY}" >"${log}" 2>&1
+    "${BINARY}" --play >"${log}" 2>&1
   local rc=$?
   set -e
 

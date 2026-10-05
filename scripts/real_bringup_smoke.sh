@@ -201,6 +201,11 @@ case "${TIER}" in
     # Tier C is the supported readiness path for the exact Build ID in the
     # compatibility manifest. It must pass the normal fail-closed gate.
     EXTRA=(--windowed)
+    # With launcher.show_on_start the settings window would wait for Play
+    # until the timeout below; only the interactive launch keeps it.
+    if [[ "${MOCKTAIL_AUTO_EXIT_AFTER_PRESENT_MS}" != "0" ]]; then
+      EXTRA+=(--play)
+    fi
     ;;
   GAME|INPUT|RESIZE)
     # Local UGCGame graphics gate after the LuaApp-window tier succeeds.
@@ -232,7 +237,8 @@ case "${TIER}" in
       export MOCKTAIL_RESIZE_HEIGHT="${MOCKTAIL_RESIZE_HEIGHT:-640}"
     fi
     # GAME uses the same exact Build-ID profile and fail-closed policy as C.
-    EXTRA=(--windowed)
+    # --play: the settings window would wait for Play until the timeout.
+    EXTRA=(--windowed --play)
     ;;
   NETWORK)
     # Authenticated public-place gate. Unlike GAME, this requires a positive
@@ -328,8 +334,9 @@ case "${TIER}" in
       exit 2
     fi
     # No unverified-build escape hatch: NETWORK is valid only for a supported
-    # exact Build-ID profile.
-    EXTRA=(--windowed)
+    # exact Build-ID profile. --play: the settings window would wait for
+    # Play until the timeout.
+    EXTRA=(--windowed --play)
     ;;
   LEGACY)
     # Researched 2.721.1108 with offset patches enabled by profile

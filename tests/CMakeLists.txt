@@ -1314,6 +1314,12 @@ add_test(
 )
 
 add_test(
+  NAME ReadinessScriptsTest.SkipTheSettingsWindow
+  COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/readiness_scripts_launcher_test.sh
+          ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
   NAME FlatpakPackagingTest.ReproducibleSandboxedBuild
   COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/flatpak_packaging_test.sh
           ${CMAKE_SOURCE_DIR}
