@@ -234,6 +234,7 @@ void Selftest::Start() {
   steps_.push_back([this] { return RenderBindingPage(); });
   steps_.push_back([this] { return SearchStep(); });
   steps_.push_back([this] { return SaveStep(); });
+  steps_.push_back([this] { return ChangedOnDisk(); });
   steps_.push_back([this] { return OpenEnvironmentDialog(); });
   steps_.push_back([this] { return RenderEnvironmentDialog(); });
   steps_.push_back([this] { return MoveEnvironment(); });
@@ -823,6 +824,39 @@ guint Selftest::SaveStep() {
   }
   Note("window_state_updated", state.width == 1366 ? "true" : "false");
   return 100;
+}
+
+// config.yaml changed in an editor while the window had unsaved changes:
+// Save is refused, and the banner with Reload must be the one shown even
+// while variables override settings (that banner only informs).
+guint Selftest::ChangedOnDisk() {
+  if (context_->read_only()) return 50;
+  context_->SetValue("window.title", "Roblox changed on disk",
+                     launcher::ScalarKind::kString);
+  {
+    std::ofstream output(context_->config_file(),
+                         std::ios::binary | std::ios::app);
+    output << "# Edited in a text editor.\n";
+  }
+  if (context_->Save()) {
+    Error("Save wrote over a config.yaml changed outside the window");
+  }
+  BannerKind kind = BannerKind::kConfigError;
+  const Banner* banner = context_->TopBanner(&kind);
+  const bool shown = banner != nullptr && kind == BannerKind::kChangedOnDisk;
+  Note("changed_on_disk_banner", shown ? "true" : "false");
+  if (!shown) {
+    Error("the changed-on-disk banner is hidden behind " +
+          Quote(banner != nullptr ? banner->title : ""));
+  }
+  context_->Discard();
+  context_->Reload();
+  kind = BannerKind::kConfigError;
+  banner = context_->TopBanner(&kind);
+  if (banner == nullptr || kind != BannerKind::kEnvironmentOverrides) {
+    Error("the environment banner did not come back after Reload");
+  }
+  return kSettleMilliseconds;
 }
 
 // The banner's Details button opens the dialog that lists the overriding

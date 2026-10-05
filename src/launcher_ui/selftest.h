@@ -54,6 +54,7 @@ class Selftest {
   guint RenderBindingPage();
   guint SearchStep();
   guint SaveStep();
+  guint ChangedOnDisk();
   guint OpenEnvironmentDialog();
   guint RenderEnvironmentDialog();
   guint MoveEnvironment();

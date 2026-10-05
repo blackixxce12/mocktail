@@ -503,11 +503,14 @@ bool LauncherContext::SaveInternal(bool quiet) {
       draft_.IsChanged("window.width") || draft_.IsChanged("window.height");
   std::string error;
   if (draft_.HasChanges() && !draft_.Save(&error)) {
-    Toast(Format(_("Settings were not saved: %s"), error.c_str()));
     if (draft_.ChangedOnDisk()) {
+      Toast(Format(_("Settings were not saved: %s"), error.c_str()),
+            _("Reload"), [this] { Reload(); });
       SetBanner(BannerKind::kChangedOnDisk,
                 {_("config.yaml was changed outside the settings window"),
                  _("Reload"), [this] { Reload(); }});
+    } else {
+      Toast(Format(_("Settings were not saved: %s"), error.c_str()));
     }
     return false;
   }

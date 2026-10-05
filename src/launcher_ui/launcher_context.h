@@ -44,14 +44,17 @@ class LauncherShell {
 };
 
 // The persistent states shown above the page, one at a time, in this
-// priority order (research/ux.md 4.4).
+// priority order (research/ux.md 4.4, except that a file changed on disk
+// comes before the environment overrides: while it is shown, Save, and Play
+// with unsaved changes, are refused, and its Reload is the only one outside
+// the Fix… dialog; the environment banner only informs).
 enum class BannerKind {
   kConfigError = 0,
   // Not used while mocktail spawns the window under its instance lock; kept
   // for a standalone settings window.
   kAlreadyRunning = 1,
-  kEnvironmentOverrides = 2,
-  kChangedOnDisk = 3,
+  kChangedOnDisk = 2,
+  kEnvironmentOverrides = 3,
 };
 inline constexpr std::size_t kBannerKindCount = 4;
 
