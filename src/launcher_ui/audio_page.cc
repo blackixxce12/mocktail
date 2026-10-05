@@ -11,6 +11,7 @@
 #include "launcher_ui/launcher_context.h"
 #include "launcher_ui/pages.h"
 #include "launcher_ui/recommendations.h"
+#include "launcher_ui/roblox_decides.h"
 
 namespace mocktail::launcher_ui {
 namespace {
@@ -414,6 +415,7 @@ GtkWidget* BuildInputRow(LauncherContext* context, AudioPageState* state) {
   spec.hint.details_for = [state](LauncherContext&) {
     return ListingDetails(*state, true);
   };
+  spec.hint.overrides_roblox = RobloxOverrideHint(kInputKey);
   spec.hint.recommend = [](const MachineProfile&) {
     return std::optional<std::string>("default");
   };

@@ -16,6 +16,8 @@
 #include "launcher_ui/i18n.h"
 #include "launcher_ui/page_dialogs.h"
 #include "launcher_ui/recommendations.h"
+#include "launcher_ui/roblox_decides.h"
+#include "launcher_ui/roblox_overrides.h"
 #include "runtime/launcher_ui_launch.h"
 #include "runtime/runtime_config_bootstrap.h"
 #include "window/video_driver_policy.h"
@@ -59,6 +61,7 @@ constexpr const char* kIcons[] = {
     "user-trash-symbolic",
     "list-add-symbolic",
     "view-more-symbolic",
+    "input-gaming-symbolic",
 };
 
 std::string Quote(const std::string& text) {
@@ -75,6 +78,28 @@ bool WriteFile(const std::filesystem::path& path, const std::string& bytes,
     return false;
   }
   return true;
+}
+
+// The first descendant of `widget` with the style class `css`.
+GtkWidget* FindByClass(GtkWidget* widget, const char* css) {
+  for (GtkWidget* child = gtk_widget_get_first_child(widget); child != nullptr;
+       child = gtk_widget_get_next_sibling(child)) {
+    if (gtk_widget_has_css_class(child, css)) return child;
+    if (GtkWidget* found = FindByClass(child, css)) return found;
+  }
+  return nullptr;
+}
+
+// The last action row inside `widget`, in tree order: an expander row's
+// last child row.
+GtkWidget* LastActionRow(GtkWidget* widget) {
+  GtkWidget* last = nullptr;
+  for (GtkWidget* child = gtk_widget_get_first_child(widget); child != nullptr;
+       child = gtk_widget_get_next_sibling(child)) {
+    if (ADW_IS_ACTION_ROW(child)) last = child;
+    if (GtkWidget* found = LastActionRow(child)) last = found;
+  }
+  return last;
 }
 
 guint FindModelPosition(GtkWidget* combo_row, const std::string& label) {
@@ -199,6 +224,68 @@ void Selftest::Start() {
   steps_.push_back([this] { return OpenEnvironmentDialog(); });
   steps_.push_back([this] { return RenderEnvironmentDialog(); });
   steps_.push_back([this] { return MoveEnvironment(); });
+  // What Mocktail decides and what Roblox decides: every kind of override
+  // at once, with a level above 3 under the performance preset, shown on
+  // the Advanced page's overview and as badges on the Graphics page.
+  steps_.push_back([this] { return ShowRobloxDecides(); });
+  steps_.push_back([this] {
+    const int width = gtk_widget_get_width(window_->widget());
+    const std::filesystem::path path =
+        out_dir_ / ("decides-" + std::to_string(width) + ".png");
+    std::string detail;
+    if (!Render(window_->content(), path, &detail)) {
+      Error("cannot render " + path.string());
+    } else {
+      rendered_.push_back(path.filename().string() + " " + detail);
+    }
+    // Both lists open, scrolled to the end of the second.
+    GtkWidget* lists = nullptr;
+    for (const RowRecord& record : context_->rows()) {
+      if (record.row != nullptr && ADW_IS_EXPANDER_ROW(record.row) &&
+          record.section == Section::kAdvanced &&
+          (record.title == _("Left to Roblox") ||
+           record.title == _("Always set by Mocktail"))) {
+        adw_expander_row_set_expanded(ADW_EXPANDER_ROW(record.row), TRUE);
+        lists = record.row;
+      }
+    }
+    if (lists == nullptr) Error("the overview's lists are missing");
+    decides_lists_ = lists;
+    return kSettleMilliseconds * 2;
+  });
+  // Once they are open, their last row can take focus.
+  steps_.push_back([this] {
+    if (decides_lists_ != nullptr) {
+      GtkWidget* last = LastActionRow(decides_lists_);
+      window_->Reveal(last != nullptr ? last : decides_lists_);
+    }
+    return kSettleMilliseconds * 2;
+  });
+  steps_.push_back([this] {
+    const int width = gtk_widget_get_width(window_->widget());
+    const std::filesystem::path path =
+        out_dir_ / ("decides-lists-" + std::to_string(width) + ".png");
+    std::string detail;
+    if (!Render(window_->content(), path, &detail)) {
+      Error("cannot render " + path.string());
+    } else {
+      rendered_.push_back(path.filename().string() + " " + detail);
+    }
+    window_->ShowSection(Section::kGraphics);
+    return kSettleMilliseconds;
+  });
+  steps_.push_back(
+      [this] { return RenderSection(Section::kGraphics, "overrides"); });
+  steps_.push_back([this] {
+    window_->ShowSection(Section::kDisplay);
+    return kSettleMilliseconds;
+  });
+  steps_.push_back(
+      [this] { return RenderSection(Section::kDisplay, "overrides"); });
+  steps_.push_back([this] {
+    context_->Discard();
+    return kSettleMilliseconds;
+  });
   // The proxy choice spans three keys: a manual proxy without a host must
   // block Save and Play, and "No proxy" must remove the host and port.
   steps_.push_back([this] {
@@ -776,6 +863,73 @@ guint Selftest::MoveEnvironment() {
   Note("environment_moved",
        context_->ignoring_environment() ? "true" : "false");
   return kSettleMilliseconds;
+}
+
+guint Selftest::ShowRobloxDecides() {
+  context_->SetValue("engine.graphics_quality", "12",
+                     launcher::ScalarKind::kInteger);
+  context_->SetValue("graphics.frame_rate_limit", "144",
+                     launcher::ScalarKind::kInteger);
+  context_->SetValue("display.start_mode", "fullscreen");
+  context_->SetValue("appearance.theme", "dark");
+  context_->SetValue("audio.input_device", "disabled");
+  const GameSettings settings = CurrentGameSettings(*context_);
+  const std::vector<RobloxOverride> overrides =
+      ResolveRobloxOverrides(settings);
+  Note("roblox_overrides", std::to_string(overrides.size()));
+  // Quality, frame rate, start mode, theme, the preset, the microphone and
+  // the PC profile.
+  if (overrides.size() != 7) {
+    Error("expected 7 overrides of Roblox's settings, have " +
+          std::to_string(overrides.size()));
+  }
+  if (FindOverrideConflicts(settings).size() != 1) {
+    Error("level 12 under the preset is not reported as a conflict");
+  }
+  // Every row whose value causes an override shows the badge, and only
+  // those.
+  int badges = 0;
+  for (const RowRecord& record : context_->rows()) {
+    // The self-test's own rows have no hints.
+    if (record.row == nullptr || record.kind == RowKind::kAction ||
+        (binding_page_ != nullptr &&
+         gtk_widget_is_ancestor(record.row, binding_page_))) {
+      continue;
+    }
+    GtkWidget* badge = FindByClass(record.row, "override-badge");
+    const bool shown = badge != nullptr && gtk_widget_get_visible(badge);
+    const bool expected = RobloxOverrideOf(settings, record.key).has_value();
+    if (shown != expected) {
+      Error("the override badge of " + record.key + " is " +
+            (shown ? "shown" : "hidden"));
+    }
+    if (shown) ++badges;
+    // Under the subtitle, in the box of the row's title and subtitle.
+    if (shown && record.key == "engine.graphics_quality") {
+      GtkWidget* parent = gtk_widget_get_parent(badge);
+      const bool under_subtitle =
+          parent != nullptr && gtk_widget_has_css_class(parent, "title");
+      Note("override_badge_under_subtitle", under_subtitle ? "true" : "false");
+      if (!under_subtitle) {
+        warnings_.push_back("the override badge is among the row's suffixes");
+      }
+    }
+  }
+  Note("override_badges", std::to_string(badges));
+  GtkWidget* first = nullptr;
+  for (const RowRecord& record : context_->rows()) {
+    if (first == nullptr && record.row != nullptr &&
+        record.section == Section::kAdvanced &&
+        record.title == _("Graphics Quality slider")) {
+      first = record.row;
+    }
+  }
+  if (first == nullptr || !gtk_widget_get_visible(first)) {
+    Error("the overview does not list the graphics quality override");
+  } else {
+    window_->Reveal(first);
+  }
+  return kSettleMilliseconds * 2;
 }
 
 guint Selftest::Resize(int width, int height) {

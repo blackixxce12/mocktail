@@ -15,6 +15,7 @@
 #include "launcher_ui/page_rules.h"
 #include "launcher_ui/page_widgets.h"
 #include "launcher_ui/pages.h"
+#include "launcher_ui/roblox_decides.h"
 #include "runtime/environment.h"
 
 namespace mocktail::launcher_ui {
@@ -50,6 +51,7 @@ GtkWidget* BuildDeviceRow(LauncherContext* context) {
         _("A computer with a mouse and keyboard gets Roblox's "
           "full desktop interface."));
   };
+  spec.hint.overrides_roblox = RobloxOverrideHint("device");
   spec.hint.warning = [](LauncherContext&, const std::string& value) {
     const std::string preset = CanonicalDevicePreset(value);
     if (preset == "mobile-pixel-7") {
@@ -466,6 +468,8 @@ GtkWidget* BuildAdvancedPage(LauncherContext* context) {
                                  "on"));
   AddRow(device, BuildDeviceRow(context));
   AddRow(device, BuildCustomDeviceRow(context));
+
+  AddRobloxDecidesGroup(context, page);
 
   GtkWidget* flags =
       AddGroup(page, _("Fast Flags"),

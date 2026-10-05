@@ -16,5 +16,6 @@ src/launcher_ui/network_updates_status.cc
 src/launcher_ui/page_widgets.cc
 src/launcher_ui/pages.cc
 src/launcher_ui/performance_page.cc
+src/launcher_ui/roblox_decides.cc
 src/launcher_ui/selftest.cc
 src/launcher_ui/window.cc

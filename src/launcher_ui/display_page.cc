@@ -15,6 +15,7 @@
 #include "launcher_ui/page_widgets.h"
 #include "launcher_ui/pages.h"
 #include "launcher_ui/recommendations.h"
+#include "launcher_ui/roblox_decides.h"
 #include "window/video_driver_policy.h"
 
 namespace mocktail::launcher_ui {
@@ -625,6 +626,7 @@ GtkWidget* BuildStartModeRow(LauncherContext* context,
   spec.keywords = {"fullscreen", "windowed",     "maximized", "start mode",
                    "f11",        "полный экран", "окно",      "развёрнутым",
                    "режим",      "запуск"};
+  spec.hint.overrides_roblox = RobloxOverrideHint(kStartModeKey);
   spec.hint.details =
       _("How the game window opens. The game still remembers the mode each "
         "session ends in, and F11 or Roblox's own fullscreen setting switch "
@@ -1109,6 +1111,7 @@ GtkWidget* BuildThemeRow(LauncherContext* context) {
   spec.fallback = "roblox";
   spec.keywords = {"theme", "dark",   "light",   "appearance",
                    "тема",  "тёмная", "светлая", "оформление"};
+  spec.hint.overrides_roblox = RobloxOverrideHint("appearance.theme");
   spec.hint.details =
       _("The theme of Roblox's own menus and screens, chosen when the game "
         "starts.") +

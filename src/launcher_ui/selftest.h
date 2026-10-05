@@ -57,6 +57,8 @@ class Selftest {
   guint OpenEnvironmentDialog();
   guint RenderEnvironmentDialog();
   guint MoveEnvironment();
+  // Sets every kind of Roblox override and opens the overview.
+  guint ShowRobloxDecides();
   guint Resize(int width, int height);
   guint RecordResize(int requested_width);
   guint CheckHints();
@@ -83,6 +85,8 @@ class Selftest {
   GtkWidget* entry_row_ = nullptr;
   GtkWidget* combo_row_ = nullptr;
   GtkWidget* hint_button_ = nullptr;
+  // The overview's last list, opened before it is rendered.
+  GtkWidget* decides_lists_ = nullptr;
   std::vector<std::string> resize_observations_;
 };
 

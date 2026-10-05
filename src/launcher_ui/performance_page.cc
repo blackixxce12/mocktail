@@ -18,6 +18,7 @@
 #include "launcher_ui/launcher_context.h"
 #include "launcher_ui/pages.h"
 #include "launcher_ui/recommendations.h"
+#include "launcher_ui/roblox_decides.h"
 
 namespace mocktail::launcher_ui {
 namespace {
@@ -260,6 +261,7 @@ GtkWidget* BuildMultithreadedRow(LauncherContext* context) {
   // No recommendation: it only matters with Automatic physics workers, and
   // there turning it on also brings back the performance preset that
   // Automatic avoids, a trade only the player can weigh.
+  spec.hint.overrides_roblox = RobloxOverrideHint(kMultithreadedKey);
   return BindSwitchRow(context, std::move(spec));
 }
 
@@ -302,6 +304,7 @@ GtkWidget* BuildPhysicsRow(LauncherContext* context) {
       _("Keep Throughput for Mocktail's tuned, lighter rendering. Choose Low "
         "latency or Automatic to run Roblox closer to its own defaults, for "
         "example when textures look too blurry.");
+  spec.hint.overrides_roblox = RobloxOverrideHint(kPhysicsKey);
   ComboSpec combo;
   combo.options = {
       {"throughput",
@@ -723,6 +726,13 @@ GtkWidget* BuildPerformancePage(LauncherContext* context) {
   adw_expander_row_add_row(ADW_EXPANDER_ROW(advanced),
                            BuildPhysicsRow(context));
   AddRow(processor, advanced);
+
+  // The overview lives on the Advanced page; the preset decided here is
+  // most of it.
+  GtkWidget* roblox =
+      AddGroup(page, _("Roblox's own settings"),
+               _("Which of them the settings in this window take over"));
+  AddRow(roblox, BuildRobloxDecidesLinkRow(context));
 
   GtkWidget* system =
       AddGroup(page, _("System"),

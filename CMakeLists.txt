@@ -597,6 +597,7 @@ add_library(mocktail_launcher_ui_model STATIC
   src/launcher_ui/env_overrides.cc
   src/launcher_ui/machine_profile.cc
   src/launcher_ui/recommendations.cc
+  src/launcher_ui/roblox_overrides.cc
   src/launcher_ui/search_index.cc
   src/launcher_ui/setting_kinds.cc
   src/launcher_ui/settings_draft.cc
@@ -695,6 +696,7 @@ if(MOCKTAIL_BUILD_LAUNCHER_UI)
     src/launcher_ui/network_updates_page.cc
     src/launcher_ui/pages.cc
     src/launcher_ui/performance_page.cc
+    src/launcher_ui/roblox_decides.cc
     src/launcher_ui/selftest.cc
     src/launcher_ui/style.cc
     src/launcher_ui/window.cc

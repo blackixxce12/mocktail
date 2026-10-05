@@ -65,6 +65,22 @@ std::optional<double> ParseNumber(const std::string& text) {
   return static_cast<double>(value);
 }
 
+// The vertical box of an action row's title and subtitle labels
+// (AdwActionRow's template: GtkBox.title holding GtkLabel.title and
+// GtkLabel.subtitle), nullptr when the row has none.
+GtkWidget* FindTitleBox(GtkWidget* widget) {
+  for (GtkWidget* child = gtk_widget_get_first_child(widget); child != nullptr;
+       child = gtk_widget_get_next_sibling(child)) {
+    if (GTK_IS_BOX(child) && gtk_widget_has_css_class(child, "title") &&
+        gtk_orientable_get_orientation(GTK_ORIENTABLE(child)) ==
+            GTK_ORIENTATION_VERTICAL) {
+      return child;
+    }
+    if (GtkWidget* found = FindTitleBox(child)) return found;
+  }
+  return nullptr;
+}
+
 // Selectable labels select all their text when the popover focuses them;
 // start with nothing selected.
 void ClearSelections(GtkWidget* widget) {
@@ -132,6 +148,19 @@ class RowBinding {
     } else if (ADW_IS_EXPANDER_ROW(row)) {
       adw_expander_row_set_subtitle_lines(ADW_EXPANDER_ROW(row), 0);
     }
+    // Under the subtitle the badge costs the title and the value no width;
+    // among the suffixes it would squeeze the title to a narrow column.
+    override_badge_ = NewRobloxOverrideBadge();
+    gtk_widget_set_visible(override_badge_, FALSE);
+    if (GtkWidget* title_box = FindTitleBox(row)) {
+      gtk_widget_set_halign(override_badge_, GTK_ALIGN_START);
+      gtk_widget_set_margin_top(override_badge_, 4);
+      gtk_box_append(GTK_BOX(title_box), override_badge_);
+    } else {
+      override_badge_compact_ = true;
+      SetRobloxOverrideBadgeCompact(override_badge_, context_->narrow());
+      AddSuffix(override_badge_);
+    }
     env_badge_ = NewEnvBadge();
     gtk_widget_set_visible(env_badge_, FALSE);
     AddSuffix(env_badge_);
@@ -176,6 +205,11 @@ class RowBinding {
           Refresh();
         }));
     listeners_.push_back(context_->OnMachineChanged([this] { Refresh(); }));
+    if (override_badge_compact_) {
+      listeners_.push_back(context_->OnLayoutChanged([this](bool narrow) {
+        SetRobloxOverrideBadgeCompact(override_badge_, narrow);
+      }));
+    }
     Refresh();
   }
 
@@ -238,6 +272,13 @@ class RowBinding {
       gtk_widget_add_css_class(row_, "has-warning");
     }
 
+    const std::optional<RobloxOverrideNote> takeover =
+        spec_.hint.overrides_roblox ? spec_.hint.overrides_roblox(*context_)
+                                    : std::nullopt;
+    gtk_widget_set_visible(override_badge_, takeover.has_value());
+    if (takeover.has_value()) {
+      SetRobloxOverrideBadgeSummary(override_badge_, takeover->summary);
+    }
     gtk_widget_set_visible(env_badge_, env != nullptr);
     if (env != nullptr) {
       gtk_widget_set_tooltip_text(
@@ -371,6 +412,30 @@ class RowBinding {
       gtk_box_append(GTK_BOX(box), NewWrappedLabel(paragraph, true));
     }
 
+    if (spec_.hint.overrides_roblox) {
+      if (const std::optional<RobloxOverrideNote> takeover =
+              spec_.hint.overrides_roblox(*context_)) {
+        GtkWidget* section = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+        GtkWidget* badge = NewRobloxOverrideBadge(takeover->summary);
+        gtk_widget_set_halign(badge, GTK_ALIGN_START);
+        gtk_box_append(GTK_BOX(section), badge);
+        gtk_box_append(GTK_BOX(section),
+                       NewWrappedLabel(takeover->summary + ".", true));
+        if (!takeover->details.empty()) {
+          gtk_box_append(GTK_BOX(section),
+                         NewWrappedLabel(takeover->details, true));
+        }
+        if (!takeover->give_back.empty()) {
+          gtk_box_append(
+              GTK_BOX(section),
+              NewWrappedLabel(Format(_("To give Roblox control back: %s"),
+                                     takeover->give_back.c_str()),
+                              true));
+        }
+        gtk_box_append(GTK_BOX(box), section);
+      }
+    }
+
     if (spec_.hint.recommend && context_->machine().detected) {
       const std::optional<std::string> recommended =
           spec_.hint.recommend(context_->machine());
@@ -379,8 +444,10 @@ class RowBinding {
         GtkWidget* badge = NewRecommendedBadge();
         gtk_widget_set_halign(badge, GTK_ALIGN_START);
         gtk_box_append(GTK_BOX(line), badge);
-        std::string text =
-            Format(_("For this computer: %s."), LabelFor(*recommended).c_str());
+        // "Вкл." already ends the sentence.
+        std::string label = LabelFor(*recommended);
+        if (!label.empty() && label.back() == '.') label.pop_back();
+        std::string text = Format(_("For this computer: %s."), label.c_str());
         if (spec_.hint.recommend_reason) {
           const std::string reason =
               spec_.hint.recommend_reason(context_->machine());
@@ -441,6 +508,9 @@ class RowBinding {
 
   std::vector<LauncherContext::ListenerId> listeners_;
   RowKind kind_ = RowKind::kAction;
+  GtkWidget* override_badge_ = nullptr;
+  // The badge is among the suffixes and keeps only its icon when narrow.
+  bool override_badge_compact_ = false;
   GtkWidget* env_badge_ = nullptr;
   GtkWidget* reset_button_ = nullptr;
   int search_id_ = -1;
@@ -996,6 +1066,50 @@ GtkWidget* NewEnvBadge() {
       GTK_ACCESSIBLE(badge), GTK_ACCESSIBLE_PROPERTY_LABEL,
       _("Overridden by an environment variable"), -1);
   return badge;
+}
+
+GtkWidget* NewRobloxOverrideBadge(const std::string& summary) {
+  GtkWidget* badge = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+  gtk_widget_add_css_class(badge, "override-badge");
+  gtk_widget_set_valign(badge, GTK_ALIGN_CENTER);
+  gtk_accessible_update_property(GTK_ACCESSIBLE(badge),
+                                 GTK_ACCESSIBLE_PROPERTY_LABEL,
+                                 _("Overrides Roblox setting"), -1);
+  GtkWidget* icon = gtk_image_new_from_icon_name("input-gaming-symbolic");
+  gtk_accessible_update_state(GTK_ACCESSIBLE(icon), GTK_ACCESSIBLE_STATE_HIDDEN,
+                              TRUE, -1);
+  gtk_box_append(GTK_BOX(badge), icon);
+  GtkWidget* label = gtk_label_new(_("Overrides Roblox setting"));
+  // A narrow row wraps it instead of widening the title column.
+  gtk_label_set_wrap(GTK_LABEL(label), TRUE);
+  gtk_label_set_natural_wrap_mode(GTK_LABEL(label), GTK_NATURAL_WRAP_WORD);
+  gtk_label_set_xalign(GTK_LABEL(label), 0.0F);
+  gtk_accessible_update_state(GTK_ACCESSIBLE(label),
+                              GTK_ACCESSIBLE_STATE_HIDDEN, TRUE, -1);
+  gtk_box_append(GTK_BOX(badge), label);
+  SetRobloxOverrideBadgeSummary(badge, summary);
+  return badge;
+}
+
+void SetRobloxOverrideBadgeSummary(GtkWidget* badge,
+                                   const std::string& summary) {
+  gtk_widget_set_tooltip_text(badge,
+                              summary.empty() ? nullptr : summary.c_str());
+  gtk_accessible_update_property(GTK_ACCESSIBLE(badge),
+                                 GTK_ACCESSIBLE_PROPERTY_DESCRIPTION,
+                                 summary.c_str(), -1);
+}
+
+void SetRobloxOverrideBadgeCompact(GtkWidget* badge, bool compact) {
+  GtkWidget* icon = gtk_widget_get_first_child(badge);
+  GtkWidget* label = icon != nullptr ? gtk_widget_get_next_sibling(icon)
+                                     : nullptr;
+  if (label != nullptr) gtk_widget_set_visible(label, !compact);
+  if (compact) {
+    gtk_widget_add_css_class(badge, "compact");
+  } else {
+    gtk_widget_remove_css_class(badge, "compact");
+  }
 }
 
 void SetMinimumTextWidth(GtkWidget* label, long characters) {

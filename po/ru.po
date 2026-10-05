@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: mocktail\n"
 "Report-Msgid-Bugs-To: https://github.com/komaruworld/mocktail/issues\n"
-"PO-Revision-Date: 2026-10-05 16:28+0400\n"
+"PO-Revision-Date: 2026-10-05 17:00+0400\n"
 "Last-Translator: Mocktail Project Authors\n"
 "Language-Team: Russian\n"
 "Language: ru\n"
@@ -3100,3 +3100,296 @@ msgstr "Диагностика"
 
 msgid "For reporting a problem to Mocktail's authors"
 msgstr "Для сообщений о проблемах авторам Mocktail"
+
+
+#, c-format
+msgid "To give Roblox control back: %s"
+msgstr "Чтобы вернуть управление Roblox: %s"
+
+msgid "Overrides Roblox setting"
+msgstr "Перекрывает настройку игры"
+
+msgid "Roblox's own settings"
+msgstr "Собственные настройки Roblox"
+
+msgid "Which of them the settings in this window take over"
+msgstr "Какие из них перекрывают настройки этого окна"
+
+msgid "Graphics Quality slider"
+msgstr "Ползунок «Качество графики»"
+
+msgid "Anti-aliasing, textures and level of detail"
+msgstr "Сглаживание, текстуры и детализация"
+
+msgid "Maximum Frame Rate"
+msgstr "Максимальная частота кадров"
+
+msgid "Voice chat microphone"
+msgstr "Микрофон голосового чата"
+
+msgid "Device and interface"
+msgstr "Устройство и интерфейс"
+
+#, c-format
+msgid "Mocktail forces graphics quality level %d, so Roblox's Graphics Quality slider has no effect"
+msgstr "Mocktail задаёт уровень качества графики %d, поэтому ползунок «Качество графики» в Roblox не действует"
+
+msgid "Mocktail's performance preset replaces Roblox's own choices for anti-aliasing, texture memory, level of detail, shadows and sound channels"
+msgstr "Пресет производительности Mocktail заменяет собственный выбор Roblox для сглаживания, памяти под текстуры, детализации, теней и числа звуков"
+
+#, c-format
+msgid "Mocktail sets Roblox's frame-rate target to %d FPS, the most Roblox's menu offers"
+msgstr "Mocktail задаёт Roblox целевую частоту %d FPS — максимум, который предлагает меню Roblox"
+
+#, c-format
+msgid "Mocktail sets Roblox's frame-rate target to %d FPS"
+msgstr "Mocktail задаёт Roblox целевую частоту %d FPS"
+
+msgid "Every start saves Light as Roblox's theme"
+msgstr "При каждом запуске тема Roblox сохраняется как светлая"
+
+msgid "Every start saves Dark as Roblox's theme"
+msgstr "При каждом запуске тема Roblox сохраняется как тёмная"
+
+msgid "Every start saves your desktop's light or dark preference as Roblox's theme"
+msgstr "При каждом запуске тема Roblox сохраняется светлой или тёмной, как предпочитает рабочий стол"
+
+msgid "Every start turns Roblox's Fullscreen setting on, to match the window"
+msgstr "При каждом запуске полноэкранный режим в настройках Roblox включается, чтобы совпасть с окном"
+
+msgid "Every start turns Roblox's Fullscreen setting off, to match the window"
+msgstr "При каждом запуске полноэкранный режим в настройках Roblox выключается, чтобы совпасть с окном"
+
+msgid "Roblox is refused the microphone, so voice chat cannot record"
+msgstr "Roblox не получает доступа к микрофону, поэтому голосовой чат не может записывать"
+
+msgid "Roblox's servers treat you as a console player when deciding which experiences let you in"
+msgstr "Серверы Roblox считают вас игроком на консоли, когда решают, в какие игры вас пускать"
+
+msgid "Roblox shows its desktop interface instead of the layout its servers choose for Android"
+msgstr "Roblox показывает настольный интерфейс вместо того, который его серверы выбирают для Android"
+
+msgid "Mocktail's performance preset sets FIntDebugFRMQualityLevelOverride, which replaces the level the Graphics Quality option in Roblox's settings would choose."
+msgstr "Пресет производительности Mocktail задаёт FIntDebugFRMQualityLevelOverride, а он заменяет уровень, который выбрал бы параметр «Качество графики» в настройках Roblox."
+
+msgid "While the preset is on, Mocktail sets these Roblox client settings at every start, in place of what Roblox would choose itself: MSAA off (FIntDebugForceMSAASamples=1), a 128 MB texture budget (FIntRenderTextureTotalBudgetMB), a texture mip bias (FIntRenderTextureMipBias), low-end level of detail (FFlagRenderEnableLowEndLOD), one shadow-map mip (FIntTM2ShadowMapMaxMips) and at most 32 sounds at once (FIntMaxAudibleSoundChannels). Unless Graphics quality is set to “Roblox in-game slider”, it also forces the quality level."
+msgstr "Пока пресет включён, Mocktail при каждом запуске задаёт эти параметры клиента Roblox вместо того, что выбрал бы сам Roblox: MSAA выключено (FIntDebugForceMSAASamples=1), бюджет текстур 128 МБ (FIntRenderTextureTotalBudgetMB), смещение мип-уровней текстур (FIntRenderTextureMipBias), детализация для слабых устройств (FFlagRenderEnableLowEndLOD), один мип-уровень карты теней (FIntTM2ShadowMapMaxMips) и не больше 32 звуков одновременно (FIntMaxAudibleSoundChannels). Если в «Качестве графики» не выбран «Ползунок в игре Roblox», пресет задаёт и уровень качества."
+
+msgid "DFIntTaskSchedulerTargetFps replaces the target that Roblox's Maximum Frame Rate menu would set. The menu stays in Roblox's settings, as Mocktail always turns it on (FFlagGameBasicSettingsFramerateCap5); whether a lower choice there still caps the game is not verified for this Roblox build."
+msgstr "DFIntTaskSchedulerTargetFps заменяет цель, которую задало бы меню «Максимальная частота кадров» в Roblox. Само меню остаётся в настройках Roblox, потому что Mocktail всегда его включает (FFlagGameBasicSettingsFramerateCap5); ограничивает ли игру выбранное там меньшее значение, для этой сборки Roblox не проверено."
+
+msgid "Mocktail writes the theme into Roblox's local settings (AuthenticatedTheme, and DeviceLevelTheme for the signed-in account) before Roblox starts, so a theme picked in Roblox's own settings lasts only until the next start."
+msgstr "Mocktail записывает тему в локальные настройки Roblox (AuthenticatedTheme и DeviceLevelTheme для вошедшего аккаунта) до запуска Roblox, поэтому тема, выбранная в настройках самого Roblox, сохраняется только до следующего запуска."
+
+msgid "After the first frame Mocktail sets Roblox's own fullscreen setting to match the window, so the mode the last session ended in does not carry over. Roblox's fullscreen switch and F11 still work while you play."
+msgstr "После первого кадра Mocktail приводит полноэкранный режим в настройках Roblox в соответствие с окном, поэтому режим, в котором закончился прошлый сеанс, не переносится. Переключатель полноэкранного режима в Roblox и F11 во время игры работают как обычно."
+
+msgid "Mocktail answers Roblox's microphone permission request with a refusal, so voice chat cannot record even when it is on in Roblox's settings. DFFlagVoiceChatSkipPermissionCheckForTests stays off, so Roblox cannot skip that check."
+msgstr "На запрос Roblox о доступе к микрофону Mocktail отвечает отказом, поэтому голосовой чат не может записывать, даже если он включён в настройках Roblox. DFFlagVoiceChatSkipPermissionCheckForTests остаётся выключенным, так что Roblox не может пропустить эту проверку."
+
+msgid "The console profile identifies the game to Roblox's experience access check as a console (Roblox/XboxOne), without the desktop layout; mouse and keyboard stay available. It is experimental."
+msgstr "Профиль консоли представляет игру проверке Roblox, решающей, в какие игры пускать, как консоль (Roblox/XboxOne), без настольного интерфейса; мышь и клавиатура остаются доступны. Это экспериментальная возможность."
+
+msgid "The PC profile reports a Windows 11 computer with mouse and keyboard, and Mocktail rewrites the app policy Roblox keeps for Android to its desktop layout (FStringAppConfigurationOverrideAppPolicy)."
+msgstr "Профиль ПК сообщает о компьютере с Windows 11, мышью и клавиатурой, а Mocktail переписывает политику приложения, которую Roblox хранит для Android, на настольный интерфейс (FStringAppConfigurationOverrideAppPolicy)."
+
+msgid "Level 1 is Mocktail's choice for Intel integrated graphics with Vulkan; other graphics get level 3."
+msgstr "Уровень 1 Mocktail выбирает для встроенной графики Intel с Vulkan; остальная графика получает уровень 3."
+
+msgid "With the PC device profile, Light and Dark are also set as ForceTheme in the app policy Mocktail gives Roblox."
+msgstr "С профилем устройства ПК светлая и тёмная темы ещё и задаются как ForceTheme в политике приложения, которую Mocktail передаёт Roblox."
+
+msgid "choose “Roblox in-game slider” under Graphics quality."
+msgstr "выберите «Ползунок в игре Roblox» в «Качестве графики»."
+
+msgid "set Physics workers to Low latency, or to Automatic with Multithreaded rendering off."
+msgstr "выберите в «Потоках физики» «Низкая задержка» или «Автоматически» с выключенным многопоточным рендерингом."
+
+msgid "turn Multithreaded rendering off, or set Physics workers to Low latency."
+msgstr "выключите многопоточный рендеринг или выберите в «Потоках физики» «Низкая задержка»."
+
+msgid "choose “Set in Roblox” under Frame rate limit."
+msgstr "выберите «Как в Roblox» в «Ограничении FPS»."
+
+msgid "choose “From your Roblox account” under Theme."
+msgstr "выберите «Из аккаунта Roblox» в «Теме»."
+
+msgid "choose “Last used mode” under Start in: every start then reopens the mode the last session ended in, Roblox's own switch included."
+msgstr "выберите «Как в прошлый раз» в «При запуске»: тогда каждый запуск открывает тот режим, в котором закончился прошлый сеанс, в том числе выбранный переключателем Roblox."
+
+msgid "choose System default or a microphone under Microphone."
+msgstr "выберите «Как в системе» или конкретный микрофон в «Микрофоне»."
+
+msgid "choose PC (Windows 11) or Phone (Google Pixel 7) under Device profile."
+msgstr "выберите «ПК (Windows 11)» или «Телефон (Google Pixel 7)» в «Профиле устройства»."
+
+msgid "choose Phone (Google Pixel 7) under Device profile, the profile Roblox for Android expects; it suits a touchscreen."
+msgstr "выберите «Телефон (Google Pixel 7)» в «Профиле устройства» — профиль, которого ждёт Roblox для Android; он подходит для сенсорного экрана."
+
+msgid "Volume"
+msgstr "Громкость"
+
+msgid "Camera sensitivity"
+msgstr "Чувствительность камеры"
+
+msgid "Camera mode"
+msgstr "Режим камеры"
+
+msgid "Chat"
+msgstr "Чат"
+
+msgid "Sound output while playing"
+msgstr "Вывод звука во время игры"
+
+msgid "Roblox's volume slider; Mocktail sets no volume"
+msgstr "Ползунок громкости Roblox; Mocktail громкость не задаёт"
+
+msgid "Roblox's own setting; nothing Mocktail sets changes it"
+msgstr "Собственная настройка Roblox; ничто из заданного Mocktail её не меняет"
+
+msgid "Roblox's chat settings; nothing Mocktail sets changes them"
+msgstr "Настройки чата Roblox; ничто из заданного Mocktail их не меняет"
+
+msgid "Roblox's audio settings can switch it; Audio › Output device picks it at start"
+msgstr "Его можно переключить в настройках звука Roblox; «Звук» › «Устройство вывода» выбирает его при запуске"
+
+msgid "Roblox's slider picks the level; the performance preset's other limits stay"
+msgstr "Уровень выбирает ползунок Roblox; остальные ограничения пресета производительности остаются"
+
+msgid "Roblox's slider picks the level"
+msgstr "Уровень выбирает ползунок Roblox"
+
+msgid "Roblox's menu sets the cap; Mocktail sets no target"
+msgstr "Предел задаёт меню Roblox; Mocktail цель не задаёт"
+
+msgid "Roblox's switch; every start reopens the mode the last session ended in"
+msgstr "Переключатель Roblox; каждый запуск открывает режим, в котором закончился прошлый сеанс"
+
+msgid "The theme saved in your Roblox settings"
+msgstr "Тема, сохранённая в ваших настройках Roblox"
+
+msgid "Roblox's voice chat settings decide whether it records"
+msgstr "Записывает ли он, решают настройки голосового чата Roblox"
+
+msgid "Maximum Frame Rate menu"
+msgstr "Меню «Максимальная частота кадров»"
+
+msgid "In-game audio device menu"
+msgstr "Меню звуковых устройств в игре"
+
+msgid "Microphone permission check"
+msgstr "Проверка доступа к микрофону"
+
+msgid "Video memory budget"
+msgstr "Бюджет видеопамяти"
+
+msgid "Web requests"
+msgstr "Веб-запросы"
+
+msgid "Crash reports"
+msgstr "Отчёты о сбоях"
+
+#, c-format
+msgid "%d MiB"
+msgstr "%d МиБ"
+
+msgid "On, so Roblox always offers its own frame-rate menu"
+msgstr "Включено, чтобы Roblox всегда предлагал собственное меню частоты кадров"
+
+msgid "Off, so the menu lists this computer's sound devices through Mocktail's bridge; set for the Roblox versions whose audio devices Mocktail bridges"
+msgstr "Выключено, чтобы меню показывало звуковые устройства этого компьютера через мост Mocktail; задаётся для тех версий Roblox, звуковые устройства которых Mocktail пробрасывает"
+
+msgid "Off, so a disabled microphone stays disabled"
+msgstr "Выключено, чтобы отключённый микрофон оставался отключённым"
+
+msgid "An eighth of this computer's memory, kept between 256 and 1536 MiB, instead of the 64 MiB Roblox for Android assumes; a value in fflags.json wins"
+msgstr "Восьмая часть памяти этого компьютера, от 256 до 1536 МиБ, вместо 64 МиБ, на которые рассчитывает Roblox для Android; значение из fflags.json важнее"
+
+msgid "Left to Roblox: this computer has less than 4 GiB of memory"
+msgstr "Оставлено Roblox: у этого компьютера меньше 4 ГиБ памяти"
+
+#, c-format
+msgid "%s here: an eighth of this computer's memory, kept between 256 and 1536 MiB, instead of the 64 MiB Roblox for Android assumes; a value in fflags.json wins"
+msgstr "Здесь %s: восьмая часть памяти этого компьютера, от 256 до 1536 МиБ, вместо 64 МиБ, на которые рассчитывает Roblox для Android; значение из fflags.json важнее"
+
+msgid "Keep Roblox's web requests on code paths that work under Mocktail"
+msgstr "Оставляют веб-запросы Roblox на путях кода, которые работают в Mocktail"
+
+msgid "Roblox's crash and error uploads are off"
+msgstr "Отправка отчётов о сбоях и ошибках Roblox выключена"
+
+#, c-format
+msgid "Decided by %s"
+msgstr "Решается в: %s"
+
+msgid "The device profile decides which interface Roblox shows and how Roblox's servers see the device: the PC profile gets the desktop layout, the console profile a console's access to experiences. Only the Phone profile leaves both to Roblox for Android."
+msgstr "Профиль устройства решает, какой интерфейс показывает Roblox и каким устройство видят серверы Roblox: профиль ПК получает настольный интерфейс, профиль консоли — доступ к играм как у консоли. Только профиль телефона оставляет и то и другое на усмотрение Roblox для Android."
+
+msgid "Nothing is taken over"
+msgstr "Ничего не перекрыто"
+
+msgid "Roblox's own settings decide everything Mocktail could take over"
+msgstr "Всё, что Mocktail мог бы перекрыть, решают собственные настройки Roblox"
+
+msgid "With the current settings no row in this window replaces one of Roblox's own settings: the performance preset is off, Roblox owns the frame rate, the fullscreen setting and the theme, the microphone is enabled, and the Phone profile leaves the interface to Roblox for Android."
+msgstr "При текущих настройках ни одна строка этого окна не заменяет собственные настройки Roblox: пресет производительности выключен, частоту кадров, полноэкранный режим и тему решает Roblox, микрофон включён, а профиль телефона оставляет интерфейс на усмотрение Roblox для Android."
+
+msgid "Other preset limits remain"
+msgstr "Остальные ограничения пресета остаются"
+
+msgid "Graphics quality only sets the level. The rest of the performance preset (MSAA off, a 128 MB texture budget, low-end level of detail, simpler shadows) stays while Physics workers is on Throughput, or on Automatic with Multithreaded rendering, whatever level Roblox runs at."
+msgstr "«Качество графики» задаёт только уровень. Остальная часть пресета производительности (MSAA выключено, бюджет текстур 128 МБ, детализация для слабых устройств, упрощённые тени) остаётся, пока «Потоки физики» стоят на «Пропускная способность» или на «Автоматически» с многопоточным рендерингом, на каком бы уровне ни работал Roblox."
+
+msgid "Left to Roblox"
+msgstr "Остаётся за Roblox"
+
+#, c-format
+msgid "%d of Roblox's own settings stays in its hands"
+msgid_plural "%d of Roblox's own settings stay in its hands"
+msgstr[0] "%d собственная настройка Roblox остаётся за ним"
+msgstr[1] "%d собственные настройки Roblox остаются за ним"
+msgstr[2] "%d собственных настроек Roblox остаются за ним"
+
+msgid "Settings in Roblox's own menus that nothing in this window replaces with the current settings: what you choose there stays."
+msgstr "Настройки в меню самого Roblox, которые при текущих настройках ничто в этом окне не заменяет: то, что вы там выберете, сохранится."
+
+msgid "Volume, camera and chat are never touched. The graphics level, the frame rate, fullscreen, the theme and the voice chat microphone are listed here only while no row above takes them over."
+msgstr "Громкость, камеру и чат Mocktail никогда не трогает. Уровень графики, частота кадров, полноэкранный режим, тема и микрофон голосового чата перечислены здесь, только пока их не перекрывает ни одна строка выше."
+
+msgid "Always set by Mocktail"
+msgstr "Всегда задаёт Mocktail"
+
+msgid "Roblox client settings Mocktail sets at every start, whatever the settings say"
+msgstr "Параметры клиента Roblox, которые Mocktail задаёт при каждом запуске, что бы ни говорили настройки"
+
+msgid "These keep Roblox for Android working on a computer. No row in this window changes them, and Roblox has no menu for them."
+msgstr "Они нужны, чтобы Roblox для Android работал на компьютере. Ни одна строка этого окна их не меняет, и меню для них в Roblox нет."
+
+msgid "fflags.json cannot change them: Mocktail replaces its values for web requests, crash reports, the audio device menu and the microphone check, and refuses to start when it sets the frame-rate menu flag to another value. Only a video memory budget in fflags.json wins over Mocktail's."
+msgstr "fflags.json не может их изменить: для веб-запросов, отчётов о сбоях, меню звуковых устройств и проверки микрофона Mocktail заменяет его значения, а если он задаёт флаг меню частоты кадров по-другому, Mocktail отказывается запускаться. Только бюджет видеопамяти из fflags.json важнее значения Mocktail."
+
+#, c-format
+msgid "Level %d is forced, but the performance preset still keeps MSAA off, textures at 128 MB and low-end level of detail, so the higher level gains less than it would. Set Physics workers to Low latency to lift those limits."
+msgstr "Задан уровень %d, но пресет производительности по-прежнему держит MSAA выключенным, текстуры в 128 МБ и детализацию для слабых устройств, так что высокий уровень даёт меньше, чем мог бы. Чтобы снять эти ограничения, выберите в «Потоках физики» «Низкая задержка»."
+
+msgid "Roblox's slider picks the level, but the performance preset still keeps MSAA off, textures at 128 MB and low-end level of detail. Set Physics workers to Low latency to lift those limits."
+msgstr "Уровень выбирает ползунок Roblox, но пресет производительности по-прежнему держит MSAA выключенным, текстуры в 128 МБ и детализацию для слабых устройств. Чтобы снять эти ограничения, выберите в «Потоках физики» «Низкая задержка»."
+
+msgid "What Mocktail decides and what Roblox decides"
+msgstr "Что решает Mocktail, а что — Roblox"
+
+msgid "Roblox's own settings that the settings in this window take over at the next start; select one to open the row that decides it"
+msgstr "Собственные настройки Roblox, которые настройки этого окна перекроют при следующем запуске; выберите строку, чтобы открыть настройку, которая это решает"
+
+#, c-format
+msgid "Mocktail takes over %d of Roblox's own settings now; see which on the Advanced page"
+msgid_plural "Mocktail takes over %d of Roblox's own settings now; see which on the Advanced page"
+msgstr[0] "Сейчас Mocktail перекрывает %d собственную настройку Roblox; какую — на странице «Дополнительно»"
+msgstr[1] "Сейчас Mocktail перекрывает %d собственные настройки Roblox; какие — на странице «Дополнительно»"
+msgstr[2] "Сейчас Mocktail перекрывает %d собственных настроек Roblox; какие — на странице «Дополнительно»"
+
+msgid "Opens the overview on the Advanced page: which of Roblox's own settings the current settings take over and which row does it, what stays in Roblox's hands, and the client settings Mocktail sets at every start."
+msgstr "Открывает обзор на странице «Дополнительно»: какие собственные настройки Roblox перекрывают текущие настройки и какая строка это делает, что остаётся за Roblox и какие параметры клиента Mocktail задаёт при каждом запуске."
+
+msgid "On this page, Physics workers and Multithreaded rendering decide whether the performance preset replaces Roblox's choices for anti-aliasing, textures, level of detail and the graphics quality level."
+msgstr "На этой странице «Потоки физики» и «Многопоточный рендеринг» решают, заменяет ли пресет производительности выбор Roblox для сглаживания, текстур, детализации и уровня качества графики."

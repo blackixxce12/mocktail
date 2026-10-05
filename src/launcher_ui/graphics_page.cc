@@ -10,6 +10,8 @@
 #include "launcher_ui/page_widgets.h"
 #include "launcher_ui/pages.h"
 #include "launcher_ui/recommendations.h"
+#include "launcher_ui/roblox_decides.h"
+#include "launcher_ui/roblox_overrides.h"
 #include "runtime/frame_rate_policy.h"
 #include "runtime/runtime_config.h"
 
@@ -628,8 +630,17 @@ GtkWidget* BuildGraphicsQualityRow(LauncherContext* context,
           _("No effect: Mocktail's performance preset is off "
             "(Performance › Physics workers)."));
     }
+    // roblox_overrides.h FindOverrideConflicts: a level above 3 under the
+    // preset's other limits.
+    const GameSettings settings = CurrentGameSettings(ctx);
+    for (const OverrideConflict conflict : FindOverrideConflicts(settings)) {
+      if (conflict == OverrideConflict::kHighLevelUnderPresetLimits) {
+        return DescribeOverrideConflict(conflict, settings);
+      }
+    }
     return std::string();
   };
+  spec.hint.overrides_roblox = RobloxOverrideHint(kQualityKey);
 
   ComboSpec combo;
   combo.options_for = QualityOptions;
@@ -663,6 +674,7 @@ GtkWidget* BuildQualityLevelRow(LauncherContext* context) {
       _("Change it in small steps and check the frame rate in a busy "
         "experience. Choose “Roblox in-game slider” above to let Roblox "
         "pick the level again.");
+  spec.hint.overrides_roblox = RobloxOverrideHint(kQualityKey);
   SpinSpec spin;
   spin.minimum = 1;
   spin.maximum = 21;
@@ -874,6 +886,8 @@ GtkWidget* BuildFrameRateRow(LauncherContext* context,
     return std::string();
   };
 
+  spec.hint.overrides_roblox = RobloxOverrideHint(kFrameRateKey);
+
   ComboSpec combo;
   combo.options_for = FrameRateOptions;
   combo.on_custom = [state](LauncherContext& ctx) {
@@ -904,6 +918,7 @@ GtkWidget* BuildCustomFrameRateRow(LauncherContext* context) {
       std::string("\n\n") +
       _("Pick the refresh rate of your screen, or a lower number to save "
         "power and heat. 240 is the highest rate Roblox's own menu offers.");
+  spec.hint.overrides_roblox = RobloxOverrideHint(kFrameRateKey);
   SpinSpec spin;
   spin.minimum = 1;
   spin.maximum = 1000;

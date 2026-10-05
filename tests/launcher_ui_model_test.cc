@@ -5,6 +5,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -17,6 +19,7 @@
 #include "launcher_ui/env_overrides.h"
 #include "launcher_ui/machine_profile.h"
 #include "launcher_ui/recommendations.h"
+#include "launcher_ui/roblox_overrides.h"
 #include "launcher_ui/search_index.h"
 #include "launcher_ui/setting_kinds.h"
 #include "launcher_ui/settings_draft.h"
@@ -1253,6 +1256,232 @@ TEST(GamePagesTest, ClassifiesSavedAudioDevices) {
             AudioDeviceState::kMissing);
   EXPECT_EQ(ClassifyAudioDevice("id:18", &devices, true),
             AudioDeviceState::kNumericId);
+}
+
+
+// ---- What Mocktail decides and what Roblox decides --------------------------
+
+std::vector<RobloxOverrideKind> OverrideKinds(const GameSettings& settings) {
+  std::vector<RobloxOverrideKind> kinds;
+  for (const RobloxOverride& entry : ResolveRobloxOverrides(settings)) {
+    kinds.push_back(entry.kind);
+  }
+  return kinds;
+}
+
+bool Owns(const GameSettings& settings, RobloxOwnedSetting setting) {
+  const std::vector<RobloxOwnedSetting> owned = RobloxOwnedSettings(settings);
+  return std::find(owned.begin(), owned.end(), setting) != owned.end();
+}
+
+TEST(RobloxOverridesTest, DefaultsForceTheQualityPresetAndDesktopLayout) {
+  // An empty config: physics workers on throughput turn the preset on
+  // (performance_policy.cc), which forces level 3, and the PC profile gives
+  // Roblox the desktop layout (main.cc ApplyDesktopAppPolicy).
+  const GameSettings settings;
+  EXPECT_EQ(OverrideKinds(settings),
+            (std::vector<RobloxOverrideKind>{
+                RobloxOverrideKind::kGraphicsQuality,
+                RobloxOverrideKind::kRenderingLimits,
+                RobloxOverrideKind::kDevice}));
+  const std::vector<RobloxOverride> overrides =
+      ResolveRobloxOverrides(settings);
+  EXPECT_EQ(overrides[0].key, "engine.graphics_quality");
+  EXPECT_EQ(overrides[0].number, 3);
+  EXPECT_EQ(overrides[0].value, "default");
+  EXPECT_EQ(overrides[1].key, "performance.physics_worker_mode");
+  EXPECT_EQ(overrides[2].key, "device");
+  EXPECT_EQ(overrides[2].value, "pc-windows-11");
+  EXPECT_FALSE(Owns(settings, RobloxOwnedSetting::kGraphicsQuality));
+  for (const RobloxOwnedSetting owned :
+       {RobloxOwnedSetting::kFrameRate, RobloxOwnedSetting::kFullscreen,
+        RobloxOwnedSetting::kTheme, RobloxOwnedSetting::kVolume,
+        RobloxOwnedSetting::kOutputSwitch, RobloxOwnedSetting::kVoiceChat,
+        RobloxOwnedSetting::kCameraSensitivity,
+        RobloxOwnedSetting::kCameraMode, RobloxOwnedSetting::kChat}) {
+    EXPECT_TRUE(Owns(settings, owned)) << static_cast<int>(owned);
+  }
+  EXPECT_TRUE(FindOverrideConflicts(settings).empty());
+
+  // Intel integrated graphics with Vulkan get level 1.
+  GameSettings intel;
+  intel.intel_integrated_vulkan = true;
+  EXPECT_EQ(RobloxOverrideOf(intel, "engine.graphics_quality")->number, 1);
+}
+
+TEST(RobloxOverridesTest, ThePresetFollowsBothPerformanceKeys) {
+  GameSettings settings;
+  settings.physics_worker_mode = "latency";
+  settings.multithreaded_rendering = "true";
+  settings.graphics_quality = "12";
+  // Low latency never merges the preset, so no level is forced either.
+  EXPECT_FALSE(RobloxOverrideOf(settings, "engine.graphics_quality"));
+  EXPECT_FALSE(RobloxOverrideOf(settings, "performance.physics_worker_mode"));
+  EXPECT_FALSE(
+      RobloxOverrideOf(settings, "performance.multithreaded_rendering"));
+  EXPECT_TRUE(Owns(settings, RobloxOwnedSetting::kGraphicsQuality));
+  EXPECT_TRUE(FindOverrideConflicts(settings).empty());
+
+  // Automatic physics workers: multithreaded rendering turns it on.
+  settings.physics_worker_mode = "auto";
+  std::optional<RobloxOverride> preset =
+      RobloxOverrideOf(settings, "performance.multithreaded_rendering");
+  ASSERT_TRUE(preset.has_value());
+  EXPECT_EQ(preset->kind, RobloxOverrideKind::kRenderingLimits);
+  EXPECT_FALSE(RobloxOverrideOf(settings, "performance.physics_worker_mode"));
+  EXPECT_EQ(RobloxOverrideOf(settings, "engine.graphics_quality")->number, 12);
+  settings.multithreaded_rendering = "false";
+  EXPECT_EQ(ResolveRobloxOverrides(settings).size(), 1U);  // the device
+
+  // Throughput turns it on by itself; multithreaded rendering adds nothing.
+  settings.physics_worker_mode = "throughput";
+  settings.multithreaded_rendering = "true";
+  preset = RobloxOverrideOf(settings, "performance.physics_worker_mode");
+  ASSERT_TRUE(preset.has_value());
+  EXPECT_FALSE(
+      RobloxOverrideOf(settings, "performance.multithreaded_rendering"));
+}
+
+TEST(RobloxOverridesTest, WarnsWhenThePresetStillLimitsAHigherLevel) {
+  GameSettings settings;
+  settings.graphics_quality = "12";
+  EXPECT_EQ(FindOverrideConflicts(settings),
+            (std::vector<OverrideConflict>{
+                OverrideConflict::kHighLevelUnderPresetLimits}));
+  const std::optional<RobloxOverride> quality =
+      RobloxOverrideOf(settings, "engine.graphics_quality");
+  ASSERT_TRUE(quality.has_value());
+  EXPECT_EQ(quality->value, "level");
+  EXPECT_EQ(quality->number, 12);
+  // Levels up to Mocktail's own 3 lose nothing to the preset.
+  settings.graphics_quality = "3";
+  EXPECT_TRUE(FindOverrideConflicts(settings).empty());
+  // Roblox's slider decides the level, the preset's other limits stay.
+  settings.graphics_quality = "manual";
+  EXPECT_FALSE(RobloxOverrideOf(settings, "engine.graphics_quality"));
+  EXPECT_TRUE(Owns(settings, RobloxOwnedSetting::kGraphicsQuality));
+  EXPECT_EQ(FindOverrideConflicts(settings),
+            (std::vector<OverrideConflict>{
+                OverrideConflict::kRobloxSliderUnderPresetLimits}));
+  // The environment's spellings of manual (ParseGraphicsQualityVariable).
+  settings.graphics_quality = "auto";
+  EXPECT_FALSE(RobloxOverrideOf(settings, "engine.graphics_quality"));
+  settings.graphics_quality = "0";
+  EXPECT_FALSE(RobloxOverrideOf(settings, "engine.graphics_quality"));
+}
+
+TEST(RobloxOverridesTest, FollowsTheFrameRatePolicy) {
+  // frame_rate_policy.cc: -1 and display set no target.
+  GameSettings settings;
+  for (const char* value : {"", "-1", "display", "fast"}) {
+    settings.frame_rate_limit = value;
+    EXPECT_FALSE(RobloxOverrideOf(settings, "graphics.frame_rate_limit"))
+        << value;
+    EXPECT_TRUE(Owns(settings, RobloxOwnedSetting::kFrameRate)) << value;
+  }
+  settings.frame_rate_limit = "144";
+  std::optional<RobloxOverride> target =
+      RobloxOverrideOf(settings, "graphics.frame_rate_limit");
+  ASSERT_TRUE(target.has_value());
+  EXPECT_EQ(target->number, 144);
+  EXPECT_EQ(target->value, "fixed");
+  EXPECT_FALSE(Owns(settings, RobloxOwnedSetting::kFrameRate));
+  settings.frame_rate_limit = "unlimited";
+  target = RobloxOverrideOf(settings, "graphics.frame_rate_limit");
+  ASSERT_TRUE(target.has_value());
+  EXPECT_EQ(target->number, 240);
+  EXPECT_EQ(target->value, "unlimited");
+}
+
+TEST(RobloxOverridesTest, FollowsTheWindowThemeMicrophoneAndDevice) {
+  GameSettings settings;
+  settings.physics_worker_mode = "latency";
+  settings.device = "mobile-pixel-7";
+  EXPECT_TRUE(ResolveRobloxOverrides(settings).empty());
+  for (const char* value : {"roblox", "remember", "default"}) {
+    settings.theme = value;
+    settings.start_mode = value;
+    settings.input_device = value;
+    EXPECT_TRUE(ResolveRobloxOverrides(settings).empty()) << value;
+  }
+
+  settings.theme = "dark";
+  settings.start_mode = "fullscreen";
+  settings.input_device = "disabled";
+  settings.device = "console";
+  EXPECT_EQ(OverrideKinds(settings),
+            (std::vector<RobloxOverrideKind>{
+                RobloxOverrideKind::kStartMode, RobloxOverrideKind::kTheme,
+                RobloxOverrideKind::kMicrophone,
+                RobloxOverrideKind::kDevice}));
+  EXPECT_EQ(RobloxOverrideOf(settings, "appearance.theme")->value, "dark");
+  EXPECT_EQ(RobloxOverrideOf(settings, "display.start_mode")->value,
+            "fullscreen");
+  EXPECT_EQ(RobloxOverrideOf(settings, "device")->value, "console-ps5");
+  EXPECT_FALSE(Owns(settings, RobloxOwnedSetting::kTheme));
+  EXPECT_FALSE(Owns(settings, RobloxOwnedSetting::kFullscreen));
+  EXPECT_FALSE(Owns(settings, RobloxOwnedSetting::kVoiceChat));
+  EXPECT_TRUE(Owns(settings, RobloxOwnedSetting::kVolume));
+
+  for (const char* value : {"system", "light"}) {
+    settings.theme = value;
+    EXPECT_TRUE(RobloxOverrideOf(settings, "appearance.theme")) << value;
+  }
+  for (const char* value : {"windowed", "maximized"}) {
+    settings.start_mode = value;
+    EXPECT_TRUE(RobloxOverrideOf(settings, "display.start_mode")) << value;
+  }
+  // An unknown profile does not load at all, so it decides nothing.
+  settings.device = "toaster";
+  EXPECT_FALSE(RobloxOverrideOf(settings, "device"));
+  settings.device = "pc";
+  EXPECT_EQ(RobloxOverrideOf(settings, "device")->value, "pc-windows-11");
+}
+
+TEST(RobloxOverridesTest, LeavesOnlyUntouchedSettingsWithEveryOverride) {
+  GameSettings settings;
+  settings.graphics_quality = "12";
+  settings.frame_rate_limit = "unlimited";
+  settings.start_mode = "windowed";
+  settings.theme = "system";
+  settings.input_device = "disabled";
+  EXPECT_EQ(ResolveRobloxOverrides(settings).size(), 7U);
+  EXPECT_EQ(RobloxOwnedSettings(settings),
+            (std::vector<RobloxOwnedSetting>{
+                RobloxOwnedSetting::kVolume, RobloxOwnedSetting::kOutputSwitch,
+                RobloxOwnedSetting::kCameraSensitivity,
+                RobloxOwnedSetting::kCameraMode, RobloxOwnedSetting::kChat}));
+  // Each override names the row whose value causes it.
+  for (const RobloxOverride& entry : ResolveRobloxOverrides(settings)) {
+    EXPECT_EQ(RobloxOverrideOf(settings, entry.key)->kind, entry.kind)
+        << entry.key;
+  }
+}
+
+TEST(RobloxOverridesTest, ListsTheAlwaysOnFlags) {
+  std::string names;
+  for (const AlwaysOnFlagInfo& info : AlwaysOnFlags()) {
+    EXPECT_FALSE(info.names.empty());
+    // The values the runtime sets; the video memory budget depends on the
+    // RAM.
+    EXPECT_EQ(info.names.find('=') == std::string_view::npos,
+              info.flag == AlwaysOnFlag::kVideoMemory)
+        << info.names;
+    names += std::string(info.names) + ",";
+  }
+  for (const char* flag :
+       {"FFlagGameBasicSettingsFramerateCap5",
+        "FFlagDebugUseWebRtcAudioDevices", "FFlagRemoteAudioDeviceSync",
+        "DFFlagVoiceChatSkipPermissionCheckForTests",
+        "FIntRenderForceVideoMemorySize"}) {
+    EXPECT_NE(names.find(flag), std::string::npos) << flag;
+  }
+  // texture_memory_policy.cc: an eighth of the RAM, 256 MiB to 1.5 GiB,
+  // nothing below 4 GiB.
+  constexpr std::uint64_t kMiB = 1024ULL * 1024ULL;
+  EXPECT_EQ(VideoMemoryBudgetBytes(16384 * kMiB), 1536 * kMiB);
+  EXPECT_EQ(VideoMemoryBudgetBytes(4096 * kMiB), 512 * kMiB);
+  EXPECT_EQ(VideoMemoryBudgetBytes(2048 * kMiB), 0U);
 }
 
 }  // namespace

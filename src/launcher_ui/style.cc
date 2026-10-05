@@ -22,11 +22,25 @@ button.play-button {
 }
 
 .env-badge,
-.recommended-badge {
+.recommended-badge,
+.override-badge {
   font-size: 0.75em;
   font-weight: 800;
   padding: 1px 7px;
   border-radius: 999px;
+}
+
+.override-badge {
+  color: var(--accent-color);
+  background-color: color-mix(in srgb, var(--accent-bg-color) 22%, transparent);
+}
+
+.override-badge image {
+  -gtk-icon-size: 12px;
+}
+
+.override-badge.compact {
+  padding: 2px 5px;
 }
 
 .env-badge {

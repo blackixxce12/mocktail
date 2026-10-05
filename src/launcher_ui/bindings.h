@@ -26,6 +26,8 @@
 //   - an info button (dialog-information-symbolic, accessible label
 //     "Learn more about <title>") opening a popover with the details;
 //   - an "ENV" badge while a managed environment variable overrides the key;
+//   - an "Overrides Roblox setting" badge while the value takes over one of
+//     Roblox's own settings (Hint::overrides_roblox);
 //   - a reset button while the value differs from the default;
 //   - a search entry (title, subtitle, section, keywords, the config.yaml
 //     key and every environment variable that overrides it);
@@ -37,6 +39,16 @@
 // (file:line or research section) of a non-obvious claim in a comment next
 // to the text.
 namespace mocktail::launcher_ui {
+
+// What a value takes over from Roblox's own settings (roblox_decides.h).
+struct RobloxOverrideNote {
+  // One line: the badge's tooltip and accessible description.
+  std::string summary;
+  // What exactly is overridden, and through what (the popover).
+  std::string details;
+  // How to give Roblox the setting back (the popover).
+  std::string give_back;
+};
 
 // What a row tells the user. Everything is optional, but every setting row
 // should have a subtitle (fixed or dynamic) and details.
@@ -67,6 +79,14 @@ struct Hint {
   // Shown inline (warning color) and in the popover.
   std::function<std::string(LauncherContext& context, const std::string& value)>
       warning;
+  // What the current settings take over from Roblox through this row,
+  // nullopt when nothing. The row then shows an "Overrides Roblox setting"
+  // badge under its subtitle (style class override-badge) and the popover
+  // says what is overridden and how to give it back. Rows use
+  // RobloxOverrideHint() (roblox_decides.h), which works it out from the
+  // settings the game reads this launch.
+  std::function<std::optional<RobloxOverrideNote>(LauncherContext& context)>
+      overrides_roblox;
 };
 
 struct RowSpec {
@@ -197,6 +217,15 @@ std::string Markup(std::string_view text);
 GtkWidget* NewRecommendedBadge();
 // A small pill reading "ENV" (style class env-badge).
 GtkWidget* NewEnvBadge();
+// A small pill with a game controller icon reading "Overrides Roblox
+// setting" (style class override-badge), the ENV badge's sibling.
+// `summary` becomes its tooltip and accessible description.
+GtkWidget* NewRobloxOverrideBadge(const std::string& summary = {});
+void SetRobloxOverrideBadgeSummary(GtkWidget* badge,
+                                   const std::string& summary);
+// Only the icon, for a badge among a row's suffixes in the narrow layout;
+// the accessible label stays.
+void SetRobloxOverrideBadgeCompact(GtkWidget* badge, bool compact);
 // An inline warning label (style class launcher-warning): wrapped text in
 // the theme's warning color with a warning icon, for use outside rows.
 GtkWidget* NewWarningLabel(const std::string& text);
