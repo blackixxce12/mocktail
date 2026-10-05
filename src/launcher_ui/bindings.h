@@ -31,7 +31,8 @@
 //   - a reset button while the value differs from the default;
 //   - a search entry (title, subtitle, section, keywords, the config.yaml
 //     key and every environment variable that overrides it);
-//   - insensitivity while config.yaml is broken (read-only draft).
+//   - while config.yaml is broken (read-only draft), everything but the
+//     info button insensitive, so the hint can still be read.
 //
 // Wording rules (all strings through _()): titles in sentence case,
 // subtitles one short line without a final period, details in plain
@@ -106,11 +107,12 @@ struct RowSpec {
   // Show the reset button while the value differs from the default.
   bool resettable = true;
   // Why the row cannot be changed right now ("Fleasion cannot be combined
-  // with the system proxy"); empty when it can. The row is then
-  // insensitive and the reason is its last subtitle line. Re-evaluated on
-  // every setting or machine change, so it may depend on other rows.
-  // Do not call gtk_widget_set_sensitive() on bound rows yourself: the
-  // binding owns their sensitivity.
+  // with the system proxy"); empty when it can. Everything in the row but
+  // its info button is then insensitive, and the reason is its last
+  // subtitle line. Re-evaluated on every setting or machine change, so it
+  // may depend on other rows. Do not call gtk_widget_set_sensitive() on
+  // bound rows or their suffixes yourself: the binding owns their
+  // sensitivity.
   std::function<std::string(LauncherContext& context)> unavailable;
 };
 

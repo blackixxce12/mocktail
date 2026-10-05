@@ -222,7 +222,8 @@ class RowBinding {
                        this);
       AddSuffix(reset_button_);
     }
-    AddSuffix(NewInfoButton());
+    info_button_ = NewInfoButton();
+    AddSuffix(info_button_);
 
     std::vector<std::string> keywords = spec_.keywords;
     if (!spec_.key.empty()) {
@@ -267,9 +268,8 @@ class RowBinding {
     const std::string unavailable =
         spec_.unavailable ? spec_.unavailable(*context_) : std::string();
     if (!spec_.key.empty() || spec_.unavailable) {
-      gtk_widget_set_sensitive(
-          row_,
-          unavailable.empty() && (spec_.key.empty() || !context_->read_only()));
+      SetLocked(!unavailable.empty() ||
+                (!spec_.key.empty() && context_->read_only()));
     }
 
     std::string base = spec_.hint.subtitle_for
@@ -371,6 +371,58 @@ class RowBinding {
       adw_action_row_set_subtitle(ADW_ACTION_ROW(row_), markup.c_str());
     } else if (ADW_IS_EXPANDER_ROW(row_)) {
       adw_expander_row_set_subtitle(ADW_EXPANDER_ROW(row_), markup.c_str());
+    }
+  }
+
+  // A row that cannot be changed (unavailable, or config.yaml is broken)
+  // used to be insensitive as a whole, info button included, so the hint
+  // that explains it could not be opened: a broken config.yaml greyed out
+  // every hint, and an unavailable Fleasion row hid why. Now everything in
+  // the row except the info button is insensitive, and the row is not
+  // activatable: every sibling of the widgets between the row and the info
+  // button (the title, the control, the badges, an expander's rows). Only
+  // what this turned off is turned on again; locking again catches what a
+  // page added to the row since.
+  void SetLocked(bool locked) {
+    if (info_button_ == nullptr || (!locked && !locked_)) return;
+    locked_ = locked;
+    constexpr char kLockedKey[] = "mocktail-locked";
+    constexpr char kActivatableKey[] = "mocktail-locked-activatable";
+    for (GtkWidget* node = info_button_; node != nullptr && node != row_;
+         node = gtk_widget_get_parent(node)) {
+      GtkWidget* parent = gtk_widget_get_parent(node);
+      if (parent == nullptr) break;
+      for (GtkWidget* sibling = gtk_widget_get_first_child(parent);
+           sibling != nullptr; sibling = gtk_widget_get_next_sibling(sibling)) {
+        if (sibling == node) continue;
+        if (locked && gtk_widget_get_sensitive(sibling)) {
+          gtk_widget_set_sensitive(sibling, FALSE);
+          g_object_set_data(G_OBJECT(sibling), kLockedKey, GINT_TO_POINTER(1));
+        } else if (!locked && g_object_get_data(G_OBJECT(sibling),
+                                                kLockedKey) != nullptr) {
+          gtk_widget_set_sensitive(sibling, TRUE);
+          g_object_set_data(G_OBJECT(sibling), kLockedKey, nullptr);
+        }
+      }
+      // The row itself and an expander's header row: no activation (a
+      // switch row would toggle, a combo row open its list).
+      if (GTK_IS_LIST_BOX_ROW(parent)) {
+        GtkListBoxRow* list_row = GTK_LIST_BOX_ROW(parent);
+        if (locked) {
+          if (g_object_get_data(G_OBJECT(parent), kActivatableKey) == nullptr) {
+            g_object_set_data(
+                G_OBJECT(parent), kActivatableKey,
+                GINT_TO_POINTER(
+                    gtk_list_box_row_get_activatable(list_row) ? 2 : 1));
+          }
+          gtk_list_box_row_set_activatable(list_row, FALSE);
+        } else if (const int saved = GPOINTER_TO_INT(
+                       g_object_get_data(G_OBJECT(parent), kActivatableKey));
+                   saved != 0) {
+          gtk_list_box_row_set_activatable(list_row, saved == 2);
+          g_object_set_data(G_OBJECT(parent), kActivatableKey, nullptr);
+        }
+      }
     }
   }
 
@@ -561,6 +613,8 @@ class RowBinding {
   bool override_badge_compact_ = false;
   GtkWidget* env_badge_ = nullptr;
   GtkWidget* reset_button_ = nullptr;
+  GtkWidget* info_button_ = nullptr;
+  bool locked_ = false;
   int search_id_ = -1;
 };
 
