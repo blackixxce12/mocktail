@@ -1484,5 +1484,85 @@ TEST(RobloxOverridesTest, ListsTheAlwaysOnFlags) {
   EXPECT_EQ(VideoMemoryBudgetBytes(2048 * kMiB), 0U);
 }
 
+TEST_F(MachineProfileTest, OffersTheGraphicsCardsThisComputerHas) {
+  // One NVIDIA card: integrated graphics cannot be chosen, and every value
+  // uses the card.
+  AddPciGpu(0, "pci0000:00/0000:00:01.0/0000:01:00.0", "0x10de", "0x2504");
+  root_.Write("usr/share/vulkan/icd.d/nvidia_icd.json", "{}");
+  MachineProfile profile = DetectMachineProfile(MapEnvironment(), Probe());
+  EXPECT_EQ(GpuChoiceAvailability(profile, runtime::GpuPreference::kAuto),
+            GpuChoiceState::kAvailable);
+  EXPECT_EQ(GpuChoiceAvailability(profile, runtime::GpuPreference::kDiscrete),
+            GpuChoiceState::kAvailable);
+  EXPECT_EQ(
+      GpuChoiceAvailability(profile, runtime::GpuPreference::kIntegrated),
+      GpuChoiceState::kNoSuchCard);
+  EXPECT_EQ(RecommendGpuPreference(profile).value, "auto");
+  EXPECT_EQ(RecommendGpuPreference(profile).reason,
+            GpuRecommendationReason::kSingleCard);
+
+  // Intel graphics beside it, without their driver: they cannot be picked.
+  AddPciGpu(1, "pci0000:00/0000:00:02.0", "0x8086", "0x9a49");
+  profile = DetectMachineProfile(MapEnvironment(), Probe());
+  EXPECT_EQ(
+      GpuChoiceAvailability(profile, runtime::GpuPreference::kIntegrated),
+      GpuChoiceState::kNoVulkanDriver);
+  // With it, both can; Automatic picks the discrete card unless PRIME
+  // offloading is off.
+  root_.Write("usr/share/vulkan/icd.d/intel_icd.x86_64.json", "{}");
+  profile = DetectMachineProfile(MapEnvironment(), Probe());
+  EXPECT_EQ(
+      GpuChoiceAvailability(profile, runtime::GpuPreference::kIntegrated),
+      GpuChoiceState::kAvailable);
+  EXPECT_EQ(RecommendGpuPreference(profile).reason,
+            GpuRecommendationReason::kDiscreteCard);
+  profile = DetectMachineProfile(MapEnvironment({{"DRI_PRIME", "0"}}), Probe());
+  EXPECT_EQ(RecommendGpuPreference(profile).reason,
+            GpuRecommendationReason::kPrimeIntegrated);
+
+  // The user's own driver list: Mocktail picks nothing, so nothing is said.
+  profile = DetectMachineProfile(
+      MapEnvironment({{"VK_DRIVER_FILES", "/opt/vk/my_icd.json"}}), Probe());
+  EXPECT_EQ(GpuChoiceAvailability(profile, runtime::GpuPreference::kDiscrete),
+            GpuChoiceState::kUnknown);
+  EXPECT_TRUE(RecommendGpuPreference(profile).value.empty());
+  EXPECT_EQ(GpuChoiceAvailability(MachineProfile{},
+                                  runtime::GpuPreference::kDiscrete),
+            GpuChoiceState::kUnknown);
+}
+
+TEST_F(MachineProfileTest, ExplainsNvidiaShaderLoading) {
+  EXPECT_EQ(ResolveShaderLoading(MachineProfile{}, "", "", ""),
+            ShaderLoadingState::kUnknown);
+  // AMD only: nothing was ever restricted.
+  AddPciGpu(0, "pci0000:00/0000:00:01.1/0000:0a:00.0", "0x1002", "0x73df");
+  root_.Write("usr/share/vulkan/icd.d/radeon_icd.x86_64.json", "{}");
+  MachineProfile profile = DetectMachineProfile(MapEnvironment(), Probe());
+  EXPECT_EQ(ResolveShaderLoading(profile, "", "", "false"),
+            ShaderLoadingState::kNoNvidia);
+
+  // An Intel + NVIDIA laptop.
+  std::filesystem::remove_all(root_.path() / "sys");
+  AddPciGpu(0, "pci0000:00/0000:00:02.0", "0x8086", "0x9a49");
+  AddPciGpu(1, "pci0000:00/0000:00:01.0/0000:01:00.0", "0x10de", "0x2520");
+  root_.Write("usr/share/vulkan/icd.d/intel_icd.x86_64.json", "{}");
+  root_.Write("usr/share/vulkan/icd.d/nvidia_icd.json", "{}");
+  profile = DetectMachineProfile(MapEnvironment(), Probe());
+  EXPECT_EQ(ResolveShaderLoading(profile, "", "", ""),
+            ShaderLoadingState::kMultithreaded);
+  EXPECT_EQ(ResolveShaderLoading(profile, "vulkan", "auto", "true"),
+            ShaderLoadingState::kMultithreaded);
+  EXPECT_EQ(ResolveShaderLoading(profile, "direct-vulkan", "auto", "false"),
+            ShaderLoadingState::kSingleThread);
+  // Only direct Vulkan reads the flag, and only an NVIDIA card is denied.
+  EXPECT_EQ(ResolveShaderLoading(profile, "opengl", "auto", "false"),
+            ShaderLoadingState::kNotVulkan);
+  EXPECT_EQ(ResolveShaderLoading(profile, "angle-vulkan", "auto", "false"),
+            ShaderLoadingState::kNotVulkan);
+  EXPECT_EQ(
+      ResolveShaderLoading(profile, "direct-vulkan", "integrated", "false"),
+      ShaderLoadingState::kOtherCard);
+}
+
 }  // namespace
 }  // namespace mocktail::launcher_ui

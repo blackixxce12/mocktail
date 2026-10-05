@@ -7,6 +7,8 @@
 #include <string_view>
 #include <vector>
 
+#include "launcher_ui/machine_profile.h"
+
 namespace mocktail::launcher_ui {
 
 // Which of Roblox's own settings Mocktail decides with the current
@@ -161,6 +163,68 @@ const std::vector<AlwaysOnFlagInfo>& AlwaysOnFlags();
 // Roblox's video memory budget the game sets for this much RAM
 // (CalculateTextureMemoryBudgetBytes); 0 when it sets none.
 std::uint64_t VideoMemoryBudgetBytes(std::uint64_t memory_bytes);
+
+// ---- Graphics card and shader loading (engine.gpu, engine.nvidia_shader_mt)
+
+// Whether engine.gpu can choose `kind` here (graphics_launch_policy.cc
+// SelectHostGpu, which falls back to another card).
+enum class GpuChoiceState {
+  kAvailable,
+  // Detection has not finished, or Mocktail does not pick the card (the
+  // user's VK_DRIVER_FILES, no driver Mocktail recognizes): nothing to say.
+  kUnknown,
+  // The computer has no card of that kind.
+  kNoSuchCard,
+  // It has one, but no card of that kind has a Vulkan driver; another card
+  // stands in.
+  kNoVulkanDriver,
+};
+
+GpuChoiceState GpuChoiceAvailability(const MachineProfile& machine,
+                                     runtime::GpuPreference kind);
+
+enum class GpuRecommendationReason {
+  // Only one graphics card: every value uses it.
+  kSingleCard,
+  // Automatic picks the discrete card, the faster one.
+  kDiscreteCard,
+  // Automatic follows DRI_PRIME or __NV_PRIME_RENDER_OFFLOAD set to 0 and
+  // picks the integrated graphics.
+  kPrimeIntegrated,
+  // Mocktail does not pick the card here, or detection has not finished.
+  kUnknown,
+};
+
+struct GpuRecommendation {
+  std::string value;  // "auto", or empty for kUnknown
+  GpuRecommendationReason reason = GpuRecommendationReason::kUnknown;
+};
+
+GpuRecommendation RecommendGpuPreference(const MachineProfile& machine);
+
+// What engine.nvidia_shader_mt does here (graphics_launch_policy.cc
+// MergeNvidiaShaderLoadingClientSettingsOverrides: the deny pattern
+// 4318:.* names NVIDIA's PCI vendor and is merged for direct Vulkan only).
+enum class ShaderLoadingState {
+  // Detection has not finished.
+  kUnknown,
+  // No NVIDIA card: the restriction never applied here.
+  kNoNvidia,
+  // Another backend than direct Vulkan, which alone reads the flag.
+  kNotVulkan,
+  // Direct Vulkan renders on another card than the NVIDIA one (engine.gpu).
+  kOtherCard,
+  // NVIDIA with direct Vulkan: several threads (true) or one (false).
+  kMultithreaded,
+  kSingleThread,
+};
+
+// `backend`, `gpu_preference` and `value` are the config.yaml values of
+// graphics.backend, engine.gpu and engine.nvidia_shader_mt.
+ShaderLoadingState ResolveShaderLoading(const MachineProfile& machine,
+                                        std::string_view backend,
+                                        std::string_view gpu_preference,
+                                        std::string_view value);
 
 }  // namespace mocktail::launcher_ui
 

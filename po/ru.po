@@ -3393,3 +3393,185 @@ msgstr "Открывает обзор на странице «Дополните
 
 msgid "On this page, Physics workers and Multithreaded rendering decide whether the performance preset replaces Roblox's choices for anti-aliasing, textures, level of detail and the graphics quality level."
 msgstr "На этой странице «Потоки физики» и «Многопоточный рендеринг» решают, заменяет ли пресет производительности выбор Roblox для сглаживания, текстур, детализации и уровня качества графики."
+
+
+#, c-format
+msgid "Renders on the integrated %s graphics, the only graphics here"
+msgstr "Отрисовка на встроенной графике %s — другой графики здесь нет"
+
+#, c-format
+msgid "Renders on the discrete %s card, the only graphics card here"
+msgstr "Отрисовка на дискретной видеокарте %s — другой видеокарты здесь нет"
+
+#, c-format
+msgid "Renders on the integrated %s graphics"
+msgstr "Отрисовка на встроенной графике %s"
+
+#, c-format
+msgid "Renders on the discrete %s card"
+msgstr "Отрисовка на дискретной видеокарте %s"
+
+msgid "This computer has no integrated graphics"
+msgstr "На этом компьютере нет встроенной графики"
+
+msgid "This computer has no discrete graphics card"
+msgstr "На этом компьютере нет дискретной видеокарты"
+
+#, c-format
+msgid "The integrated %s graphics have no Vulkan driver here"
+msgstr "Для встроенной графики %s здесь нет драйвера Vulkan"
+
+#, c-format
+msgid "The discrete %s card has no Vulkan driver here"
+msgstr "Для дискретной видеокарты %s здесь нет драйвера Vulkan"
+
+#, c-format
+msgid "• Integrated %s graphics (%s)"
+msgstr "• Встроенная графика %s (%s)"
+
+#, c-format
+msgid "• Discrete %s card (%s)"
+msgstr "• Дискретная видеокарта %s (%s)"
+
+#, c-format
+msgid "• Integrated %s graphics (%s) at %s"
+msgstr "• Встроенная графика %s (%s), адрес %s"
+
+#, c-format
+msgid "• Discrete %s card (%s) at %s"
+msgstr "• Дискретная видеокарта %s (%s), адрес %s"
+
+msgid "No effect: only the Vulkan backend picks a graphics card"
+msgstr "Не действует: видеокарту выбирает только движок Vulkan"
+
+msgid "No effect: VK_DRIVER_FILES chooses the Vulkan driver"
+msgstr "Не действует: драйвер Vulkan выбирает VK_DRIVER_FILES"
+
+msgid "Which graphics card the Vulkan renderer uses"
+msgstr "На какой видеокарте рисует Vulkan"
+
+msgid "Which graphics card Roblox's Vulkan renderer uses when the computer has more than one, such as a laptop with integrated graphics and a discrete card. The change applies the next time Roblox starts."
+msgstr "Какую видеокарту использует Vulkan-рендерер Roblox, если их в компьютере несколько, например в ноутбуке со встроенной графикой и дискретной видеокартой. Изменение вступит в силу при следующем запуске Roblox."
+
+msgid "Mocktail lists the Intel, NVIDIA and AMD cards in /sys/class/drm and tells them apart by their place on the PCI bus: every NVIDIA card is discrete, a card on the processor's own PCI bus is integrated (Intel graphics, older AMD APUs), and so is an AMD card right behind that bus's device-8 bridge, where Ryzen APUs put their graphics. Every other card counts as discrete."
+msgstr "Mocktail находит видеокарты Intel, NVIDIA и AMD в /sys/class/drm и различает их по месту на шине PCI: любая видеокарта NVIDIA считается дискретной, видеокарта на собственной шине PCI процессора — встроенной (графика Intel, старые APU AMD), как и видеокарта AMD сразу за мостом device-8 этой шины, где свою графику размещают APU Ryzen. Все остальные считаются дискретными."
+
+msgid "• Automatic: the discrete card, unless DRI_PRIME or __NV_PRIME_RENDER_OFFLOAD is set to 0 to ask for the integrated graphics."
+msgstr "• Автоматически: дискретная видеокарта, если только DRI_PRIME или __NV_PRIME_RENDER_OFFLOAD не равны 0 — так запрашивают встроенную графику."
+
+msgid "• Discrete card: the card with its own memory, faster but using more power. With several, NVIDIA comes before AMD and Intel Arc."
+msgstr "• Дискретная видеокарта: видеокарта с собственной памятью, быстрее, но потребляет больше энергии. Если их несколько, NVIDIA идёт раньше AMD и Intel Arc."
+
+msgid "• Integrated graphics: the graphics built into the processor, slower but using less power. Intel comes before AMD."
+msgstr "• Встроенная графика: графика, встроенная в процессор, медленнее, но экономнее. Intel идёт раньше AMD."
+
+msgid "When no card of the chosen kind has a Vulkan driver, the game uses another card that has one, and with a single card every choice uses it. When the two cards share a driver (an AMD APU with a Radeon card), Mocktail also tells the Vulkan loader which one to put first."
+msgstr "Если ни у одной видеокарты выбранного типа нет драйвера Vulkan, игра использует другую, у которой он есть, а при единственной видеокарте любой вариант выбирает её. Если у двух видеокарт общий драйвер (APU AMD вместе с Radeon), Mocktail ещё и сообщает загрузчику Vulkan, какую из них поставить первой."
+
+msgid "It applies to the Vulkan backend only: Mocktail hands the Vulkan loader just that card's drivers (VK_DRIVER_FILES). OpenGL ES and ANGLE are not affected, and VK_DRIVER_FILES or VK_ICD_FILENAMES set in the shortcut or terminal win over this setting. The card also decides whether NVIDIA's display-server rule applies and whether Intel integrated graphics get quality level 1."
+msgstr "Настройка действует только для движка Vulkan: Mocktail передаёт загрузчику Vulkan драйверы лишь этой видеокарты (VK_DRIVER_FILES). На OpenGL ES и ANGLE она не влияет, а VK_DRIVER_FILES или VK_ICD_FILENAMES из ярлыка или терминала важнее неё. От видеокарты также зависит, действует ли правило NVIDIA для графического сервера и получает ли встроенная графика Intel уровень качества 1."
+
+msgid "Mocktail found no Intel, NVIDIA or AMD graphics card in /sys/class/drm, so this setting has nothing to choose from."
+msgstr "Mocktail не нашёл в /sys/class/drm видеокарт Intel, NVIDIA или AMD, так что выбирать этой настройке не из чего."
+
+msgid "Graphics cards Mocktail found:"
+msgstr "Видеокарты, которые нашёл Mocktail:"
+
+msgid "VK_DRIVER_FILES or VK_ICD_FILENAMES is set, so Mocktail pins no Vulkan driver and this setting has no effect."
+msgstr "Задана переменная VK_DRIVER_FILES или VK_ICD_FILENAMES, поэтому Mocktail не закрепляет драйвер Vulkan и эта настройка не действует."
+
+msgid "Mocktail recognizes no Vulkan driver for these cards, so it pins none and this setting has no effect."
+msgstr "Mocktail не знает драйверов Vulkan для этих видеокарт, поэтому ничего не закрепляет и эта настройка не действует."
+
+msgid "DRI_PRIME or __NV_PRIME_RENDER_OFFLOAD is 0 here, so Automatic picks the integrated graphics."
+msgstr "Здесь DRI_PRIME или __NV_PRIME_RENDER_OFFLOAD равны 0, поэтому «Автоматически» выбирает встроенную графику."
+
+#, c-format
+msgid "This computer has one graphics card (%s), and Automatic uses it."
+msgstr "На этом компьютере одна видеокарта (%s), и «Автоматически» использует её."
+
+#, c-format
+msgid "Automatic already picks the discrete %s card, the faster one, and still follows DRI_PRIME=0 when you set it."
+msgstr "«Автоматически» и так выбирает более быструю дискретную видеокарту %s, но учтёт DRI_PRIME=0, если вы его зададите."
+
+msgid "DRI_PRIME or __NV_PRIME_RENDER_OFFLOAD asks for the integrated graphics, and Automatic follows it."
+msgstr "DRI_PRIME или __NV_PRIME_RENDER_OFFLOAD запрашивают встроенную графику, и «Автоматически» это учитывает."
+
+msgid "This computer has no integrated graphics with a Vulkan driver, so the game uses another card."
+msgstr "На этом компьютере нет встроенной графики с драйвером Vulkan, поэтому игра использует другую видеокарту."
+
+msgid "This computer has no discrete card with a Vulkan driver, so the game uses another card."
+msgstr "На этом компьютере нет дискретной видеокарты с драйвером Vulkan, поэтому игра использует другую видеокарту."
+
+msgid "The discrete card when there is one, unless DRI_PRIME=0 asks for the integrated graphics"
+msgstr "Дискретная видеокарта, если она есть, если только DRI_PRIME=0 не запрашивает встроенную графику"
+
+msgid "Discrete card"
+msgstr "Дискретная видеокарта"
+
+#, c-format
+msgid "The discrete %s card: faster, uses more power"
+msgstr "Дискретная видеокарта %s: быстрее, но потребляет больше"
+
+msgid "A graphics card with its own memory: faster, uses more power"
+msgstr "Видеокарта с собственной памятью: быстрее, но потребляет больше"
+
+msgid "Integrated graphics"
+msgstr "Встроенная графика"
+
+#, c-format
+msgid "The integrated %s graphics: slower, uses less power"
+msgstr "Встроенная графика %s: медленнее, но экономнее"
+
+msgid "The graphics built into the processor: slower, uses less power"
+msgstr "Графика, встроенная в процессор: медленнее, но экономнее"
+
+#, c-format
+msgid "The game renders on the integrated %s graphics here, which were never restricted"
+msgstr "Здесь игра отрисовывается на встроенной графике %s, которую никогда не ограничивали"
+
+#, c-format
+msgid "The game renders on the %s card here, which was never restricted"
+msgstr "Здесь игра отрисовывается на видеокарте %s, которую никогда не ограничивали"
+
+msgid "Multithreaded shader loading"
+msgstr "Многопоточная загрузка шейдеров"
+
+msgid "Roblox loads its shader pack on several threads, as on Intel and AMD"
+msgstr "Roblox загружает набор шейдеров в несколько потоков, как на Intel и AMD"
+
+msgid "Roblox loads its shader pack on one thread on NVIDIA, as Mocktail used to"
+msgstr "На NVIDIA Roblox загружает набор шейдеров в один поток, как раньше в Mocktail"
+
+msgid "On NVIDIA, Roblox loads its shader pack on one thread"
+msgstr "На NVIDIA Roblox загружает набор шейдеров в один поток"
+
+msgid "On NVIDIA, Roblox loads its shader pack on several threads"
+msgstr "На NVIDIA Roblox загружает набор шейдеров в несколько потоков"
+
+msgid "Lets Roblox's Vulkan renderer load its shader pack on several threads on NVIDIA graphics cards, as it already does on Intel and AMD. The change applies the next time Roblox starts."
+msgstr "Позволяет Vulkan-рендереру Roblox загружать набор шейдеров в несколько потоков на видеокартах NVIDIA, как он уже делает на Intel и AMD. Изменение вступит в силу при следующем запуске Roblox."
+
+msgid "Mocktail used to keep NVIDIA on one thread with Roblox's FStringGraphicsVulkanShaderMTDenyPattern (4318:.*, NVIDIA's PCI vendor number). That restriction was a workaround that turned out to be unnecessary: Roblox's loader holds its own lock around every read of the pack, so several threads are safe on every vendor. Only NVIDIA was ever restricted."
+msgstr "Раньше Mocktail оставлял NVIDIA один поток через параметр Roblox FStringGraphicsVulkanShaderMTDenyPattern (4318:.*, номер производителя NVIDIA в PCI). Это ограничение было обходным решением, которое оказалось ненужным: загрузчик Roblox сам берёт блокировку при каждом чтении набора, так что несколько потоков безопасны на видеокартах любого производителя. Ограничение когда-либо касалось только NVIDIA."
+
+msgid "On an RTX 3060 (driver 615) the startup shaders took 23 to 29 ms on several threads against 30 to 35 ms on one, about 6 to 9 ms saved per start, and the game rendered the same frames either way."
+msgstr "На RTX 3060 (драйвер 615) стартовые шейдеры загружались за 23–29 мс в несколько потоков против 30–35 мс в один — примерно 6–9 мс экономии при каждом запуске, а кадры игра рисовала одинаковые в обоих случаях."
+
+msgid "Turn it off only if shader loading misbehaves on NVIDIA, for example if Roblox hangs or crashes while it loads; Off brings the one-thread restriction back. Only the Vulkan backend reads this setting."
+msgstr "Выключайте, только если загрузка шейдеров на NVIDIA работает неправильно, например Roblox зависает или падает во время загрузки; выключение возвращает ограничение в один поток. Эту настройку читает только движок Vulkan."
+
+msgid "Several threads load the shader pack about 6 to 9 ms faster, and Roblox's loader keeps its reads safe on every vendor."
+msgstr "В несколько потоков набор шейдеров загружается примерно на 6–9 мс быстрее, а загрузчик Roblox сам защищает чтение на видеокартах любого производителя."
+
+msgid "No NVIDIA graphics card here: only NVIDIA was ever restricted"
+msgstr "Здесь нет видеокарты NVIDIA, а ограничение когда-либо касалось только NVIDIA"
+
+msgid "Only the Vulkan backend reads this setting"
+msgstr "Эту настройку читает только движок Vulkan"
+
+msgid "More renderer options"
+msgstr "Другие настройки отрисовки"
+
+msgid "Shader loading on NVIDIA"
+msgstr "Загрузка шейдеров на NVIDIA"

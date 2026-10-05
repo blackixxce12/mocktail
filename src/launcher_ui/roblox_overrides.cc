@@ -1,5 +1,7 @@
 #include "launcher_ui/roblox_overrides.h"
 
+#include <algorithm>
+
 #include "launcher_ui/recommendations.h"
 #include "runtime/device_profile.h"
 #include "runtime/frame_rate_policy.h"
@@ -230,6 +232,71 @@ const std::vector<AlwaysOnFlagInfo>& AlwaysOnFlags() {
 
 std::uint64_t VideoMemoryBudgetBytes(std::uint64_t memory_bytes) {
   return runtime::CalculateTextureMemoryBudgetBytes(memory_bytes);
+}
+
+// ---- Graphics card and shader loading ---------------------------------------
+
+GpuChoiceState GpuChoiceAvailability(const MachineProfile& machine,
+                                     runtime::GpuPreference kind) {
+  // Only the drivers Mocktail pins follow engine.gpu
+  // (graphics_launch_policy.cc ApplyVulkanIcdPolicy).
+  if (!machine.detected ||
+      machine.vulkan_source != VulkanDriverSource::kPinned) {
+    return GpuChoiceState::kUnknown;
+  }
+  if (kind == runtime::GpuPreference::kAuto) return GpuChoiceState::kAvailable;
+  const bool want_integrated = kind == runtime::GpuPreference::kIntegrated;
+  const bool exists =
+      std::any_of(machine.gpu.cards.begin(), machine.gpu.cards.end(),
+                  [want_integrated](const runtime::HostGpu& card) {
+                    return card.integrated == want_integrated;
+                  });
+  if (!exists) return GpuChoiceState::kNoSuchCard;
+  const runtime::HostGpuSelection& selection =
+      want_integrated ? machine.integrated_selection
+                      : machine.discrete_selection;
+  return selection.preferred ? GpuChoiceState::kAvailable
+                             : GpuChoiceState::kNoVulkanDriver;
+}
+
+GpuRecommendation RecommendGpuPreference(const MachineProfile& machine) {
+  if (!machine.detected ||
+      machine.vulkan_source != VulkanDriverSource::kPinned ||
+      machine.gpu.cards.empty()) {
+    return {};
+  }
+  if (machine.gpu.cards.size() == 1) {
+    return {"auto", GpuRecommendationReason::kSingleCard};
+  }
+  // ResolveGpuPreference: auto is the discrete card unless DRI_PRIME or
+  // __NV_PRIME_RENDER_OFFLOAD say otherwise, which the user asked for.
+  if (machine.automatic_gpu == runtime::GpuPreference::kIntegrated) {
+    return {"auto", GpuRecommendationReason::kPrimeIntegrated};
+  }
+  return {"auto", GpuRecommendationReason::kDiscreteCard};
+}
+
+ShaderLoadingState ResolveShaderLoading(const MachineProfile& machine,
+                                        std::string_view backend,
+                                        std::string_view gpu_preference,
+                                        std::string_view value) {
+  if (!machine.detected) return ShaderLoadingState::kUnknown;
+  if (!machine.gpu.nvidia) return ShaderLoadingState::kNoNvidia;
+  // graphics_launch_policy.cc: only direct Vulkan (any spelling,
+  // RuntimeConfig::ParseGraphicsBackend) merges the deny pattern.
+  if (backend.empty()) backend = "direct-vulkan";
+  if (backend != "direct-vulkan" && backend != "vulkan" &&
+      backend != "native-vulkan") {
+    return ShaderLoadingState::kNotVulkan;
+  }
+  if (gpu_preference.empty()) gpu_preference = "auto";
+  const VulkanDriverSelection driver = machine.VulkanDriver(gpu_preference);
+  if (driver.gpu.has_value() && driver.gpu->vendor != kNvidiaPciVendor) {
+    return ShaderLoadingState::kOtherCard;
+  }
+  // runtime_config_file.cc ParseBoolean: config.yaml holds true or false.
+  return value == "false" ? ShaderLoadingState::kSingleThread
+                          : ShaderLoadingState::kMultithreaded;
 }
 
 }  // namespace mocktail::launcher_ui

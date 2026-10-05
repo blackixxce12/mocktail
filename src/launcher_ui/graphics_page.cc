@@ -342,6 +342,428 @@ GtkWidget* BuildGraphicsBackendRow(LauncherContext* context) {
   return BindComboRow(context, std::move(spec), std::move(combo));
 }
 
+constexpr char kGpuKey[] = "engine.gpu";
+constexpr char kShaderMtKey[] = "engine.nvidia_shader_mt";
+
+bool UsesDirectVulkan(const LauncherContext& context) {
+  return IsVulkanSpelling(
+      context.GameValue("graphics.backend", "direct-vulkan"));
+}
+
+// The card of one kind on this computer: the one SelectHostGpu picks for
+// it, else the first one listed.
+std::optional<runtime::HostGpu> CardOfKind(const MachineProfile& machine,
+                                           bool integrated) {
+  const runtime::HostGpuSelection& selection =
+      integrated ? machine.integrated_selection : machine.discrete_selection;
+  if (selection.gpu.has_value() && selection.gpu->integrated == integrated) {
+    return selection.gpu;
+  }
+  for (const runtime::HostGpu& card : machine.gpu.cards) {
+    if (card.integrated == integrated) return card;
+  }
+  return std::nullopt;
+}
+
+// Where direct Vulkan renders with `value` (an engine.gpu value), as the
+// row's subtitle says it; empty while Mocktail does not pick the card.
+std::string RendersOn(const MachineProfile& machine, const std::string& value) {
+  if (!machine.detected ||
+      machine.vulkan_source != VulkanDriverSource::kPinned) {
+    return {};
+  }
+  const VulkanDriverSelection driver = machine.VulkanDriver(value);
+  if (!driver.gpu.has_value()) return {};
+  const std::string name = GpuCardName(*driver.gpu);
+  if (machine.gpu.cards.size() == 1) {
+    return driver.gpu->integrated
+               ? Format(_("Renders on the integrated %s graphics, the only "
+                          "graphics here"),
+                        name.c_str())
+               : Format(_("Renders on the discrete %s card, the only "
+                          "graphics card here"),
+                        name.c_str());
+  }
+  return driver.gpu->integrated
+             ? Format(_("Renders on the integrated %s graphics"), name.c_str())
+             : Format(_("Renders on the discrete %s card"), name.c_str());
+}
+
+// Why a kind cannot be chosen here (GpuChoiceAvailability), empty when it
+// can or when Mocktail does not pick the card.
+std::string GpuChoiceUnavailable(const MachineProfile& machine,
+                                 bool integrated) {
+  const GpuChoiceState state = GpuChoiceAvailability(
+      machine, integrated ? runtime::GpuPreference::kIntegrated
+                          : runtime::GpuPreference::kDiscrete);
+  if (state == GpuChoiceState::kNoSuchCard) {
+    return integrated
+               ? std::string(_("This computer has no integrated graphics"))
+               : std::string(_("This computer has no discrete graphics card"));
+  }
+  if (state == GpuChoiceState::kNoVulkanDriver) {
+    const std::optional<runtime::HostGpu> card =
+        CardOfKind(machine, integrated);
+    const std::string name = card.has_value() ? GpuCardName(*card) : "";
+    return integrated
+               ? Format(_("The integrated %s graphics have no Vulkan driver "
+                          "here"),
+                        name.c_str())
+               : Format(_("The discrete %s card has no Vulkan driver here"),
+                        name.c_str());
+  }
+  return {};
+}
+
+std::string CardLine(const runtime::HostGpu& card) {
+  const std::string name = GpuCardName(card);
+  const std::string ids = Format("%04x:%04x", card.vendor, card.device);
+  if (card.pci_address.empty()) {
+    return card.integrated
+               ? Format(_("• Integrated %s graphics (%s)"), name.c_str(),
+                        ids.c_str())
+               : Format(_("• Discrete %s card (%s)"), name.c_str(),
+                        ids.c_str());
+  }
+  return card.integrated
+             ? Format(_("• Integrated %s graphics (%s) at %s"), name.c_str(),
+                      ids.c_str(), card.pci_address.c_str())
+             : Format(_("• Discrete %s card (%s) at %s"), name.c_str(),
+                      ids.c_str(), card.pci_address.c_str());
+}
+
+// engine.gpu (graphics_launch_policy.cc DetectHostGpus,
+// ResolveGpuPreference, SelectHostGpu and ApplyVulkanIcdPolicy).
+GtkWidget* BuildGpuRow(LauncherContext* context) {
+  RowSpec spec;
+  spec.key = kGpuKey;
+  spec.title = _("Graphics card");
+  // runtime_config.cc: MOCKTAIL_GPU defaults to auto.
+  spec.fallback = "auto";
+  spec.keywords = {"gpu",        "graphics card", "discrete",    "integrated",
+                   "hybrid",     "prime",         "dri_prime",   "laptop",
+                   "видеокарта", "дискретная",    "встроенная",  "гибридная",
+                   "ноутбук",    "MOCKTAIL_GPU",  "VK_DRIVER_FILES"};
+  spec.hint.subtitle_for = [](LauncherContext& ctx, const std::string& value) {
+    const MachineProfile& machine = ctx.machine();
+    if (!UsesDirectVulkan(ctx)) {
+      return std::string(
+          _("No effect: only the Vulkan backend picks a graphics card"));
+    }
+    if (machine.detected && machine.vulkan_source == VulkanDriverSource::kUser) {
+      return std::string(
+          _("No effect: VK_DRIVER_FILES chooses the Vulkan driver"));
+    }
+    const std::string renders = RendersOn(machine, value);
+    return renders.empty()
+               ? std::string(_("Which graphics card the Vulkan renderer uses"))
+               : renders;
+  };
+  spec.hint.details =
+      _("Which graphics card Roblox's Vulkan renderer uses when the computer "
+        "has more than one, such as a laptop with integrated graphics and a "
+        "discrete card. The change applies the next time Roblox starts.") +
+      std::string("\n\n") +
+      // graphics_launch_policy.h DetectHostGpus (IsIntegrated).
+      _("Mocktail lists the Intel, NVIDIA and AMD cards in /sys/class/drm and "
+        "tells them apart by their place on the PCI bus: every NVIDIA card "
+        "is discrete, a card on the processor's own PCI bus is integrated "
+        "(Intel graphics, older AMD APUs), and so is an AMD card right behind "
+        "that bus's device-8 bridge, where Ryzen APUs put their graphics. "
+        "Every other card counts as discrete.") +
+      "\n\n" +
+      // ResolveGpuPreference: 0, off or igpu.
+      _("• Automatic: the discrete card, unless DRI_PRIME or "
+        "__NV_PRIME_RENDER_OFFLOAD is set to 0 to ask for the integrated "
+        "graphics.") +
+      "\n\n" +
+      // SelectHostGpu VendorRank.
+      _("• Discrete card: the card with its own memory, faster but using "
+        "more power. With several, NVIDIA comes before AMD and Intel Arc.") +
+      "\n\n" +
+      _("• Integrated graphics: the graphics built into the processor, "
+        "slower but using less power. Intel comes before AMD.") +
+      "\n\n" +
+      // SelectHostGpu falls back to any card with a driver;
+      // HostGpuSelection::loader_device_select.
+      _("When no card of the chosen kind has a Vulkan driver, the game uses "
+        "another card that has one, and with a single card every choice "
+        "uses it. When the two cards share a driver (an AMD APU with a "
+        "Radeon card), Mocktail also tells the Vulkan loader which one to "
+        "put first.") +
+      "\n\n" +
+      // ApplyGraphicsLaunchPolicy pins drivers in the direct-vulkan branch
+      // only; ApplyVulkanIcdPolicy keeps the user's VK_DRIVER_FILES.
+      _("It applies to the Vulkan backend only: Mocktail hands the Vulkan "
+        "loader just that card's drivers (VK_DRIVER_FILES). OpenGL ES and "
+        "ANGLE are not affected, and VK_DRIVER_FILES or VK_ICD_FILENAMES set "
+        "in the shortcut or terminal win over this setting. The card also "
+        "decides whether NVIDIA's display-server rule applies and whether "
+        "Intel integrated graphics get quality level 1.");
+  spec.hint.details_for = [](LauncherContext& ctx) {
+    const MachineProfile& machine = ctx.machine();
+    if (!machine.detected) return std::string();
+    if (machine.gpu.cards.empty()) {
+      return std::string(
+          _("Mocktail found no Intel, NVIDIA or AMD graphics card in "
+            "/sys/class/drm, so this setting has nothing to choose from."));
+    }
+    std::string text = _("Graphics cards Mocktail found:");
+    for (const runtime::HostGpu& card : machine.gpu.cards) {
+      text += "\n" + CardLine(card);
+    }
+    switch (machine.vulkan_source) {
+      case VulkanDriverSource::kUser:
+        text += "\n\n";
+        text +=
+            _("VK_DRIVER_FILES or VK_ICD_FILENAMES is set, so Mocktail pins "
+              "no Vulkan driver and this setting has no effect.");
+        break;
+      case VulkanDriverSource::kLoader:
+      case VulkanDriverSource::kUnknown:
+      case VulkanDriverSource::kNone:
+        text += "\n\n";
+        text +=
+            _("Mocktail recognizes no Vulkan driver for these cards, so it "
+              "pins none and this setting has no effect.");
+        break;
+      case VulkanDriverSource::kPinned:
+        if (machine.automatic_gpu == runtime::GpuPreference::kIntegrated) {
+          text += "\n\n";
+          text +=
+              _("DRI_PRIME or __NV_PRIME_RENDER_OFFLOAD is 0 here, so "
+                "Automatic picks the integrated graphics.");
+        }
+        break;
+    }
+    return text;
+  };
+  spec.hint.recommend = [](const MachineProfile& machine) {
+    const GpuRecommendation recommendation = RecommendGpuPreference(machine);
+    if (recommendation.value.empty()) return std::optional<std::string>();
+    return std::optional<std::string>(recommendation.value);
+  };
+  spec.hint.recommend_reason = [](const MachineProfile& machine) {
+    switch (RecommendGpuPreference(machine).reason) {
+      case GpuRecommendationReason::kSingleCard:
+        return Format(_("This computer has one graphics card (%s), and "
+                        "Automatic uses it."),
+                      GpuCardName(machine.gpu.cards.front()).c_str());
+      case GpuRecommendationReason::kDiscreteCard: {
+        const std::optional<runtime::HostGpu> card = CardOfKind(machine, false);
+        return Format(_("Automatic already picks the discrete %s card, the "
+                        "faster one, and still follows DRI_PRIME=0 when you "
+                        "set it."),
+                      card.has_value() ? GpuCardName(*card).c_str() : "");
+      }
+      case GpuRecommendationReason::kPrimeIntegrated:
+        return std::string(
+            _("DRI_PRIME or __NV_PRIME_RENDER_OFFLOAD asks for the integrated "
+              "graphics, and Automatic follows it."));
+      case GpuRecommendationReason::kUnknown:
+        break;
+    }
+    return std::string();
+  };
+  spec.hint.warning = [](LauncherContext& ctx, const std::string& value) {
+    if (!UsesDirectVulkan(ctx)) return std::string();
+    const std::optional<runtime::GpuPreference> preference =
+        runtime::ParseGpuPreference(value);
+    if (!preference.has_value() ||
+        *preference == runtime::GpuPreference::kAuto) {
+      return std::string();
+    }
+    const GpuChoiceState state =
+        GpuChoiceAvailability(ctx.machine(), *preference);
+    if (state != GpuChoiceState::kNoSuchCard &&
+        state != GpuChoiceState::kNoVulkanDriver) {
+      return std::string();
+    }
+    return *preference == runtime::GpuPreference::kIntegrated
+               ? std::string(_("This computer has no integrated graphics with "
+                               "a Vulkan driver, so the game uses another "
+                               "card."))
+               : std::string(_("This computer has no discrete card with a "
+                               "Vulkan driver, so the game uses another "
+                               "card."));
+  };
+  ComboSpec combo;
+  combo.options = {
+      {"auto",
+       _("Automatic"),
+       {},
+       {},
+       [](LauncherContext& ctx) {
+         const std::string renders = RendersOn(ctx.machine(), "auto");
+         return renders.empty()
+                    ? std::string(_("The discrete card when there is one, "
+                                    "unless DRI_PRIME=0 asks for the "
+                                    "integrated graphics"))
+                    : renders;
+       },
+       nullptr,
+       false,
+       false},
+      {"discrete",
+       _("Discrete card"),
+       {},
+       {},
+       [](LauncherContext& ctx) {
+         const MachineProfile& machine = ctx.machine();
+         const std::optional<runtime::HostGpu> card = CardOfKind(machine, false);
+         if (GpuChoiceAvailability(machine, runtime::GpuPreference::kDiscrete) ==
+                 GpuChoiceState::kAvailable &&
+             card.has_value()) {
+           return Format(_("The discrete %s card: faster, uses more power"),
+                         GpuCardName(*card).c_str());
+         }
+         return std::string(_("A graphics card with its own memory: faster, "
+                              "uses more power"));
+       },
+       [](LauncherContext& ctx) {
+         return GpuChoiceUnavailable(ctx.machine(), false);
+       },
+       false,
+       false},
+      {"integrated",
+       _("Integrated graphics"),
+       {},
+       {},
+       [](LauncherContext& ctx) {
+         const MachineProfile& machine = ctx.machine();
+         const std::optional<runtime::HostGpu> card = CardOfKind(machine, true);
+         if (GpuChoiceAvailability(machine,
+                                   runtime::GpuPreference::kIntegrated) ==
+                 GpuChoiceState::kAvailable &&
+             card.has_value()) {
+           return Format(_("The integrated %s graphics: slower, uses less "
+                           "power"),
+                         GpuCardName(*card).c_str());
+         }
+         return std::string(_("The graphics built into the processor: "
+                              "slower, uses less power"));
+       },
+       [](LauncherContext& ctx) {
+         return GpuChoiceUnavailable(ctx.machine(), true);
+       },
+       false,
+       false},
+  };
+  return BindComboRow(context, std::move(spec), std::move(combo));
+}
+
+// The card direct Vulkan renders on with engine.gpu, when it is not the
+// NVIDIA one (ShaderLoadingState::kOtherCard).
+std::string OtherCardReason(const LauncherContext& context) {
+  const VulkanDriverSelection driver =
+      context.machine().VulkanDriver(context.GameValue(kGpuKey, "auto"));
+  if (!driver.gpu.has_value()) return {};
+  const std::string name = GpuCardName(*driver.gpu);
+  return driver.gpu->integrated
+             ? Format(_("The game renders on the integrated %s graphics here, "
+                        "which were never restricted"),
+                      name.c_str())
+             : Format(_("The game renders on the %s card here, which was "
+                        "never restricted"),
+                      name.c_str());
+}
+
+ShaderLoadingState ShaderLoading(const LauncherContext& context,
+                                 const std::string& value) {
+  return ResolveShaderLoading(
+      context.machine(), context.GameValue("graphics.backend", "direct-vulkan"),
+      context.GameValue(kGpuKey, "auto"), value);
+}
+
+// engine.nvidia_shader_mt (graphics_launch_policy.cc
+// MergeNvidiaShaderLoadingClientSettingsOverrides; commit 72b9e52 has the
+// measurements).
+GtkWidget* BuildShaderLoadingRow(LauncherContext* context) {
+  RowSpec spec;
+  spec.key = kShaderMtKey;
+  spec.title = _("Multithreaded shader loading");
+  // runtime_config.cc: MOCKTAIL_NVIDIA_SHADER_MT defaults to on.
+  spec.fallback = "true";
+  spec.keywords = {"shader",    "shaders",  "shader pack", "threads",
+                   "nvidia",    "loading",  "startup",     "шейдеры",
+                   "потоки",    "загрузка", "запуск",
+                   "FStringGraphicsVulkanShaderMTDenyPattern"};
+  spec.hint.subtitle_for = [](LauncherContext& ctx, const std::string& value) {
+    switch (ShaderLoading(ctx, value)) {
+      case ShaderLoadingState::kMultithreaded:
+        return std::string(_("Roblox loads its shader pack on several "
+                             "threads, as on Intel and AMD"));
+      case ShaderLoadingState::kSingleThread:
+        return std::string(_("Roblox loads its shader pack on one thread on "
+                             "NVIDIA, as Mocktail used to"));
+      case ShaderLoadingState::kUnknown:
+        return value == "false"
+                   ? std::string(_("On NVIDIA, Roblox loads its shader pack "
+                                   "on one thread"))
+                   : std::string(_("On NVIDIA, Roblox loads its shader pack "
+                                   "on several threads"));
+      case ShaderLoadingState::kNoNvidia:
+      case ShaderLoadingState::kNotVulkan:
+      case ShaderLoadingState::kOtherCard:
+        break;
+    }
+    // The reason it does not apply is the row's last line.
+    return std::string();
+  };
+  spec.hint.details =
+      _("Lets Roblox's Vulkan renderer load its shader pack on several "
+        "threads on NVIDIA graphics cards, as it already does on Intel and "
+        "AMD. The change applies the next time Roblox starts.") +
+      std::string("\n\n") +
+      // graphics_launch_policy.cc kNvidiaShaderMtDenyPattern; the loader's
+      // own mutex around each fseek/fread pair (shader_pack_stream_test).
+      _("Mocktail used to keep NVIDIA on one thread with Roblox's "
+        "FStringGraphicsVulkanShaderMTDenyPattern (4318:.*, NVIDIA's PCI "
+        "vendor number). That restriction was a workaround that turned out "
+        "to be unnecessary: Roblox's loader holds its own lock around every "
+        "read of the pack, so several threads are safe on every vendor. Only "
+        "NVIDIA was ever restricted.") +
+      "\n\n" +
+      // Commit 72b9e52: RTX 3060, driver 615, isolated LuaApp runs of
+      // 2.736.1408 and 2.738.1397.
+      _("On an RTX 3060 (driver 615) the startup shaders took 23 to 29 ms on "
+        "several threads against 30 to 35 ms on one, about 6 to 9 ms saved "
+        "per start, and the game rendered the same frames either way.") +
+      "\n\n" +
+      _("Turn it off only if shader loading misbehaves on NVIDIA, for "
+        "example if Roblox hangs or crashes while it loads; Off brings the "
+        "one-thread restriction back. Only the Vulkan backend reads this "
+        "setting.");
+  spec.hint.recommend = [context](const MachineProfile&) {
+    const ShaderLoadingState state = ShaderLoading(*context, "true");
+    return state == ShaderLoadingState::kMultithreaded
+               ? std::optional<std::string>("true")
+               : std::optional<std::string>();
+  };
+  spec.hint.recommend_reason = [](const MachineProfile&) {
+    return std::string(
+        _("Several threads load the shader pack about 6 to 9 ms faster, and "
+          "Roblox's loader keeps its reads safe on every vendor."));
+  };
+  spec.unavailable = [](LauncherContext& ctx) {
+    switch (ShaderLoading(ctx, "true")) {
+      case ShaderLoadingState::kNoNvidia:
+        return std::string(_("No NVIDIA graphics card here: only NVIDIA was "
+                             "ever restricted"));
+      case ShaderLoadingState::kNotVulkan:
+        return std::string(_("Only the Vulkan backend reads this setting"));
+      case ShaderLoadingState::kOtherCard:
+        return OtherCardReason(ctx);
+      case ShaderLoadingState::kUnknown:
+      case ShaderLoadingState::kMultithreaded:
+      case ShaderLoadingState::kSingleThread:
+        break;
+    }
+    return std::string();
+  };
+  return BindSwitchRow(context, std::move(spec));
+}
+
 constexpr char kQualityKey[] = "engine.graphics_quality";
 constexpr char kFrameRateKey[] = "graphics.frame_rate_limit";
 constexpr char kVsyncKey[] = "graphics.vsync";
@@ -1092,10 +1514,19 @@ GtkWidget* BuildGraphicsPage(LauncherContext* context) {
       AddGroup(page, _("Renderer"),
                _("Which graphics path Roblox uses on this computer"));
   AddRow(renderer, BuildGraphicsBackendRow(context));
+  AddRow(renderer, BuildGpuRow(context));
   AddRow(renderer, BuildGraphicsQualityRow(context, state));
   GtkWidget* quality_level = BuildQualityLevelRow(context);
   state->set_quality_spin(quality_level);
   AddRow(renderer, quality_level);
+  GtkWidget* advanced = adw_expander_row_new();
+  adw_preferences_row_set_title(ADW_PREFERENCES_ROW(advanced),
+                                _("More renderer options"));
+  adw_expander_row_set_subtitle(ADW_EXPANDER_ROW(advanced),
+                                _("Shader loading on NVIDIA"));
+  adw_expander_row_add_row(ADW_EXPANDER_ROW(advanced),
+                           BuildShaderLoadingRow(context));
+  AddRow(renderer, advanced);
 
   GtkWidget* frame_rate =
       AddGroup(page, _("Frame rate"),
