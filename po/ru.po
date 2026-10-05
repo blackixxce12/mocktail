@@ -47,7 +47,7 @@ msgstr "Для этого компьютера рекомендуется: %s"
 
 #, c-format
 msgid "This launch uses %s=%s instead"
-msgstr "В этом запуске вместо этого действует %s=%s"
+msgstr "В этом запуске вместо настройки действует %s=%s"
 
 #, c-format
 msgid "Set by %s=%s: this launch uses that value instead of config.yaml"
@@ -3114,7 +3114,7 @@ msgid "Roblox's own settings"
 msgstr "Собственные настройки Roblox"
 
 msgid "Which of them the settings in this window take over"
-msgstr "Какие из них перекрывают настройки этого окна"
+msgstr "Какие из них перекрывает это окно"
 
 msgid "Graphics Quality slider"
 msgstr "Ползунок «Качество графики»"
@@ -3380,7 +3380,7 @@ msgid "What Mocktail decides and what Roblox decides"
 msgstr "Что решает Mocktail, а что — Roblox"
 
 msgid "Roblox's own settings that the settings in this window take over at the next start; select one to open the row that decides it"
-msgstr "Собственные настройки Roblox, которые настройки этого окна перекроют при следующем запуске; выберите строку, чтобы открыть настройку, которая это решает"
+msgstr "Настройки самого Roblox, которые это окно перекроет при следующем запуске; выберите строку, чтобы перейти к настройке, от которой это зависит"
 
 #, c-format
 msgid "Mocktail takes over %d of Roblox's own settings now; see which on the Advanced page"
