@@ -9,6 +9,7 @@
 #include "launcher_ui/launcher_context.h"
 #include "launcher_ui/pages.h"
 #include "launcher_ui/recommendations.h"
+#include "runtime/frame_rate_policy.h"
 
 namespace mocktail::launcher_ui {
 namespace {
@@ -48,34 +49,57 @@ GtkWidget* BuildGraphicsBackendRow(LauncherContext* context) {
       // stubs/libegl_stub.cc eglSwapInterval is a no-op; Mocktail never
       // calls SDL_GL_SetSwapInterval (research/graphics.md 1.5).
       _("• OpenGL ES: Roblox's OpenGL ES 3.0 renderer on your system's EGL "
-        "driver. Use it when Vulkan is missing or crashes. Vertical sync has "
-        "no effect here: frames follow the driver's default, which normally "
-        "waits for the display.") +
+        "driver. Use it when Vulkan is missing or crashes. The driver decides "
+        "when frames are shown, which normally means waiting for the "
+        "display.") +
       "\n\n" +
-      // window.cc FindInstalledAngleLibraries; upstream issue #149.
+      // window.cc FindInstalledAngleLibraries; upstream issue #149 (an
+      // older Mocktail that never found ANGLE, research/graphics.md 1.6).
       _("• ANGLE on Vulkan: the OpenGL ES renderer, translated to Vulkan by "
-        "the ANGLE libraries of a Chromium or Electron installed on this "
-        "computer. It adds a translation layer, is experimental on NVIDIA "
-        "(upstream issue #149), and can break when that browser updates. Try "
-        "it only when Vulkan shows glitches and OpenGL ES does not work.") +
+        "ANGLE libraries: Mocktail's own copy when it has one, otherwise "
+        "those of an installed Chromium, Electron, CEF or Chrome. It adds a "
+        "translation layer, is untested on NVIDIA, and a browser's copy can "
+        "break when that browser updates. Try it only when Vulkan shows "
+        "glitches and OpenGL ES does not work.") +
       "\n\n" +
       // config/mocktail.example.yaml updates.automatic: the canaries run
       // with the selected graphics backend.
       _("Automatic Roblox updates test a new Roblox version with the backend "
-        "chosen here before switching to it, so a version that fails with it "
-        "is not installed.");
+        "chosen here before switching to it; if the test fails, your current "
+        "version stays in use. After changing the backend, the next update "
+        "is tested with the new one.");
   spec.hint.details_for = [](LauncherContext& ctx) {
     const MachineProfile& machine = ctx.machine();
     if (!machine.detected) return std::string();
     std::string text;
-    text += machine.has_vulkan_driver()
-                ? Format(_("Vulkan driver on this computer: %s"),
-                         machine.vulkan_icd.c_str())
-                : std::string(_("No Vulkan driver for your graphics card was "
-                                "found in the usual places "
-                                "(/usr/share/vulkan/icd.d)."));
+    switch (machine.vulkan_source) {
+      case VulkanDriverSource::kPinned:
+      case VulkanDriverSource::kLoader:
+        text += Format(_("Vulkan driver on this computer: %s"),
+                       machine.vulkan_icd.c_str());
+        break;
+      case VulkanDriverSource::kUser:
+        text += Format(_("Vulkan driver chosen by VK_DRIVER_FILES: %s"),
+                       machine.vulkan_icd.c_str());
+        break;
+      case VulkanDriverSource::kUnknown:
+        text += _("Mocktail found no Vulkan driver it recognizes; inside "
+                  "Flatpak the drivers come with the runtime. If Roblox fails "
+                  "to start with Vulkan, choose OpenGL ES.");
+        break;
+      case VulkanDriverSource::kNone:
+        text += _("Mocktail found no Vulkan driver for your graphics card "
+                  "where the Vulkan loader looks (/usr/share/vulkan/icd.d "
+                  "and similar folders). If Roblox fails to start with "
+                  "Vulkan, choose OpenGL ES.");
+        break;
+    }
     text += "\n\n";
-    if (machine.angle.has_value()) {
+    if (machine.angle.has_value() && machine.angle->from_environment) {
+      text += Format(_("ANGLE for “ANGLE on Vulkan”: %s, set by "
+                       "MOCKTAIL_ANGLE_LIB_DIR."),
+                     machine.angle->directory.c_str());
+    } else if (machine.angle.has_value()) {
       text += machine.angle->bundled
                   ? Format(_("ANGLE for “ANGLE on Vulkan”: Mocktail's own copy "
                              "in %s."),
@@ -101,7 +125,12 @@ GtkWidget* BuildGraphicsBackendRow(LauncherContext* context) {
     return text;
   };
   spec.hint.recommend = [](const MachineProfile& machine) {
-    return std::optional<std::string>(RecommendGraphicsBackend(machine).value);
+    const BackendRecommendation recommendation =
+        RecommendGraphicsBackend(machine);
+    if (recommendation.reason == BackendRecommendationReason::kUnknown) {
+      return std::optional<std::string>();
+    }
+    return std::optional<std::string>(recommendation.value);
   };
   spec.hint.recommend_reason = [](const MachineProfile& machine) {
     switch (RecommendGraphicsBackend(machine).reason) {
@@ -118,8 +147,8 @@ GtkWidget* BuildGraphicsBackendRow(LauncherContext* context) {
       }
       case BackendRecommendationReason::kNoVulkanDriver:
         return std::string(
-            _("No Vulkan driver was found, and OpenGL ES works "
-              "with any driver that supports OpenGL ES 3.0."));
+            _("No Vulkan driver was found where the Vulkan loader looks, and "
+              "OpenGL ES works with any driver that supports OpenGL ES 3.0."));
       case BackendRecommendationReason::kUnknown:
         break;
     }
@@ -135,7 +164,7 @@ GtkWidget* BuildGraphicsBackendRow(LauncherContext* context) {
             "the Vulkan one. Choose Vulkan to fix it."));
     }
     if (IsVulkanSpelling(value) && machine.detected &&
-        !machine.has_vulkan_driver()) {
+        machine.vulkan_source == VulkanDriverSource::kNone) {
       return std::string(
           _("No Vulkan driver was found for your graphics "
             "card, so Roblox may fail to start. Install one or "
@@ -147,15 +176,19 @@ GtkWidget* BuildGraphicsBackendRow(LauncherContext* context) {
             _("No ANGLE libraries were found, so Roblox cannot "
               "start with this backend."));
       }
+      if (machine.angle.has_value() && !machine.angle->looks_like_angle) {
+        // Only MOCKTAIL_ANGLE_LIB_DIR gets here: the search skips such
+        // pairs, and so does the game.
+        return Format(_("The libraries in %s, set by MOCKTAIL_ANGLE_LIB_DIR, "
+                        "do not look like ANGLE, so Roblox may not start "
+                        "with this backend."),
+                      machine.angle->directory.c_str());
+      }
       if (machine.gpu.nvidia) {
         return std::string(
-            _("Experimental on NVIDIA: ANGLE on Vulkan has "
-              "failed there before (upstream issue #149)."));
-      }
-      if (machine.angle.has_value() && !machine.angle->looks_like_angle) {
-        return Format(_("The libraries in %s do not look like ANGLE. Roblox "
-                        "checks them at start and stops if they are not."),
-                      machine.angle->directory.c_str());
+            _("Untested on NVIDIA: the only report (upstream issue #149) "
+              "failed with an older Mocktail that did not find ANGLE at "
+              "all."));
       }
     }
     if (value == "angle-swiftshader") {
@@ -164,12 +197,21 @@ GtkWidget* BuildGraphicsBackendRow(LauncherContext* context) {
           _("Software rendering on the processor: very slow, "
             "only for diagnosing problems."));
     }
-    if ((value == "opengl" || value == "gles" || value == "system" ||
-         value == "auto") &&
-        ctx.EffectiveValue("graphics.vsync", "auto") != "auto") {
-      return std::string(
-          _("Vertical sync is set, but it has no effect with "
-            "OpenGL ES."));
+    if (value == "opengl" || value == "gles" || value == "system" ||
+        value == "auto") {
+      // window.cc: only the 240 Hz report and the input pacing follow
+      // Vertical sync outside the Vulkan adapter.
+      const std::string vsync = ctx.GameValue("graphics.vsync", "auto");
+      if (vsync == "on") {
+        return std::string(
+            _("Vertical sync On has no effect with OpenGL ES; the driver "
+              "decides when frames are shown."));
+      }
+      if (vsync == "off") {
+        return std::string(
+            _("With OpenGL ES, Vertical sync Off does not change when frames "
+              "are shown; it only tells Roblox the display runs at 240 Hz."));
+      }
     }
     return std::string();
   };
@@ -186,7 +228,8 @@ GtkWidget* BuildGraphicsBackendRow(LauncherContext* context) {
        false},
       {"opengl",
        _("OpenGL ES"),
-       _("For a missing or broken Vulkan driver; Vertical sync has no effect"),
+       _("For a missing or broken Vulkan driver; the driver decides when "
+         "frames are shown"),
        // runtime_config.cc ParseGraphicsBackend: gles is the same strict
        // EGL path.
        {"gles"},
@@ -212,8 +255,8 @@ GtkWidget* BuildGraphicsBackendRow(LauncherContext* context) {
        [](LauncherContext& ctx) {
          const MachineProfile& machine = ctx.machine();
          return machine.detected && !machine.angle.has_value()
-                    ? std::string(_("No Chromium or Electron ANGLE libraries "
-                                    "were found on this computer"))
+                    ? std::string(_("No ANGLE libraries were found on this "
+                                    "computer"))
                     : std::string();
        },
        false,
@@ -222,8 +265,8 @@ GtkWidget* BuildGraphicsBackendRow(LauncherContext* context) {
       {"system",
        _("OpenGL ES with ANGLE retry"),
        // window.cc RetryWithAutoAngleFallback; "auto" is treated the same.
-       _("OpenGL ES; if the window cannot start, one retry with ANGLE on "
-         "Vulkan"),
+       _("OpenGL ES; if the window cannot start and ANGLE is installed, one "
+         "retry with ANGLE on Vulkan"),
        {"auto"},
        nullptr,
        nullptr,
@@ -332,8 +375,8 @@ class GraphicsPageState {
 // follows the Performance page's physics workers and multithreading.
 bool PresetActive(const LauncherContext& context) {
   return RenderingPresetActive(
-      context.EffectiveValue("performance.physics_worker_mode", "throughput"),
-      context.EffectiveValue("performance.multithreaded_rendering", "false"));
+      context.GameValue("performance.physics_worker_mode", "throughput"),
+      context.GameValue("performance.multithreaded_rendering", "false"));
 }
 
 // graphics_launch_policy.cc: direct Vulkan (any spelling) on Intel-only
@@ -342,7 +385,7 @@ bool IntelOnlyVulkan(const LauncherContext& context) {
   const MachineProfile& machine = context.machine();
   return machine.detected && machine.gpu.intel_only() &&
          IsVulkanSpelling(
-             context.EffectiveValue("graphics.backend", "direct-vulkan"));
+             context.GameValue("graphics.backend", "direct-vulkan"));
 }
 
 QualityEffect CurrentQuality(const LauncherContext& context,
@@ -354,16 +397,19 @@ QualityEffect CurrentQuality(const LauncherContext& context,
 std::vector<ComboOption> QualityOptions(LauncherContext& context) {
   std::vector<ComboOption> options;
   const int default_level = IntelOnlyVulkan(context) ? 1 : 3;
+  // A level is named only while the preset forces one.
   options.push_back(
       {"default",
-       Format(_("Mocktail default (level %d)"), default_level),
+       PresetActive(context)
+           ? Format(_("Mocktail default (level %d)"), default_level)
+           : std::string(_("Mocktail default")),
        {},
        {},
        [](LauncherContext& ctx) {
          if (!PresetActive(ctx)) {
            return std::string(
-               _("Roblox's own setting decides while Mocktail's performance "
-                 "preset is off"));
+               _("No level is forced while Mocktail's performance preset is "
+                 "off"));
          }
          return IntelOnlyVulkan(ctx)
                     ? std::string(_("Level 1 of 21: Mocktail's choice for "
@@ -377,8 +423,8 @@ std::vector<ComboOption> QualityOptions(LauncherContext& context) {
   options.push_back(
       {"manual",
        _("Roblox in-game slider"),
-       _("Roblox's Graphics Quality setting decides (automatic unless you "
-         "change it)"),
+       _("Roblox's Graphics Quality setting picks the level; the "
+         "performance preset's other limits stay"),
        {},
        nullptr,
        nullptr,
@@ -445,10 +491,14 @@ GtkWidget* BuildGraphicsQualityRow(LauncherContext* context,
         "that have only Intel graphics. Roblox's in-game quality slider then "
         "has no effect.") +
       "\n\n" +
-      _("• Roblox in-game slider: Mocktail forces nothing, and the Graphics "
-        "Quality option in Roblox's settings decides. It is automatic unless "
-        "you change it, so Roblox raises or lowers the level with the frame "
-        "rate.") +
+      // performance_policy.cc: "manual" leaves out only
+      // FIntDebugFRMQualityLevelOverride; the rest of the preset stays.
+      _("• Roblox in-game slider: Mocktail stops forcing a quality level, and "
+        "the Graphics Quality option in Roblox's settings decides it. While "
+        "the performance preset is on, Mocktail still lowers texture detail, "
+        "turns MSAA off and uses low-end level of detail; set Physics workers "
+        "to Low latency (or Automatic without Multithreaded rendering) to "
+        "turn that off too.") +
       "\n\n" + _("• Custom level: forces the level you pick.") + "\n\n" +
       // performance_policy.cc rendering_settings (MSAA, texture budgets,
       // shadow map mips, low-end LOD).
@@ -458,32 +508,44 @@ GtkWidget* BuildGraphicsQualityRow(LauncherContext* context,
   spec.hint.details_for = [](LauncherContext& ctx) {
     const QualityEffect effect =
         CurrentQuality(ctx, ctx.EffectiveValue(kQualityKey, "default"));
+    std::string text;
     if (effect.source == QualitySource::kRobloxSetting) {
-      return PresetActive(ctx)
+      text = PresetActive(ctx)
                  ? std::string(_("With the current settings Roblox's own "
                                  "Graphics Quality setting decides."))
                  : std::string(_("Mocktail's performance preset is off with "
                                  "the current Performance settings, so "
                                  "Roblox's own Graphics Quality setting "
                                  "decides."));
+    } else {
+      text = Format(_("With the current settings Roblox runs at level %d."),
+                    effect.level);
     }
-    return Format(_("With the current settings Roblox runs at level %d."),
-                  effect.level);
+    const std::string note = ctx.UnfollowedOverrideNote(
+        {"performance.physics_worker_mode",
+         "performance.multithreaded_rendering", "graphics.backend"});
+    if (!note.empty()) text += "\n\n" + note;
+    return text;
   };
   spec.hint.recommend = [](const MachineProfile& machine) {
-    return std::optional<std::string>(RecommendGraphicsQuality(machine).value);
+    const QualityRecommendation recommendation =
+        RecommendGraphicsQuality(machine);
+    if (recommendation.value.empty()) return std::optional<std::string>();
+    return std::optional<std::string>(recommendation.value);
   };
   spec.hint.recommend_reason = [](const MachineProfile& machine) {
     switch (RecommendGraphicsQuality(machine).reason) {
       case QualityRecommendationReason::kCapableGraphics:
-        return Format(_("Your %s graphics can usually draw more than level 3, "
-                        "and Roblox's automatic setting keeps the frame rate "
-                        "up by itself."),
-                      machine.GpuVendorsLabel().c_str());
+        return Format(_("Your %s graphics can usually draw more than level 3. "
+                        "Roblox's own Graphics Quality setting then picks the "
+                        "level; while Physics workers is on Throughput, "
+                        "Mocktail's preset still keeps textures and "
+                        "anti-aliasing low."),
+                      machine.DiscreteGpuLabel().c_str());
       case QualityRecommendationReason::kModestGraphics:
         return std::string(
-            _("With integrated or unknown graphics, Mocktail's low default "
-              "keeps the frame rate up."));
+            _("With integrated graphics, Mocktail's low default keeps the "
+              "frame rate up."));
       case QualityRecommendationReason::kUnknown:
         break;
     }
@@ -595,11 +657,13 @@ std::vector<ComboOption> FrameRateOptions(LauncherContext& context) {
        {},
        {},
        [](LauncherContext& ctx) {
-         return ctx.EffectiveValue(kVsyncKey, "auto") == "on"
-                    ? std::string(_("Roblox's highest target; Vertical sync "
-                                    "On still waits for the display"))
-                    : std::string(_("Roblox's highest target; Vulkan frames "
-                                    "do not wait for the display"));
+         return ctx.GameValue(kVsyncKey, "auto") == "on"
+                    ? std::string(_("The highest rate Roblox's menu offers; "
+                                    "Vertical sync On still waits for the "
+                                    "display"))
+                    : std::string(_("The highest rate Roblox's menu offers; "
+                                    "Vulkan frames do not wait for the "
+                                    "display"));
        },
        nullptr,
        false,
@@ -660,10 +724,13 @@ GtkWidget* BuildFrameRateRow(LauncherContext* context,
                    "частота",   "ограничение",
                    "герц",      "DFIntTaskSchedulerTargetFps"};
   spec.hint.details =
+      // frame_rate_policy.cc: the target and FFlagGameBasicSettingsFramerateCap5
+      // are both set; which of the two wins in the payload is unverified.
       _("How many frames per second Roblox aims for. A number here is passed "
-        "to Roblox as its task scheduler target (DFIntTaskSchedulerTargetFps), "
-        "so Roblox's in-game Maximum Frame Rate menu no longer decides. The "
-        "change applies the next time Roblox starts.") +
+        "to Roblox as its task scheduler target (DFIntTaskSchedulerTargetFps). "
+        "Roblox's in-game Maximum Frame Rate menu stays available; if the "
+        "game stays below the target, check that menu too. The change "
+        "applies the next time Roblox starts.") +
       std::string("\n\n") +
       // frame_rate_policy.cc forces FFlagGameBasicSettingsFramerateCap5.
       _("• Set in Roblox: Mocktail sets no target, and Roblox's own Maximum "
@@ -676,9 +743,10 @@ GtkWidget* BuildFrameRateRow(LauncherContext* context,
       "\n\n" +
       // window.cc GetDisplayRefreshCapabilities advertises 240 Hz when
       // presentation is unthrottled.
-      _("• 240 (maximum): Roblox's highest target. With Vulkan and Vertical "
-        "sync on Automatic, frames are shown without waiting for the display, "
-        "and Roblox is told the display runs at 240 Hz.") +
+      _("• 240 (maximum): the highest rate Roblox's own menu offers. With "
+        "Vertical sync on Automatic, Roblox is told the display runs at "
+        "240 Hz, and Vulkan frames are shown without waiting for the "
+        "display.") +
       "\n\n" +
       _("More frames make motion smoother and input quicker, at the cost of "
         "power, heat and fan noise. A target above the screen's refresh rate "
@@ -694,13 +762,20 @@ GtkWidget* BuildFrameRateRow(LauncherContext* context,
                         monitor.connector.c_str(), monitor.RefreshHz());
   };
   spec.hint.recommend = [](const MachineProfile& machine) {
-    return RecommendFrameRate(machine.monitor);
+    return RecommendFrameRate(machine);
   };
   spec.hint.recommend_reason = [](const MachineProfile& machine) {
     const int refresh = machine.monitor.RefreshHz();
+    if (refresh > runtime::kMaximumSupportedRobloxSchedulerFps) {
+      return Format(_("Your screen refreshes %d times a second, faster than "
+                      "the 240 frames per second Roblox's own menu offers, "
+                      "so 240 is the closest target."),
+                    refresh);
+    }
     if (refresh > 60) {
-      return Format(_("Your screen refreshes %d times a second, so this "
-                      "target gives it a new frame on every refresh."),
+      return Format(_("Your screen refreshes %d times a second; this target "
+                      "lets Roblox show a new frame on every refresh when "
+                      "the computer is fast enough."),
                     refresh);
     }
     return Format(_("Your screen refreshes %d times a second, which Roblox's "
@@ -710,6 +785,14 @@ GtkWidget* BuildFrameRateRow(LauncherContext* context,
   spec.hint.warning = [state](LauncherContext&, const std::string& value) {
     if (const launcher::FastFlagsDocument* flags = state->fast_flags()) {
       const std::string conflict = FrameRateFlagConflict(*flags, value);
+      // frame_rate_policy.cc turns FFlagGameBasicSettingsFramerateCap5 on
+      // for every value, "Set in Roblox" included.
+      if (conflict == "FFlagGameBasicSettingsFramerateCap5") {
+        return Format(_("fflags.json sets %s to another value, but Mocktail "
+                        "always turns it on, so Roblox will not start. Remove "
+                        "that flag from fflags.json."),
+                      conflict.c_str());
+      }
       if (!conflict.empty()) {
         return Format(_("fflags.json sets %s to another value, so Roblox will "
                         "not start. Remove that flag or choose “Set in "
@@ -718,11 +801,14 @@ GtkWidget* BuildFrameRateRow(LauncherContext* context,
       }
     }
     const std::optional<int> fps = ParseFrameRate(value);
-    if (fps.has_value() && *fps > 240) {
-      // frame_rate_policy.h kMaximumSupportedRobloxSchedulerFps.
+    if (fps.has_value() &&
+        *fps > runtime::kMaximumSupportedRobloxSchedulerFps) {
+      // frame_rate_policy.cc forwards the number verbatim; nothing shows
+      // whether this payload honours more than its menu's 240.
       return std::string(
-          _("Roblox's highest target is 240, so a larger number "
-            "may not raise the frame rate."));
+          _("Above 240, the highest rate Roblox's own menu offers. Mocktail "
+            "passes the number on unchanged, but higher targets are untested "
+            "with this Roblox build."));
     }
     return std::string();
   };
@@ -756,7 +842,7 @@ GtkWidget* BuildCustomFrameRateRow(LauncherContext* context) {
         "unchanged, without a list of allowed values.") +
       std::string("\n\n") +
       _("Pick the refresh rate of your screen, or a lower number to save "
-        "power and heat. Roblox's own maximum is 240.");
+        "power and heat. 240 is the highest rate Roblox's own menu offers.");
   SpinSpec spin;
   spin.minimum = 1;
   spin.maximum = 1000;
@@ -765,10 +851,13 @@ GtkWidget* BuildCustomFrameRateRow(LauncherContext* context) {
 }
 
 std::string VsyncAutoDescription(const LauncherContext& context) {
-  switch (ResolvePresentation("auto",
-                              context.EffectiveValue(kFrameRateKey, "-1"))) {
+  switch (ResolvePresentation("auto", context.GameValue(kFrameRateKey, "-1"))) {
     case Presentation::kDriverDefault:
-      return _("The driver's default, since Roblox owns the frame-rate cap");
+      // graphics_launch_policy.cc exports MESA_VK_WSI_PRESENT_MODE=mailbox,
+      // which Mesa's drivers apply; elsewhere the adapter leaves Roblox's
+      // own choice (present_mode_policy.cc kHostDefault).
+      return _("Roblox picks how frames are shown while it owns the cap "
+               "(mailbox on AMD and Intel)");
     case Presentation::kSynchronized:
       return _("Synchronized, because a frame-rate target is set");
     case Presentation::kUnthrottled:
@@ -791,26 +880,36 @@ GtkWidget* BuildVsyncRow(LauncherContext* context) {
                    "present",       "mailbox",      "immediate", "fifo",
                    "синхронизация", "вертикальная", "разрывы",   "задержка"};
   spec.hint.details =
+      // window.cc: GetDisplayRefreshCapabilities and PaceInputPump follow
+      // the policy for every backend; FilterPresentModes is Vulkan only.
       _("Decides whether Vulkan frames wait for the display's next refresh. "
-        "Only the Vulkan backend uses it: with OpenGL ES and ANGLE the "
-        "driver's default applies, which normally waits.") +
+        "Only the Vulkan backend presents frames this way: with OpenGL ES and "
+        "ANGLE the driver decides when frames are shown, but Off still tells "
+        "Roblox the display runs at 240 Hz.") +
       std::string("\n\n") +
       _("• Automatic: synchronized when a frame-rate target is set, not "
-        "synchronized with the 240 maximum, and the driver's default while "
-        "Roblox owns the cap.") +
+        "synchronized with the 240 maximum. While Roblox owns the cap, "
+        "Roblox picks how frames are presented; with Mesa drivers (AMD, "
+        "Intel, NVK) Mocktail uses mailbox, which shows only whole frames "
+        "without making Roblox wait.") +
       "\n\n" +
       // present_mode_policy.cc FilterPresentModes.
       _("• On: frames wait for the display, using the newest finished frame "
         "when the driver allows it. No tearing, slightly more input "
         "latency.") +
       "\n\n" +
-      // window.cc advertises 240 Hz to Roblox when unthrottled.
+      // window.cc advertises 240 Hz to Roblox and PaceInputPump stops
+      // sleeping when unthrottled.
       _("• Off: frames are shown as soon as they are ready, for the lowest "
-        "input latency. Roblox is also told the display runs at 240 Hz.") +
+        "input latency. Roblox is also told the display runs at 240 Hz, and "
+        "Mocktail stops pacing its main loop, which uses more processor "
+        "time.") +
       "\n\n" +
-      _("On Wayland a window only tears when the compositor allows it (on "
-        "Hyprland, for example, allow_tearing); otherwise Off still shows "
-        "whole frames, just with less waiting.");
+      // research/graphics.md 4.2: allow_tearing alone does not tear.
+      _("On Wayland a window only tears when the compositor allows it; on "
+        "Hyprland that takes general:allow_tearing plus an “immediate” window "
+        "rule for the game. Otherwise Off still shows whole frames, just "
+        "with less waiting.");
   const auto describe = [](const LauncherContext& ctx,
                            const std::string& value) -> std::string {
     if (value == "on") {
@@ -823,19 +922,39 @@ GtkWidget* BuildVsyncRow(LauncherContext* context) {
   };
   spec.hint.subtitle_for = [describe](LauncherContext& ctx,
                                       const std::string& value) {
+    std::string text;
     if (!IsVulkanSpelling(
-            ctx.EffectiveValue("graphics.backend", "direct-vulkan"))) {
-      return std::string(
-          _("No effect with this graphics backend; the driver decides"));
+            ctx.GameValue("graphics.backend", "direct-vulkan"))) {
+      text = ResolvePresentation(value, ctx.GameValue(kFrameRateKey, "-1")) ==
+                     Presentation::kUnthrottled
+                 ? std::string(_("With this backend the driver decides when "
+                                 "frames are shown, but Roblox is told the "
+                                 "display runs at 240 Hz"))
+                 : std::string(_("With this backend the driver decides when "
+                                 "frames are shown"));
+    } else {
+      text = describe(ctx, value);
     }
-    return describe(ctx, value);
+    const std::string note =
+        ctx.UnfollowedOverrideNote({"graphics.backend", kFrameRateKey});
+    if (!note.empty()) text += "\n" + note;
+    return text;
   };
   spec.hint.warning = [](LauncherContext& ctx, const std::string& value) {
-    if (value != "auto" && !IsVulkanSpelling(ctx.EffectiveValue(
-                               "graphics.backend", "direct-vulkan"))) {
+    if (IsVulkanSpelling(ctx.GameValue("graphics.backend", "direct-vulkan"))) {
+      return std::string();
+    }
+    if (value == "on") {
       return std::string(
-          _("Only the Vulkan backend applies this; choose Vulkan or set "
+          _("Only the Vulkan backend applies On; choose Vulkan or set "
             "Automatic."));
+    }
+    if (value == "off") {
+      return std::string(
+          _("With this backend Vertical sync does not change when frames are "
+            "shown, but Off still tells Roblox the display runs at 240 Hz and "
+            "stops Mocktail's input pacing. Choose Automatic unless you want "
+            "that."));
     }
     return std::string();
   };

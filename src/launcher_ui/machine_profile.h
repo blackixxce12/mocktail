@@ -32,11 +32,22 @@ struct GpuSummary {
   // video_driver_policy.cc checks (HasNvidiaKernelDriver): the proprietary
   // or open NVIDIA kernel module, not nouveau.
   bool nvidia_kernel_driver = false;
+  // Discrete AMD and Intel cards. An AMD GPU counts when amdgpu reports at
+  // least 2 GiB of its own memory (mem_info_vram_total; an APU's carve-out
+  // is smaller) or reports nothing; an Intel GPU when it is not at PCI
+  // address 0000:00:02.0, where Intel always puts integrated graphics
+  // (Arc cards sit behind a PCIe port).
+  bool amd_discrete = false;
+  bool intel_discrete = false;
 
   bool any() const { return nvidia || amd || intel || other; }
   // Only an Intel GPU: Mocktail then lowers Roblox's graphics quality by
   // default (graphics_launch_policy.cc, MOCKTAIL_GRAPHICS_QUALITY=1).
   bool intel_only() const { return intel && !nvidia && !amd; }
+  // A graphics card with its own memory (every NVIDIA GPU counts).
+  bool discrete() const { return nvidia || amd_discrete || intel_discrete; }
+  // Only integrated AMD or Intel graphics: an APU, Intel UHD, Iris or Xe.
+  bool integrated_only() const { return (amd || intel) && !discrete(); }
 };
 
 struct MonitorInfo {
@@ -71,6 +82,23 @@ struct AngleLibraries {
   bool looks_like_angle = false;
 };
 
+// Where the Vulkan driver the game would use comes from.
+enum class VulkanDriverSource {
+  // No hardware driver manifest anywhere the Vulkan loader looks.
+  kNone,
+  // None of the manifests Mocktail recognizes, inside Flatpak: the
+  // runtime's GL extensions hold the drivers, out of the launcher's sight.
+  kUnknown,
+  // The manifest Mocktail pins for this GPU (graphics_launch_policy.cc
+  // SelectHardwareIcd).
+  kPinned,
+  // VK_DRIVER_FILES or VK_ICD_FILENAMES, which Mocktail keeps as they are.
+  kUser,
+  // Mocktail pins nothing, and the loader finds a hardware driver itself
+  // (AMDVLK's amd_icd64.json, an unknown GPU's driver, ...).
+  kLoader,
+};
+
 struct MachineProfile {
   // False until the background detection finished.
   bool detected = false;
@@ -95,15 +123,23 @@ struct MachineProfile {
 
   // libgamemode.so.0 is installed (the game dlmopen()s it, game_mode.cc).
   bool gamemode_library = false;
-  // The first ANGLE pair in the order window.cc searches.
+  // The ANGLE pair the game would load: MOCKTAIL_ANGLE_LIB_DIR as it is
+  // set, else the first pair in window.cc's search order that looks like
+  // ANGLE (the game skips pairs that do not load).
   std::optional<AngleLibraries> angle;
-  // The Vulkan driver manifest the game would pin for this GPU, or any
-  // hardware driver manifest when the GPU vendor is unknown.
+  // The Vulkan driver the game would use: the manifest Mocktail pins, the
+  // user's VK_DRIVER_FILES, or a manifest the loader finds itself; empty
+  // for kNone and kUnknown.
   std::string vulkan_icd;
+  VulkanDriverSource vulkan_source = VulkanDriverSource::kNone;
 
   MonitorInfo monitor;
 
-  bool has_vulkan_driver() const { return !vulkan_icd.empty(); }
+  bool has_vulkan_driver() const {
+    return vulkan_source == VulkanDriverSource::kPinned ||
+           vulkan_source == VulkanDriverSource::kUser ||
+           vulkan_source == VulkanDriverSource::kLoader;
+  }
   // What display.server: auto picks for the game window with `backend`
   // (a config.yaml graphics.backend value): "wayland" or "x11", or empty
   // when this session has neither. Mirrors ResolveVideoDriverChoice.
@@ -113,12 +149,17 @@ struct MachineProfile {
   bool NvidiaDirectVulkanUsesX11() const;
   // Vendor names, discrete first: "NVIDIA", "AMD + Intel", "" if unknown.
   std::string GpuVendorsLabel() const;
+  // The vendors of the discrete cards only: "NVIDIA", "Intel Arc".
+  std::string DiscreteGpuLabel() const;
 };
 
 // Where detection looks; tests point everything at a fake tree.
 struct MachineProbe {
   // Prefixed to /sys, /proc and every directory below.
   std::filesystem::path root = "/";
+  // Where Mocktail looks for the manifest it pins (kIcdDirectories). The
+  // loader's own search (XDG_CONFIG_DIRS, XDG_DATA_DIRS, ...) is derived
+  // from the environment.
   std::vector<std::filesystem::path> icd_directories;
   std::vector<std::filesystem::path> library_directories;
   // Physical cores; defaults to runtime::DetectAvailablePhysicalCoreCount.

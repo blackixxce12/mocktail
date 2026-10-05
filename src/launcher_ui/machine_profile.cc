@@ -87,12 +87,32 @@ bool ParseHex(const std::string& text, unsigned int* value) {
   return true;
 }
 
+// amdgpu reports an APU's carve-out from system memory as its VRAM: a few
+// hundred MiB to 2 GiB on most laptops. Discrete cards have more.
+constexpr std::uint64_t kDiscreteVramBytes = 2ULL * 1024U * 1024U * 1024U;
+// Intel's integrated graphics are always device 2 on the root bus.
+constexpr std::string_view kIntelIntegratedSlot = "0000:00:02.0";
+
+// PCI_SLOT_NAME from the device's uevent ("0000:00:02.0"); empty when
+// unknown.
+std::string PciSlot(const std::filesystem::path& device) {
+  std::ifstream input(device / "uevent");
+  constexpr std::string_view kKey = "PCI_SLOT_NAME=";
+  std::string line;
+  while (std::getline(input, line)) {
+    if (line.compare(0, kKey.size(), kKey) == 0) {
+      return line.substr(kKey.size());
+    }
+  }
+  return {};
+}
+
 GpuSummary DetectGpus(const std::filesystem::path& root) {
   GpuSummary gpus;
   for (int index = 0; index < 16; ++index) {
-    std::ifstream input(Under(
-        root,
-        "/sys/class/drm/card" + std::to_string(index) + "/device/vendor"));
+    const std::filesystem::path device =
+        Under(root, "/sys/class/drm/card" + std::to_string(index) + "/device");
+    std::ifstream input(device / "vendor");
     std::string raw;
     unsigned int vendor = 0;
     if (!(input >> raw) || !ParseHex(raw, &vendor)) {
@@ -102,8 +122,19 @@ GpuSummary DetectGpus(const std::filesystem::path& root) {
       gpus.nvidia = true;
     } else if (vendor == 0x1002) {
       gpus.amd = true;
+      // Without the amdgpu file (the old radeon driver) the card counts as
+      // discrete, as before the check existed.
+      std::ifstream memory(device / "mem_info_vram_total");
+      std::uint64_t vram = 0;
+      if (!(memory >> vram) || vram >= kDiscreteVramBytes) {
+        gpus.amd_discrete = true;
+      }
     } else if (vendor == 0x8086) {
       gpus.intel = true;
+      const std::string slot = PciSlot(device);
+      if (!slot.empty() && slot != kIntelIntegratedSlot) {
+        gpus.intel_discrete = true;
+      }
     } else {
       gpus.other = true;
     }
@@ -127,35 +158,132 @@ std::uint64_t DetectMemory(const std::filesystem::path& root) {
   return 0;
 }
 
-std::string SelectIcd(const std::vector<std::filesystem::path>& directories,
-                      const GpuSummary& gpus) {
+// graphics_launch_policy.cc EnvIsOff.
+bool SwitchedOff(const runtime::Environment& environment,
+                 std::string_view name) {
+  const std::optional<std::string> value = environment.Get(name);
+  return value.has_value() &&
+         (*value == "0" || *value == "off" || *value == "igpu");
+}
+
+// The manifest graphics_launch_policy.cc SelectHardwareIcd pins, step by
+// step: the discrete GPU unless DRI_PRIME or __NV_PRIME_RENDER_OFFLOAD
+// turn offloading off, NVIDIA before nouveau, then Intel.
+std::string SelectPinnedIcd(const std::vector<std::filesystem::path>& directories,
+                            const GpuSummary& gpus,
+                            const runtime::Environment& environment) {
   const auto find = [&directories](std::string_view needle) {
     return runtime::SelectVulkanIcdManifest(directories, needle);
   };
-  // The order graphics_launch_policy.cc SelectHardwareIcd prefers: the
-  // discrete GPU, NVIDIA before nouveau.
-  std::string icd;
-  if (gpus.nvidia) {
-    icd = find("nvidia_icd");
-    if (icd.empty()) icd = find("nouveau_icd");
+  const auto nvidia = [&find] {
+    std::string icd = find("nvidia_icd");
+    return icd.empty() ? find("nouveau_icd") : icd;
+  };
+  const bool prefer_discrete =
+      !SwitchedOff(environment, "DRI_PRIME") &&
+      !SwitchedOff(environment, "__NV_PRIME_RENDER_OFFLOAD");
+  if (prefer_discrete && gpus.nvidia) {
+    std::string icd = nvidia();
+    if (!icd.empty()) return icd;
   }
-  if (icd.empty() && gpus.amd) icd = find("radeon_icd");
-  if (icd.empty() && gpus.intel) {
-    icd = find("intel_icd");
-    if (icd.empty()) icd = find("intel_hasvk_icd");
+  if (prefer_discrete && gpus.amd) {
+    std::string icd = find("radeon_icd");
+    if (!icd.empty()) return icd;
   }
-  if (icd.empty() && !gpus.nvidia && !gpus.amd && !gpus.intel) {
-    // Unknown GPU: any hardware driver the loader would use. Software and
-    // translation drivers are disabled for the game
-    // (VK_LOADER_DRIVERS_DISABLE=lvp_icd:dzn_icd:virtio_icd).
-    for (const char* needle :
-         {"nvidia_icd", "radeon_icd", "intel_icd", "nouveau_icd",
-          "freedreno_icd", "panfrost_icd", "asahi_icd", "broadcom_icd"}) {
-      icd = find(needle);
-      if (!icd.empty()) break;
+  if (gpus.intel) {
+    std::string icd = find("intel_icd");
+    return icd.empty() ? find("intel_hasvk_icd") : icd;
+  }
+  if (gpus.nvidia) return nvidia();
+  if (gpus.amd) return find("radeon_icd");
+  return {};
+}
+
+std::vector<std::filesystem::path> SplitPaths(std::string_view list) {
+  std::vector<std::filesystem::path> paths;
+  while (!list.empty()) {
+    const std::size_t colon = list.find(':');
+    const std::string_view entry = list.substr(0, colon);
+    if (!entry.empty() && entry.front() == '/') paths.emplace_back(entry);
+    if (colon == std::string_view::npos) break;
+    list.remove_prefix(colon + 1);
+  }
+  return paths;
+}
+
+// Where the Vulkan loader looks for driver manifests on Linux, in its order
+// (Vulkan-Loader, LoaderDriverInterface.md), plus VK_ADD_DRIVER_FILES.
+std::vector<std::filesystem::path> LoaderIcdLocations(
+    const runtime::Environment& environment) {
+  std::vector<std::filesystem::path> locations =
+      SplitPaths(environment.GetOr("VK_ADD_DRIVER_FILES", ""));
+  const std::string home = environment.GetOr("HOME", "");
+  const auto add = [&locations](const std::filesystem::path& base) {
+    locations.push_back(base / "vulkan/icd.d");
+  };
+  const auto add_home = [&](const char* variable, const char* fallback) {
+    const std::vector<std::filesystem::path> own =
+        SplitPaths(environment.GetOr(variable, ""));
+    if (!own.empty()) {
+      add(own.front());
+    } else if (!home.empty() && home.front() == '/') {
+      add(std::filesystem::path(home) / fallback);
+    }
+  };
+  const auto add_list = [&](const char* variable, const char* fallback) {
+    std::vector<std::filesystem::path> list =
+        SplitPaths(environment.GetOr(variable, ""));
+    if (list.empty()) list = SplitPaths(fallback);
+    for (const std::filesystem::path& base : list) add(base);
+  };
+  add_home("XDG_CONFIG_HOME", ".config");
+  add_list("XDG_CONFIG_DIRS", "/etc/xdg");
+  add("/etc");
+  add_home("XDG_DATA_HOME", ".local/share");
+  add_list("XDG_DATA_DIRS", "/usr/local/share:/usr/share");
+  return locations;
+}
+
+// A manifest of a driver for real hardware: Mocktail disables Mesa's
+// software and translation drivers for the game
+// (VK_LOADER_DRIVERS_DISABLE=lvp_icd:dzn_icd:virtio_icd), SwiftShader is
+// software too, and 32-bit manifests are for 32-bit programs.
+bool IsHardwareManifest(const std::string& name) {
+  if (name.size() < 5 || name.compare(name.size() - 5, 5, ".json") != 0) {
+    return false;
+  }
+  for (const char* skipped : {"lvp_icd", "dzn_icd", "virtio_icd",
+                              "swiftshader", "i686", "i386", "icd32"}) {
+    if (name.find(skipped) != std::string::npos) return false;
+  }
+  return true;
+}
+
+// The first hardware driver manifest the loader would find; empty when
+// there is none.
+std::string FindLoaderIcd(const std::vector<std::filesystem::path>& locations,
+                          const std::filesystem::path& root) {
+  for (const std::filesystem::path& location : locations) {
+    const std::filesystem::path path = Under(root, location);
+    std::error_code error;
+    if (std::filesystem::is_regular_file(path, error)) {
+      if (IsHardwareManifest(path.filename().string())) return path.string();
+      continue;
+    }
+    std::vector<std::string> names;
+    for (std::filesystem::directory_iterator iterator(path, error), end;
+         !error && iterator != end; iterator.increment(error)) {
+      const std::string name = iterator->path().filename().string();
+      if (iterator->is_regular_file(error) && IsHardwareManifest(name)) {
+        names.push_back(name);
+      }
+    }
+    if (!names.empty()) {
+      std::sort(names.begin(), names.end());
+      return (path / names.front()).string();
     }
   }
-  return icd;
+  return {};
 }
 
 bool FileMentions(const std::filesystem::path& path, std::string_view needle) {
@@ -192,21 +320,28 @@ std::optional<AngleLibraries> FindAngle(const runtime::Environment& environment,
       environment.Get("MOCKTAIL_ANGLE_LIB_DIR");
   for (const std::filesystem::path& directory :
        AngleSearchDirectories(environment)) {
+    const bool from_environment = override_directory.has_value() &&
+                                  !override_directory->empty() &&
+                                  directory == *override_directory;
     const std::filesystem::path egl = Under(root, directory / "libEGL.so");
     const std::filesystem::path gles = Under(root, directory / "libGLESv2.so");
     if (!Exists(egl) || !Exists(gles)) {
+      // window.cc ResolveGraphicsLibraries uses MOCKTAIL_ANGLE_LIB_DIR as
+      // it is set, without searching further.
+      if (from_environment) return std::nullopt;
       continue;
     }
     AngleLibraries angle;
     angle.directory = directory;
-    angle.from_environment = override_directory.has_value() &&
-                             !override_directory->empty() &&
-                             directory == *override_directory;
+    angle.from_environment = from_environment;
     angle.bundled =
         runtime_directory.has_value() && !runtime_directory->empty() &&
         directory == std::filesystem::path(*runtime_directory) / "angle";
     angle.label = AngleLibraryLabel(directory);
     angle.looks_like_angle = FileMentions(gles, kAnglePlatformExtension);
+    // window.cc FindInstalledAngleLibraries skips a pair that does not
+    // load as ANGLE and tries the next directory.
+    if (!angle.looks_like_angle && !from_environment) continue;
     return angle;
   }
   return std::nullopt;
@@ -294,6 +429,19 @@ bool MachineProfile::NvidiaDirectVulkanUsesX11() const {
   input.has_nvidia_kernel_driver = gpu.nvidia_kernel_driver;
   return window::ResolveVideoDriverChoice(input) ==
          window::VideoDriverChoice::kNvidiaDirectVulkanX11;
+}
+
+std::string MachineProfile::DiscreteGpuLabel() const {
+  std::vector<std::string> names;
+  if (gpu.nvidia) names.emplace_back("NVIDIA");
+  if (gpu.amd_discrete) names.emplace_back("AMD");
+  if (gpu.intel_discrete) names.emplace_back("Intel Arc");
+  std::string label;
+  for (const std::string& name : names) {
+    if (!label.empty()) label += " + ";
+    label += name;
+  }
+  return label;
 }
 
 std::string MachineProfile::GpuVendorsLabel() const {
@@ -421,11 +569,32 @@ MachineProfile DetectMachineProfile(const runtime::Environment& environment,
   profile.gamemode_library =
       HasGameModeLibrary(probe.library_directories, probe.root);
   profile.angle = FindAngle(environment, probe.root);
+  // graphics_launch_policy.cc ApplyVulkanIcdPolicy: a driver list the user
+  // set is kept; otherwise Mocktail pins the GPU's manifest, or leaves the
+  // choice to the loader when it recognizes none.
+  const std::string user_files = environment.GetOr("VK_DRIVER_FILES", "");
+  const std::string user_icds = environment.GetOr("VK_ICD_FILENAMES", "");
   std::vector<std::filesystem::path> icd_directories;
   for (const std::filesystem::path& directory : probe.icd_directories) {
     icd_directories.push_back(Under(probe.root, directory));
   }
-  profile.vulkan_icd = SelectIcd(icd_directories, profile.gpu);
+  if (!user_files.empty() || !user_icds.empty()) {
+    profile.vulkan_icd = user_files.empty() ? user_icds : user_files;
+    profile.vulkan_source = VulkanDriverSource::kUser;
+  } else if (std::string pinned =
+                 SelectPinnedIcd(icd_directories, profile.gpu, environment);
+             !pinned.empty()) {
+    profile.vulkan_icd = std::move(pinned);
+    profile.vulkan_source = VulkanDriverSource::kPinned;
+  } else if (std::string found =
+                 FindLoaderIcd(LoaderIcdLocations(environment), probe.root);
+             !found.empty()) {
+    profile.vulkan_icd = std::move(found);
+    profile.vulkan_source = VulkanDriverSource::kLoader;
+  } else {
+    profile.vulkan_source = profile.flatpak ? VulkanDriverSource::kUnknown
+                                            : VulkanDriverSource::kNone;
+  }
   profile.detected = true;
   return profile;
 }

@@ -6,6 +6,7 @@
 #include <array>
 #include <filesystem>
 #include <functional>
+#include <initializer_list>
 #include <map>
 #include <optional>
 #include <string>
@@ -164,6 +165,18 @@ class LauncherContext {
   // keys the template leaves commented out).
   std::string EffectiveValue(std::string_view key,
                              std::string_view fallback = {}) const;
+  // The value the game uses for `key` this launch: the config.yaml form of
+  // the variable overriding it while overrides apply (SDL_VIDEODRIVER=
+  // wayland reads as display.server: wayland), else EffectiveValue().
+  // Hints worked out from another row's setting read this, so they say
+  // what this launch does; a row's own value stays the draft's.
+  std::string GameValue(std::string_view key,
+                        std::string_view fallback = {}) const;
+  // "Worked out from config.yaml; this launch uses NAME=value instead." for
+  // the first of `keys` overridden by a variable whose value has no
+  // config.yaml form, which GameValue() cannot follow; empty otherwise.
+  std::string UnfollowedOverrideNote(
+      std::initializer_list<std::string_view> keys) const;
   // Change the draft. Errors (a value the editor refuses) are shown as a
   // toast and return false. Listeners run on success.
   bool SetValue(std::string_view key, std::string_view value,

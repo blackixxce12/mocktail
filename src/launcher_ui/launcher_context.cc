@@ -254,6 +254,27 @@ std::string LauncherContext::EffectiveValue(std::string_view key,
   return std::string(fallback);
 }
 
+std::string LauncherContext::GameValue(std::string_view key,
+                                       std::string_view fallback) const {
+  const EnvOverride* env = EffectiveOverride(key);
+  if (env != nullptr && env->imported.has_value()) return *env->imported;
+  return EffectiveValue(key, fallback);
+}
+
+std::string LauncherContext::UnfollowedOverrideNote(
+    std::initializer_list<std::string_view> keys) const {
+  for (const std::string_view key : keys) {
+    const EnvOverride* env = EffectiveOverride(key);
+    if (env != nullptr && !env->imported.has_value()) {
+      return Format(_("Worked out from config.yaml; this launch uses %s=%s "
+                      "instead."),
+                    env->name.c_str(),
+                    RedactEnvironmentValue(env->value).c_str());
+    }
+  }
+  return {};
+}
+
 bool LauncherContext::SetValue(std::string_view key, std::string_view value,
                                launcher::ScalarKind kind) {
   if (draft_.Get(key) == std::optional<std::string>(std::string(value))) {

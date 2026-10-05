@@ -35,6 +35,9 @@ BackendRecommendation RecommendGraphicsBackend(const MachineProfile& machine) {
   if (machine.has_vulkan_driver()) {
     return {"direct-vulkan", BackendRecommendationReason::kVulkanDriver};
   }
+  if (machine.vulkan_source == VulkanDriverSource::kUnknown) {
+    return {"direct-vulkan", BackendRecommendationReason::kUnknown};
+  }
   return {"opengl", BackendRecommendationReason::kNoVulkanDriver};
 }
 
@@ -85,13 +88,14 @@ QualityEffect ResolveGraphicsQuality(std::string_view graphics_quality,
 }
 
 QualityRecommendation RecommendGraphicsQuality(const MachineProfile& machine) {
-  if (!machine.detected || !machine.gpu.any()) {
-    return {"default", QualityRecommendationReason::kUnknown};
-  }
-  if (machine.gpu.nvidia || machine.gpu.amd) {
+  if (!machine.detected) return {};
+  if (machine.gpu.discrete()) {
     return {"manual", QualityRecommendationReason::kCapableGraphics};
   }
-  return {"default", QualityRecommendationReason::kModestGraphics};
+  if (machine.gpu.integrated_only()) {
+    return {"default", QualityRecommendationReason::kModestGraphics};
+  }
+  return {};
 }
 
 Presentation ResolvePresentation(std::string_view vsync,
@@ -109,10 +113,17 @@ std::optional<int> ParseFrameRate(std::string_view value) {
   return ParsePositive(value);
 }
 
-std::optional<std::string> RecommendFrameRate(const MonitorInfo& monitor) {
-  if (!monitor.valid || monitor.RefreshHz() <= 0) return std::nullopt;
-  if (monitor.RefreshHz() > 60) return std::to_string(monitor.RefreshHz());
-  return std::string("-1");
+std::optional<std::string> RecommendFrameRate(const MachineProfile& machine) {
+  const MonitorInfo& monitor = machine.monitor;
+  const int refresh = monitor.valid ? monitor.RefreshHz() : 0;
+  if (refresh <= 0) return std::nullopt;
+  if (refresh <= 60) return std::string("-1");
+  if (machine.detected && machine.gpu.integrated_only()) return std::nullopt;
+  // frame_rate_policy.h kMaximumSupportedRobloxSchedulerFps.
+  if (refresh > runtime::kMaximumSupportedRobloxSchedulerFps) {
+    return std::string("unlimited");
+  }
+  return std::to_string(refresh);
 }
 
 std::string FrameRateFlagConflict(const launcher::FastFlagsDocument& flags,
@@ -238,7 +249,9 @@ std::optional<std::string> RecommendHighDpi(const MachineProfile& machine,
       machine.monitor.scale <= 1.0 + 1e-6) {
     return std::nullopt;
   }
-  if (machine.detected && machine.gpu.intel_only()) return std::string("false");
+  if (machine.detected && machine.gpu.integrated_only()) {
+    return std::string("false");
+  }
   return std::string("true");
 }
 
@@ -277,8 +290,11 @@ std::uint64_t SuggestedMemoryLimitMiB(std::uint64_t memory_bytes) {
   constexpr std::uint64_t kStep = 512;
   constexpr std::uint64_t kMinimum = 4096;
   const std::uint64_t memory_mib = memory_bytes / (1024U * 1024U);
-  const std::uint64_t suggested = (memory_mib * 3 / 16) / kStep * kStep;
-  return std::max(suggested, kMinimum);
+  std::uint64_t suggested = std::max(memory_mib * 3 / 16, kMinimum);
+  // On a small computer 4 GiB would be more than it has: the watchdog
+  // counts swap too, so the game would run out of memory first.
+  if (memory_mib > 0) suggested = std::min(suggested, memory_mib * 3 / 4);
+  return std::max(suggested / kStep * kStep, kStep);
 }
 
 AudioDeviceState ClassifyAudioDevice(std::string_view value,

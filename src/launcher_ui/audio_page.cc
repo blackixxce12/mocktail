@@ -371,7 +371,8 @@ GtkWidget* BuildOutputRow(LauncherContext* context, AudioPageState* state) {
       case AudioDeviceState::kAmbiguous:
         return std::string(
             _("Several devices have this name, so Roblox refuses it. Choose "
-              "System default."));
+              "System default, or give the devices different names in your "
+              "sound settings."));
       default:
         break;
     }
@@ -433,8 +434,9 @@ GtkWidget* BuildInputRow(LauncherContext* context, AudioPageState* state) {
               "until it is back or System default is chosen."));
       case AudioDeviceState::kAmbiguous:
         return std::string(
-            _("Several devices have this name, so Roblox refuses it. Choose "
-              "System default."));
+            _("Several microphones have this name, so Roblox refuses it. "
+              "Choose System default, or give the devices different names in "
+              "your sound settings."));
       case AudioDeviceState::kNumericId:
         return std::string(
             _("Device numbers change between starts. Choose the microphone "

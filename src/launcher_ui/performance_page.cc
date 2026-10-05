@@ -31,7 +31,7 @@ constexpr double kMebibytesPerGibibyte = 1024.0;
 
 std::string Physics(const LauncherContext& context) {
   // runtime_config.cc: MOCKTAIL_PHYSICS_WORKER_MODE defaults to throughput.
-  return context.EffectiveValue(kPhysicsKey, "throughput");
+  return context.GameValue(kPhysicsKey, "throughput");
 }
 
 std::optional<std::uint64_t> ParseMebibytes(std::string_view text) {
@@ -76,12 +76,16 @@ class GameModeProbe {
 
   GameModeService service() const { return service_; }
   const char* name() const { return name_; }
+  // Inside Flatpak the probe asks for the GameMode portal, which any
+  // desktop with portals has: it says nothing about the host's gamemoded.
+  bool portal() const { return portal_; }
 
   void Start() {
     const char* flatpak_id = std::getenv("FLATPAK_ID");
     if ((flatpak_id != nullptr && flatpak_id[0] != '\0') ||
         access("/.flatpak-info", F_OK) == 0) {
       name_ = "org.freedesktop.portal.Desktop";
+      portal_ = true;
     }
     // GIO falls back to autolaunching a bus through X11; ask only an
     // existing one.
@@ -181,6 +185,7 @@ class GameModeProbe {
   GCancellable* cancellable_;
   GDBusConnection* bus_ = nullptr;
   const char* name_ = "com.feralinteractive.GameMode";
+  bool portal_ = false;
   GameModeService service_ = GameModeService::kChecking;
 };
 
@@ -252,30 +257,9 @@ GtkWidget* BuildMultithreadedRow(LauncherContext* context) {
                     "processors: %d)."),
                   machine.physical_cores, machine.logical_cpus);
   };
-  // Only meaningful with Automatic physics workers (see above).
-  spec.hint.recommend = [context](const MachineProfile& machine) {
-    if (Physics(*context) != "auto" || machine.physical_cores <= 0) {
-      return std::optional<std::string>();
-    }
-    return std::optional<std::string>(machine.physical_cores >= 4 ? "true"
-                                                                  : "false");
-  };
-  spec.hint.recommend_reason = [](const MachineProfile& machine) {
-    const auto cores = static_cast<unsigned long>(machine.physical_cores);
-    return machine.physical_cores >= 4
-               ? Format(ngettext("With %d physical core, Roblox's work can be "
-                                 "spread wider than its own default.",
-                                 "With %d physical cores, Roblox's work can "
-                                 "be spread wider than its own default.",
-                                 cores),
-                        machine.physical_cores)
-               : Format(ngettext("With only %d physical core there is little "
-                                 "to spread.",
-                                 "With only %d physical cores there is little "
-                                 "to spread.",
-                                 cores),
-                        machine.physical_cores);
-  };
+  // No recommendation: it only matters with Automatic physics workers, and
+  // there turning it on also brings back the performance preset that
+  // Automatic avoids, a trade only the player can weigh.
   return BindSwitchRow(context, std::move(spec));
 }
 
@@ -304,9 +288,12 @@ GtkWidget* BuildPhysicsRow(LauncherContext* context) {
       "\n\n" +
       // performance_policy.cc: latency only sets
       // DFIntSimMidPhaseContactPipelineBatchSize.
+      // performance_policy.cc MergeTextureMemoryClientSettingsOverrides
+      // runs for every mode.
       _("• Low latency: Roblox keeps its own pool sizes; Mocktail only "
         "batches physics contact work. The preset stays off, so Roblox's own "
-        "graphics quality and memory use apply.") +
+        "graphics quality and texture limits apply (Mocktail still sizes "
+        "Roblox's video memory from this computer's RAM).") +
       "\n\n" +
       _("• Automatic: no tuning at all, unless Multithreaded rendering is "
         "on; that sizes the scheduler from the physical cores and turns the "
@@ -359,12 +346,18 @@ GtkWidget* BuildPhysicsRow(LauncherContext* context) {
 std::string GameModeStatus(const LauncherContext& context,
                            const GameModeProbe& probe) {
   const MachineProfile& machine = context.machine();
+  // machine_profile.cc looks in fixed directories; the game's dlmopen()
+  // also searches the loader's own path (NixOS and others).
   if (machine.detected && !machine.gamemode_library) {
-    return _("GameMode is not installed");
+    return _("libgamemode.so.0 was not found in the usual places");
   }
   switch (probe.service()) {
     case GameModeService::kRunning:
     case GameModeService::kActivatable:
+      if (probe.portal()) {
+        return _("The GameMode portal is available; whether GameMode is "
+                 "installed on the host could not be checked");
+      }
       return _("GameMode is installed and its service is available");
     case GameModeService::kMissing:
       return _("libgamemode is installed, but no GameMode service was found");
@@ -412,9 +405,10 @@ GtkWidget* BuildGameModeRow(LauncherContext* context,
     if (machine.detected) {
       text = machine.gamemode_library
                  ? std::string(_("libgamemode.so.0 is installed."))
-                 : std::string(_("libgamemode.so.0 was not found; install "
-                                 "your distribution's gamemode package to "
-                                 "use GameMode."));
+                 : std::string(_("libgamemode.so.0 was not found in the "
+                                 "usual library folders; install your "
+                                 "distribution's gamemode package to use "
+                                 "GameMode."));
     }
     std::string service;
     switch (probe->service()) {
@@ -455,8 +449,8 @@ GtkWidget* BuildGameModeRow(LauncherContext* context,
     const MachineProfile& machine = ctx.machine();
     if (value == "on" && machine.detected && !machine.gamemode_library) {
       return std::string(
-          _("GameMode is not installed, so On only adds a warning to the "
-            "log."));
+          _("libgamemode.so.0 was not found, so On will probably only add a "
+            "warning to the log."));
     }
     if (value != "off" && machine.gamemode_library &&
         probe->service() == GameModeService::kMissing) {
@@ -509,11 +503,16 @@ GtkWidget* BuildGameModeRow(LauncherContext* context,
     const char* text = nullptr;
     const char* style = nullptr;
     if (machine.detected && !machine.gamemode_library) {
-      text = _("Not installed");
+      text = _("Not found");
       style = "dim-label";
     } else if (probe->service() == GameModeService::kMissing) {
       text = _("No service");
       style = "warning";
+    } else if (machine.detected && probe->portal() &&
+               (probe->service() == GameModeService::kRunning ||
+                probe->service() == GameModeService::kActivatable)) {
+      text = _("Portal");
+      style = "dim-label";
     } else if (machine.detected &&
                (probe->service() == GameModeService::kRunning ||
                 probe->service() == GameModeService::kActivatable ||
@@ -629,9 +628,10 @@ class MemoryLimitRow {
             _("Very low: Roblox may be stopped while it is still loading."));
       }
       if (mebibytes != 0 && memory != 0 && mebibytes * 1024U * 1024U > memory) {
+        // memory_limit.cc counts resident memory plus swap.
         return std::string(
-            _("Larger than this computer's memory, so the system runs out "
-              "before the limit is reached."));
+            _("Larger than this computer's memory: the game is stopped only "
+              "after much of it has moved to swap."));
       }
       return std::string();
     };

@@ -429,6 +429,93 @@ TEST_F(MachineProfileTest, DetectsAMachineWithoutVulkan) {
             BackendRecommendationReason::kUnknown);
 }
 
+TEST_F(MachineProfileTest, TellsIntegratedFromDiscreteGraphics) {
+  // An AMD APU: amdgpu reports a small carve-out as VRAM.
+  AddGpu(0, "0x1002");
+  root_.Write("sys/class/drm/card0/device/mem_info_vram_total", "536870912\n");
+  // Intel's integrated graphics at 00:02.0.
+  AddGpu(1, "0x8086");
+  root_.Write("sys/class/drm/card1/device/uevent",
+              "DRIVER=i915\nPCI_SLOT_NAME=0000:00:02.0\n");
+  MachineProfile profile = DetectMachineProfile(MapEnvironment(), Probe());
+  EXPECT_FALSE(profile.gpu.amd_discrete);
+  EXPECT_FALSE(profile.gpu.intel_discrete);
+  EXPECT_TRUE(profile.gpu.integrated_only());
+  EXPECT_FALSE(profile.gpu.intel_only());
+
+  // An 8 GiB Radeon and an Arc card behind a PCIe port are discrete.
+  root_.Write("sys/class/drm/card0/device/mem_info_vram_total",
+              "8589934592\n");
+  root_.Write("sys/class/drm/card1/device/uevent",
+              "DRIVER=xe\nPCI_SLOT_NAME=0000:03:00.0\n");
+  profile = DetectMachineProfile(MapEnvironment(), Probe());
+  EXPECT_TRUE(profile.gpu.amd_discrete);
+  EXPECT_TRUE(profile.gpu.intel_discrete);
+  EXPECT_FALSE(profile.gpu.integrated_only());
+  EXPECT_EQ(profile.DiscreteGpuLabel(), "AMD + Intel Arc");
+}
+
+TEST_F(MachineProfileTest, FollowsTheVulkanLoader) {
+  AddGpu(0, "0x1002");
+  // AMDVLK only: Mocktail pins nothing, the loader still finds it.
+  root_.Write("usr/share/vulkan/icd.d/amd_icd64.json", "{}");
+  root_.Write("usr/share/vulkan/icd.d/lvp_icd.x86_64.json", "{}");
+  MachineProfile profile = DetectMachineProfile(MapEnvironment(), Probe());
+  EXPECT_EQ(profile.vulkan_source, VulkanDriverSource::kLoader);
+  EXPECT_NE(profile.vulkan_icd.find("amd_icd64.json"), std::string::npos);
+  EXPECT_TRUE(profile.has_vulkan_driver());
+  EXPECT_EQ(RecommendGraphicsBackend(profile).value, "direct-vulkan");
+
+  // A driver list the user set is kept as it is.
+  profile = DetectMachineProfile(
+      MapEnvironment({{"VK_DRIVER_FILES", "/opt/vk/my_icd.json"}}), Probe());
+  EXPECT_EQ(profile.vulkan_source, VulkanDriverSource::kUser);
+  EXPECT_EQ(profile.vulkan_icd, "/opt/vk/my_icd.json");
+
+  // With PRIME offloading off, Mocktail pins the integrated GPU's driver.
+  AddGpu(1, "0x8086");
+  root_.Write("usr/share/vulkan/icd.d/radeon_icd.x86_64.json", "{}");
+  root_.Write("usr/share/vulkan/icd.d/intel_icd.x86_64.json", "{}");
+  profile = DetectMachineProfile(MapEnvironment(), Probe());
+  EXPECT_NE(profile.vulkan_icd.find("radeon_icd"), std::string::npos);
+  profile = DetectMachineProfile(MapEnvironment({{"DRI_PRIME", "0"}}), Probe());
+  EXPECT_EQ(profile.vulkan_source, VulkanDriverSource::kPinned);
+  EXPECT_NE(profile.vulkan_icd.find("intel_icd"), std::string::npos);
+}
+
+TEST_F(MachineProfileTest, CannotSeeFlatpakDrivers) {
+  AddGpu(0, "0x10de");
+  root_.Write(".flatpak-info", "[Application]\n");
+  const MachineProfile profile =
+      DetectMachineProfile(MapEnvironment(), Probe());
+  EXPECT_TRUE(profile.flatpak);
+  EXPECT_EQ(profile.vulkan_source, VulkanDriverSource::kUnknown);
+  EXPECT_FALSE(profile.has_vulkan_driver());
+  EXPECT_EQ(RecommendGraphicsBackend(profile).reason,
+            BackendRecommendationReason::kUnknown);
+}
+
+TEST_F(MachineProfileTest, SkipsLibrariesThatAreNotAngle) {
+  root_.Write("usr/lib/chromium/libEGL.so", "egl");
+  root_.Write("usr/lib/chromium/libGLESv2.so", "plain gles");
+  root_.Write("usr/lib/electron43/libEGL.so", "egl");
+  root_.Write("usr/lib/electron43/libGLESv2.so", "EGL_ANGLE_platform_angle");
+  MachineProfile profile = DetectMachineProfile(MapEnvironment(), Probe());
+  ASSERT_TRUE(profile.angle.has_value());
+  EXPECT_EQ(profile.angle->directory, "/usr/lib/electron43");
+
+  // MOCKTAIL_ANGLE_LIB_DIR is used as it is set, like the game does.
+  profile = DetectMachineProfile(
+      MapEnvironment({{"MOCKTAIL_ANGLE_LIB_DIR", "/usr/lib/chromium"}}),
+      Probe());
+  ASSERT_TRUE(profile.angle.has_value());
+  EXPECT_TRUE(profile.angle->from_environment);
+  EXPECT_FALSE(profile.angle->looks_like_angle);
+  profile = DetectMachineProfile(
+      MapEnvironment({{"MOCKTAIL_ANGLE_LIB_DIR", "/srv/missing"}}), Probe());
+  EXPECT_FALSE(profile.angle.has_value());
+}
+
 TEST_F(MachineProfileTest, FindsTheBundledAngleFirst) {
   root_.Write("opt/mocktail/lib/angle/libEGL.so", "egl");
   root_.Write("opt/mocktail/lib/angle/libGLESv2.so",
@@ -575,6 +662,18 @@ TEST(GamePagesTest, ResolvesTheGraphicsQualityLevel) {
   EXPECT_EQ(RecommendGraphicsQuality(machine).value, "default");
   EXPECT_EQ(RecommendGraphicsQuality(machine).reason,
             QualityRecommendationReason::kModestGraphics);
+  // An Arc card is discrete; an APU is not.
+  machine.gpu.intel_discrete = true;
+  EXPECT_EQ(RecommendGraphicsQuality(machine).value, "manual");
+  machine.gpu = {};
+  machine.gpu.amd = true;
+  EXPECT_EQ(RecommendGraphicsQuality(machine).value, "default");
+  machine.gpu.amd_discrete = true;
+  EXPECT_EQ(RecommendGraphicsQuality(machine).value, "manual");
+  // No known GPU, or detection not finished: no recommendation.
+  machine.gpu = {};
+  machine.gpu.other = true;
+  EXPECT_TRUE(RecommendGraphicsQuality(machine).value.empty());
   EXPECT_EQ(RecommendGraphicsQuality(MachineProfile{}).reason,
             QualityRecommendationReason::kUnknown);
 }
@@ -594,13 +693,27 @@ TEST(GamePagesTest, PresentationMatchesThePresentModePolicy) {
 }
 
 TEST(GamePagesTest, RecommendsTheDisplaysFrameRate) {
-  MonitorInfo monitor;
-  EXPECT_FALSE(RecommendFrameRate(monitor).has_value());
-  monitor.valid = true;
-  monitor.refresh_millihertz = 165003;
-  EXPECT_EQ(RecommendFrameRate(monitor), "165");
-  monitor.refresh_millihertz = 59950;
-  EXPECT_EQ(RecommendFrameRate(monitor), "-1");
+  MachineProfile machine = DetectedMachine();
+  machine.gpu.nvidia = true;
+  machine.monitor = {};
+  EXPECT_FALSE(RecommendFrameRate(machine).has_value());
+  machine.monitor.valid = true;
+  machine.monitor.refresh_millihertz = 165003;
+  EXPECT_EQ(RecommendFrameRate(machine), "165");
+  machine.monitor.refresh_millihertz = 59950;
+  EXPECT_EQ(RecommendFrameRate(machine), "-1");
+  // Above Roblox's menu maximum, the maximum.
+  machine.monitor.refresh_millihertz = 360000;
+  EXPECT_EQ(RecommendFrameRate(machine), "unlimited");
+  machine.monitor.refresh_millihertz = 240000;
+  EXPECT_EQ(RecommendFrameRate(machine), "240");
+  // Integrated graphics rarely keep up with a fast screen.
+  machine.gpu = {};
+  machine.gpu.intel = true;
+  machine.monitor.refresh_millihertz = 120000;
+  EXPECT_FALSE(RecommendFrameRate(machine).has_value());
+  machine.monitor.refresh_millihertz = 60000;
+  EXPECT_EQ(RecommendFrameRate(machine), "-1");
   EXPECT_EQ(ParseFrameRate("75"), 75);
   EXPECT_FALSE(ParseFrameRate("-1").has_value());
   EXPECT_FALSE(ParseFrameRate("display").has_value());
@@ -702,6 +815,12 @@ TEST(GamePagesTest, RecommendsHighDpiOnlyWhereItMatters) {
   machine.gpu = {};
   machine.gpu.intel = true;
   EXPECT_EQ(RecommendHighDpi(machine, true), "false");
+  // Integrated AMD graphics too, but not a discrete card.
+  machine.gpu = {};
+  machine.gpu.amd = true;
+  EXPECT_EQ(RecommendHighDpi(machine, true), "false");
+  machine.gpu.amd_discrete = true;
+  EXPECT_EQ(RecommendHighDpi(machine, true), "true");
   machine.monitor.scale = 1.0;
   EXPECT_FALSE(RecommendHighDpi(machine, true).has_value());
 }
@@ -740,6 +859,10 @@ TEST(GamePagesTest, SuggestsAMemoryLimit) {
   EXPECT_EQ(SuggestedMemoryLimitMiB(16 * kGiB), 4096U);
   EXPECT_EQ(SuggestedMemoryLimitMiB(0), 4096U);
   EXPECT_EQ(SuggestedMemoryLimitMiB(64 * kGiB) % 512U, 0U);
+  // Never more than 3/4 of a small computer's memory (MemTotal of a 4 GiB
+  // machine is about 3.7 GiB).
+  EXPECT_EQ(SuggestedMemoryLimitMiB(3788ULL * 1024U * 1024U), 2560U);
+  EXPECT_LE(SuggestedMemoryLimitMiB(2 * kGiB), 1536U);
 }
 
 TEST(GamePagesTest, ClassifiesSavedAudioDevices) {

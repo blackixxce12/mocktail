@@ -47,7 +47,7 @@ bool IsVulkanSpelling(const std::string& value) {
 }
 
 std::string Backend(const LauncherContext& context) {
-  return context.EffectiveValue("graphics.backend", "direct-vulkan");
+  return context.GameValue("graphics.backend", "direct-vulkan");
 }
 
 DisplayServerChoice ServerChoice(const LauncherContext& context,
@@ -59,11 +59,26 @@ DisplayServerChoice ServerChoice(const LauncherContext& context,
 // pixel counts only mean something there (research/graphics.md 2.2).
 bool GameUsesWayland(const LauncherContext& context) {
   const DisplayServerChoice choice =
-      ServerChoice(context, context.EffectiveValue(kServerKey, "auto"));
+      ServerChoice(context, context.GameValue(kServerKey, "auto"));
   if (choice.server.empty()) {
     return context.machine().session != SessionType::kX11;
   }
   return choice.server == "wayland";
+}
+
+// The scaled screen is shown through X11: window sizes are X pixels there,
+// which may be physical pixels, so a logical size may not fill the screen.
+bool ScaledThroughX11(const LauncherContext& context) {
+  const MonitorInfo& monitor = context.machine().monitor;
+  return !GameUsesWayland(context) && monitor.valid &&
+         monitor.scale > 1.0 + 1e-6;
+}
+
+// "No effect through X11 (XWayland)", or on an X11 desktop.
+std::string NoEffectThroughX11(const LauncherContext& context) {
+  return context.machine().session == SessionType::kX11
+             ? std::string(_("No effect on an X11 desktop"))
+             : std::string(_("No effect through X11 (XWayland)"));
 }
 
 // What the Display page's rows share: the window state the game remembers
@@ -162,7 +177,7 @@ class DisplayPageState {
   }
 
   WindowMode Mode() const {
-    return StartWindowMode(context_->EffectiveValue(kStartModeKey, "remember"),
+    return StartWindowMode(context_->GameValue(kStartModeKey, "remember"),
                            remembered_.found, remembered_.fullscreen,
                            remembered_.maximized);
   }
@@ -173,7 +188,7 @@ class DisplayPageState {
   }
 
   bool HighDpi() const {
-    return context_->EffectiveValue(kHighDpiKey, "false") == "true";
+    return context_->GameValue(kHighDpiKey, "false") == "true";
   }
 
   GtkWidget* BuildSizeRow();
@@ -205,6 +220,12 @@ class DisplayPageState {
   }
 
   std::string PixelDescription(WindowSize size) const {
+    if (ScaledThroughX11(*context_)) {
+      // research/graphics.md 2.1: Hyprland's force_zero_scaling and KDE's
+      // "apply scaling themselves" give X11 windows physical pixels.
+      return _("In X11 pixels: on this scaled screen it may cover only part "
+               "of it, depending on how the desktop scales X11 apps");
+    }
     if (!GameUsesWayland(*context_)) {
       return _("In X11 pixels; native resolution has no effect");
     }
@@ -212,10 +233,10 @@ class DisplayPageState {
         ComputeGameResolution(context_->machine().monitor, size,
                               WindowMode::kWindowed, HighDpi(), true);
     if (resolution.upscaled) {
-      return Format(_("Renders %s px; the compositor upscales it"),
+      return Format(_("A %s px picture; the compositor upscales it"),
                     SizeText(resolution.pixels).c_str());
     }
-    return Format(_("Renders %s px"), SizeText(resolution.pixels).c_str());
+    return Format(_("A %s px picture"), SizeText(resolution.pixels).c_str());
   }
 
   void ShowCustomRows(bool show);
@@ -404,11 +425,15 @@ void DisplayPageState::RebuildSizes() {
        WindowSizePresets(context_->machine().monitor)) {
     SizeEntry entry;
     entry.size = preset.size;
-    entry.label = preset.whole_screen ? Format(_("%s (whole screen)"),
-                                               SizeText(preset.size).c_str())
-                  : preset.runtime_default
-                      ? Format(_("%s (default)"), SizeText(preset.size).c_str())
-                      : SizeText(preset.size);
+    // Through X11 on a scaled screen the logical size may not fill it.
+    if (preset.whole_screen && !ScaledThroughX11(*context_)) {
+      entry.label =
+          Format(_("%s (whole screen)"), SizeText(preset.size).c_str());
+    } else if (preset.runtime_default) {
+      entry.label = Format(_("%s (default)"), SizeText(preset.size).c_str());
+    } else {
+      entry.label = SizeText(preset.size);
+    }
     entry.description = PixelDescription(preset.size);
     if (preset.size == current && selected < 0) {
       selected = static_cast<int>(sizes.size());
@@ -639,42 +664,47 @@ GtkWidget* BuildHighDpiRow(LauncherContext* context, DisplayPageState* state) {
                    "масштабирование"};
   spec.hint.subtitle_for = [state](LauncherContext& ctx,
                                    const std::string& value) {
-    if (!GameUsesWayland(ctx)) {
-      return std::string(_("No effect through X11 (XWayland)"));
-    }
+    std::string text;
     const MonitorInfo& monitor = ctx.machine().monitor;
-    if (!monitor.valid) {
-      return std::string(
-          _("Renders every pixel of a scaled screen instead of upscaling"));
-    }
-    if (monitor.scale <= 1.0 + 1e-6) {
-      return Format(_("No effect at %d %% scale"), Percent(monitor.scale));
-    }
-    const GameResolution resolution = state->Resolution(value == "true");
-    if (value == "true") {
-      return Format(_("Scale %d %%: renders all %s pixels"),
+    if (!GameUsesWayland(ctx)) {
+      text = NoEffectThroughX11(ctx);
+    } else if (!monitor.valid) {
+      text = _("A full-size picture on a scaled screen instead of an "
+               "upscaled one");
+    } else if (monitor.scale <= 1.0 + 1e-6) {
+      text = Format(_("No effect at %d %% scale"), Percent(monitor.scale));
+    } else if (value == "true") {
+      text = Format(_("Scale %d %%: a %s-pixel picture, sharp text and menus"),
                     Percent(monitor.scale),
-                    SizeText(resolution.pixels).c_str());
+                    SizeText(state->Resolution(true).pixels).c_str());
+    } else {
+      text = Format(_("Scale %d %%: a %s picture, upscaled by the compositor"),
+                    Percent(monitor.scale),
+                    SizeText(state->Resolution(false).pixels).c_str());
     }
-    return Format(_("Scale %d %%: renders %s, upscaled by the compositor"),
-                  Percent(monitor.scale), SizeText(resolution.pixels).c_str());
+    const std::string note = ctx.UnfollowedOverrideNote({kServerKey});
+    if (!note.empty()) text += "\n" + note;
+    return text;
   };
   spec.hint.details =
       // SDL_WINDOW_HIGH_PIXEL_DENSITY; Roblox's density follows the
       // window's display scale (window.cc, research/graphics.md 2.2).
-      _("On a screen scaled above 100 %, this decides whether Roblox renders "
-        "every pixel of the screen or the smaller desktop size, which the "
-        "compositor then stretches. Roblox's menus keep the same size either "
-        "way.") +
+      _("On a screen scaled above 100 %, this decides whether Roblox hands "
+        "the compositor a picture with every pixel of the screen or one at "
+        "the smaller desktop size, which the compositor then stretches. "
+        "Roblox's menus keep the same size either way.") +
       std::string("\n\n") +
-      _("• On: sharp text and edges, but the graphics card draws the scale "
-        "squared times as many pixels: 2.56 times as many at 160 %.") +
+      // research/graphics.md 2.5: Roblox's dynamic resolution (DRS) is
+      // active; how many 3D pixels it draws is unverified.
+      _("• On: sharp text and edges; the picture has the scale squared times "
+        "as many pixels (2.56 times at 160 %), though Roblox may still draw "
+        "its 3D scene smaller and scale it up itself.") +
       "\n\n" +
       _("• Off: fewer pixels to draw, a softer picture and usually a higher "
         "frame rate.") +
       "\n\n" +
-      _("It works only with Wayland. Through X11 (XWayland) the game gets no "
-        "pixel density, so this setting changes nothing there.");
+      _("It works only with Wayland. Through X11 the window is sized in X "
+        "pixels and this setting changes nothing.");
   spec.hint.details_for = [](LauncherContext& ctx) {
     const MonitorInfo& monitor = ctx.machine().monitor;
     if (!monitor.valid) return std::string();
@@ -687,11 +717,13 @@ GtkWidget* BuildHighDpiRow(LauncherContext* context, DisplayPageState* state) {
   spec.hint.recommend = [context](const MachineProfile& machine) {
     return RecommendHighDpi(machine, GameUsesWayland(*context));
   };
-  spec.hint.recommend_reason = [](const MachineProfile& machine) {
-    if (machine.detected && machine.gpu.intel_only()) {
-      return std::string(
-          _("With Intel graphics only, the extra pixels cost more frame rate "
-            "than the sharper picture is worth."));
+  spec.hint.recommend_reason = [state](const MachineProfile& machine) {
+    if (machine.detected && machine.gpu.integrated_only()) {
+      return Format(_("With integrated graphics, drawing %s instead of %s "
+                      "costs more frame rate than the sharper picture is "
+                      "worth; the compositor stretches the smaller picture."),
+                    SizeText(state->Resolution(true).pixels).c_str(),
+                    SizeText(state->Resolution(false).pixels).c_str());
     }
     return Format(_("Your screen is scaled to %d %%, and this keeps the "
                     "picture as sharp as the screen allows."),
@@ -700,8 +732,8 @@ GtkWidget* BuildHighDpiRow(LauncherContext* context, DisplayPageState* state) {
   return BindSwitchRow(context, std::move(spec));
 }
 
-std::string ResolutionSummary(const LauncherContext& context,
-                              const DisplayPageState& state) {
+std::string ResolutionSummaryLine(const LauncherContext& context,
+                                  const DisplayPageState& state) {
   const MonitorInfo& monitor = context.machine().monitor;
   const WindowMode mode = state.Mode();
   const GameResolution resolution = state.Resolution(state.HighDpi());
@@ -746,6 +778,15 @@ std::string ResolutionSummary(const LauncherContext& context,
   return {};
 }
 
+std::string ResolutionSummary(const LauncherContext& context,
+                              const DisplayPageState& state) {
+  std::string text = ResolutionSummaryLine(context, state);
+  const std::string note = context.UnfollowedOverrideNote(
+      {kServerKey, kHighDpiKey, kStartModeKey});
+  if (!note.empty()) text += "\n" + note;
+  return text;
+}
+
 // Read-only summary (SPEC 5: monitor geometry x scale x high_dpi x start
 // mode).
 GtkWidget* BuildResolutionRow(LauncherContext* context,
@@ -758,10 +799,12 @@ GtkWidget* BuildResolutionRow(LauncherContext* context,
     return ResolutionSummary(ctx, *state);
   };
   spec.hint.details =
-      _("What Roblox renders with the settings above, worked out from this "
-        "screen's desktop size and scale, the window size, the start mode "
-        "and native resolution. Roblox lays out its interface at the desktop "
-        "size; this is how many pixels it draws.") +
+      _("The size of the picture Roblox hands to the compositor with the "
+        "settings above, worked out from this screen's desktop size and "
+        "scale, the window size, the start mode and native resolution. "
+        "Roblox lays out its interface at the desktop size. Roblox's dynamic "
+        "resolution may draw the 3D scene below this size, especially at low "
+        "graphics quality levels.") +
       std::string("\n\n") +
       // research/graphics.md 1.2 and 2.5; SPEC 6 non-goals.
       _("A lower fullscreen resolution, as games offer on Windows, is not "
@@ -773,7 +816,23 @@ GtkWidget* BuildResolutionRow(LauncherContext* context,
   return DecorateRow(context, row, std::move(spec));
 }
 
-std::vector<ComboOption> DisplayServerOptions() {
+// The NVIDIA rule sends the game through XWayland on a scaled screen,
+// which costs native resolution there (research/graphics.md 2.2, 3.3-3.4).
+bool NvidiaXWaylandOnScaledScreen(const LauncherContext& context) {
+  const MonitorInfo& monitor = context.machine().monitor;
+  return ServerChoice(context, "auto").reason ==
+             DisplayServerReason::kNvidiaVulkan &&
+         monitor.valid && monitor.scale > 1.0 + 1e-6;
+}
+
+// "X11 (XWayland)" on a Wayland desktop, plain "X11" on an X11 one.
+std::string X11Label(const LauncherContext& context) {
+  return context.machine().detected && !context.machine().wayland_available
+             ? std::string("X11")
+             : std::string(_("X11 (XWayland)"));
+}
+
+std::vector<ComboOption> DisplayServerOptions(LauncherContext& context) {
   return {
       {"auto",
        _("Automatic"),
@@ -826,7 +885,7 @@ std::vector<ComboOption> DisplayServerOptions() {
        false,
        false},
       {"x11",
-       _("X11 (XWayland)"),
+       X11Label(context),
        _("Through an X server; native resolution has no effect"),
        {},
        nullptr,
@@ -869,9 +928,11 @@ GtkWidget* BuildDisplayServerRow(LauncherContext* context) {
         "resolution. On NVIDIA with Vulkan it is the riskier choice, but "
         "worth a try when the mouse or camera misbehaves through XWayland.") +
       "\n\n" +
-      _("• X11 (XWayland): works with every driver, but the game gets no "
-        "pixel density, so native resolution has no effect and the picture "
-        "may look small or soft on a scaled screen.") +
+      // research/graphics.md 2.2 and 3.3 (upstream issue #135).
+      _("• X11 (XWayland): avoids NVIDIA's Wayland freezes, but native "
+        "resolution has no effect: on a scaled screen the picture is soft or "
+        "Roblox's interface small, depending on how the desktop scales X11 "
+        "apps. On some desktops (Hyprland) mouse capture can misbehave.") +
       "\n\n" +
       // graphics_launch_policy.cc UserSelectsVideoDriver.
       _("SDL_VIDEODRIVER or SDL_VIDEO_DRIVER set in the shortcut or terminal "
@@ -895,15 +956,28 @@ GtkWidget* BuildDisplayServerRow(LauncherContext* context) {
     }
     return text;
   };
-  spec.hint.recommend = [](const MachineProfile& machine) {
-    return machine.detected ? std::optional<std::string>("auto") : std::nullopt;
+  spec.hint.recommend = [context](const MachineProfile& machine) {
+    if (!machine.detected) return std::optional<std::string>();
+    // research/graphics.md 3.4: on a scaled screen Wayland, with a note on
+    // NVIDIA's risk (the warning below).
+    return std::optional<std::string>(
+        NvidiaXWaylandOnScaledScreen(*context) ? "wayland" : "auto");
   };
-  spec.hint.recommend_reason = [context](const MachineProfile&) {
+  spec.hint.recommend_reason = [context](const MachineProfile& machine) {
+    if (NvidiaXWaylandOnScaledScreen(*context)) {
+      return Format(_("Through XWayland this %d %% screen cannot use native "
+                      "resolution, so Roblox looks soft or its interface "
+                      "small, and some desktops (Hyprland) have mouse-capture "
+                      "trouble. Wayland keeps it sharp; NVIDIA's Wayland path "
+                      "can still freeze on some drivers (upstream issue "
+                      "#186), so switch back to Automatic if it does."),
+                    Percent(machine.monitor.scale));
+    }
     if (ServerChoice(*context, "auto").reason ==
         DisplayServerReason::kNvidiaVulkan) {
       return std::string(
-          _("It avoids NVIDIA's Wayland hangs; choose Wayland only if XWayland "
-            "gives you trouble."));
+          _("It avoids NVIDIA's Wayland freezes (upstream issue #186), and at "
+            "100 % scale XWayland costs no sharpness."));
     }
     return std::string(
         _("It already picks the best server this session offers."));
@@ -928,7 +1002,7 @@ GtkWidget* BuildDisplayServerRow(LauncherContext* context) {
     return std::string();
   };
   ComboSpec combo;
-  combo.options = DisplayServerOptions();
+  combo.options_for = DisplayServerOptions;
   return BindComboRow(context, std::move(spec), std::move(combo));
 }
 
@@ -951,8 +1025,11 @@ GtkWidget* BuildThemeRow(LauncherContext* context) {
         "none is saved yet.") +
       "\n\n" +
       // legacy_runtime.cc: SDL_GetSystemTheme(); unknown counts as light.
-      _("• Follow the system: your desktop's light or dark preference as SDL "
-        "reports it at start; light when the desktop reports none.") +
+      // SDL 3 reads the color scheme from the desktop portal's Settings.
+      _("• Follow the system: your desktop's light or dark preference as "
+        "reported through the desktop portal at start; light when nothing "
+        "is reported, for example without xdg-desktop-portal-gtk or "
+        "-gnome.") +
       "\n\n" + _("• Light and Dark: always that theme.") + "\n\n" +
       // legacy_runtime.cc: ApplyRobloxThemeCacheOverride runs for every
       // mode but roblox.

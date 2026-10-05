@@ -18,10 +18,11 @@ namespace mocktail::launcher_ui {
 enum class BackendRecommendationReason {
   // A Vulkan driver for this GPU is installed: direct Vulkan.
   kVulkanDriver,
-  // No hardware Vulkan driver was found: OpenGL ES works with any
-  // OpenGL ES 3.0 driver.
+  // No hardware Vulkan driver was found anywhere the loader looks: OpenGL
+  // ES works with any OpenGL ES 3.0 driver.
   kNoVulkanDriver,
-  // Detection has not finished; the default is recommended.
+  // Detection has not finished, or the drivers are out of sight (Flatpak):
+  // no recommendation.
   kUnknown,
 };
 
@@ -72,16 +73,18 @@ QualityEffect ResolveGraphicsQuality(std::string_view graphics_quality,
                                      bool intel_only_vulkan);
 
 enum class QualityRecommendationReason {
-  // NVIDIA or AMD graphics: Roblox's own (automatic) setting can go above
-  // level 3.
+  // A discrete graphics card (GpuSummary::discrete): Roblox's own setting
+  // can go above level 3.
   kCapableGraphics,
-  // Intel graphics only, or unknown: Mocktail's low default.
+  // Only integrated AMD or Intel graphics: Mocktail's low default.
   kModestGraphics,
+  // Detection has not finished, or no known GPU was found: no
+  // recommendation.
   kUnknown,
 };
 
 struct QualityRecommendation {
-  std::string value;  // "manual" or "default"
+  std::string value;  // "manual", "default", or empty for kUnknown
   QualityRecommendationReason reason = QualityRecommendationReason::kUnknown;
 };
 
@@ -106,9 +109,11 @@ inline constexpr int kFrameRateChoices[] = {60, 120, 144};
 std::optional<int> ParseFrameRate(std::string_view value);
 
 // The display's refresh rate when it is above 60 Hz (each refresh then
-// shows a new frame), "-1" (Roblox's own menu) for a 60 Hz or slower
-// display, nullopt while the monitor is unknown.
-std::optional<std::string> RecommendFrameRate(const MonitorInfo& monitor);
+// shows a new frame), "unlimited" (240, the highest rate Roblox's own menu
+// offers) above 240 Hz, "-1" (Roblox's own menu) for a 60 Hz or slower
+// display. nullopt while the monitor is unknown, and above 60 Hz with only
+// integrated graphics, which rarely keep up with a fast screen.
+std::optional<std::string> RecommendFrameRate(const MachineProfile& machine);
 
 // The fflags.json entry that makes Mocktail refuse to start with this
 // frame rate (frame_rate_policy.cc rejects a different explicit value of a
@@ -175,9 +180,9 @@ GameResolution ComputeGameResolution(const MonitorInfo& monitor,
                                      WindowSize windowed, WindowMode mode,
                                      bool high_dpi, bool wayland);
 
-// The High-DPI recommendation: on for a scaled Wayland screen, off for
-// Intel-only graphics there (it renders scale^2 as many pixels), nullopt
-// when it changes nothing (scale 1, X11, unknown monitor).
+// The High-DPI recommendation: on for a scaled Wayland screen, off with
+// only integrated graphics there (it renders scale^2 as many pixels),
+// nullopt when it changes nothing (scale 1, X11, unknown monitor).
 std::optional<std::string> RecommendHighDpi(const MachineProfile& machine,
                                             bool wayland);
 
@@ -209,7 +214,7 @@ DisplayServerChoice ResolveDisplayServer(const MachineProfile& machine,
 
 // Mocktail's suggestion when the memory limit is switched on: 3/16 of the
 // RAM (6 GiB of 32, as config/mocktail.example.yaml suggests), at least
-// 4 GiB, in whole 512 MiB steps.
+// 4 GiB but never more than 3/4 of the RAM, in whole 512 MiB steps.
 std::uint64_t SuggestedMemoryLimitMiB(std::uint64_t memory_bytes);
 
 enum class AudioDeviceState {
