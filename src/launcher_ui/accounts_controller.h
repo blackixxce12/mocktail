@@ -24,7 +24,10 @@
 // It reads the store when the window opens, then, on a worker, moves a
 // session from an older Mocktail into it and files what the last game
 // changed (AccountStore::MigrateLegacySession and Reconcile: research/
-// auth.md 5.5.1 and 5.5.6), and refreshes names and avatar headshots. The
+// auth.md 5.5.1 and 5.5.6), and refreshes names and avatar headshots. None
+// of that, and no sign-in, happens while the proxy for Roblox is not known
+// (ResolveLauncherNetwork); it starts once a save, reload or restore makes
+// it known. The
 // selection and removals are staged in an AccountsModel and written by the
 // "accounts" dirty source on Save, and the selection once more by the Play
 // hook, so accounts/active never changes while the user is picking. "Add
@@ -60,6 +63,9 @@ class AccountsController final
   }
   // Why the store could not be read, empty when it could.
   const std::string& load_error() const { return load_error_; }
+  // Why nothing is sent to Roblox from the window (the proxy is not known:
+  // ResolveLauncherNetwork), empty when requests may go out.
+  const std::string& network_blocked() const { return network_blocked_; }
   // The check after start (migration and reconcile) is running; Save and
   // Play wait for it.
   bool checking() const { return checking_; }
@@ -106,7 +112,11 @@ class AccountsController final
 
   void Register();
   void RegisterDirtySource();
-  void ConfigureNetwork();
+  // Sets the proxy up for the window's requests; false (network_blocked_
+  // says why) while it is not known.
+  bool ConfigureNetwork();
+  // After a save, reload or restore: the proxy may be known now.
+  void RetryNetwork();
   void LoadStore();
   void StartWorker(bool startup);
   static void RunWorker(runtime::AccountStoreOptions options,
@@ -130,6 +140,8 @@ class AccountsController final
   bool usable_ = false;
   std::vector<std::string> override_variables_;
   std::string load_error_;
+  LauncherNetworkBlock network_block_ = LauncherNetworkBlock::kNone;
+  std::string network_blocked_;
   AccountsModel model_;
   std::optional<runtime::AccountStore> store_;
   std::shared_ptr<Network> network_;

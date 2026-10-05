@@ -112,8 +112,8 @@ AccountsController::AccountsController(LauncherContext* context)
   LoadStore();
   usable_ = !context->selftest() && load_error_.empty();
   if (usable_) {
-    ConfigureNetwork();
     network_ = std::make_shared<Network>();
+    ConfigureNetwork();
   }
 }
 
@@ -152,6 +152,16 @@ void AccountsController::Register() {
       });
 
   if (!usable_) return;
+  // A save, reload or restore may make config.yaml load, or the system
+  // proxy resolve, after all.
+  std::weak_ptr<AccountsController> weak = self;
+  context_->OnSettingChanged([weak](std::string_view key) {
+    if (!key.empty()) return;
+    if (std::shared_ptr<AccountsController> controller = weak.lock()) {
+      controller->RetryNetwork();
+    }
+  });
+  if (!network_blocked_.empty()) return;
   // Network work only once the window is up (research/ux.md 4.5).
   checking_ = true;
   g_idle_add_full(
@@ -191,23 +201,50 @@ void AccountsController::RegisterDirtySource() {
   context_->AddDirtySource(std::move(source));
 }
 
-void AccountsController::ConfigureNetwork() {
+bool AccountsController::ConfigureNetwork() {
   // mocktail sets the proxy up only after this window (main.cc after
   // LoadRuntimeConfig), and CurlHttpClient reads it from the environment.
-  // Runs while the window is being built, before any worker thread exists.
-  const LauncherNetworkPlan plan = PlanLauncherNetwork(
-      runtime::ProcessEnvironment(), context_->config_file());
-  for (const auto& [name, value] : plan.assignments) {
+  // Runs while no worker thread exists: while the window is being built,
+  // or before the first worker once the proxy was not known.
+  const LauncherNetworkSetup setup = ResolveLauncherNetwork(
+      PlanLauncherNetwork(runtime::ProcessEnvironment(),
+                          context_->config_file()),
+      [] { return runtime::ResolveSystemProxy(); });
+  network_block_ = setup.blocked;
+  switch (setup.blocked) {
+    case LauncherNetworkBlock::kNone:
+      network_blocked_.clear();
+      break;
+    case LauncherNetworkBlock::kConfig:
+      network_blocked_ =
+          _("config.yaml does not load, so the proxy for Roblox is not "
+            "known, and nothing is sent to Roblox from this window. Fix the "
+            "file, then reload it.");
+      break;
+    case LauncherNetworkBlock::kSystemProxy:
+      // main.cc: "Cannot resolve host system proxy" stops the start too.
+      network_blocked_ =
+          _("The system proxy cannot be determined, so nothing is sent to "
+            "Roblox from this window, and Roblox will not start until it "
+            "can be.");
+      break;
+  }
+  if (setup.blocked != LauncherNetworkBlock::kNone) {
+    g_warning("accounts: no requests to Roblox: %s", setup.error.c_str());
+    return false;
+  }
+  for (const auto& [name, value] : setup.assignments) {
     (void)setenv(name.c_str(), value.c_str(), 1);
   }
-  if (!plan.system_proxy) return;
-  const runtime::SystemProxyResult system = runtime::ResolveSystemProxy();
-  if (system && system.proxy.has_value()) {
-    (void)setenv("MOCKTAIL_HTTP_PROXY_HOST", system.proxy->host.c_str(), 1);
-    (void)setenv("MOCKTAIL_HTTP_PROXY_PORT",
-                 std::to_string(system.proxy->port).c_str(), 1);
-    (void)setenv("MOCKTAIL_HTTP_PROXY_SCHEME", system.proxy->scheme.c_str(), 1);
-  }
+  return true;
+}
+
+void AccountsController::RetryNetwork() {
+  if (shut_down_ || network_blocked_.empty() || worker_running_) return;
+  if (!ConfigureNetwork()) return;
+  checking_ = true;
+  StartWorker(true);
+  Changed();
 }
 
 void AccountsController::LoadStore() {
@@ -226,7 +263,7 @@ void AccountsController::LoadStore() {
 // ---------------------------------------------------------------------
 
 void AccountsController::StartWorker(bool startup) {
-  if (!usable_ || shut_down_) return;
+  if (!usable_ || shut_down_ || !network_blocked_.empty()) return;
   if (worker_running_) {
     if (!startup) profiles_again_ = true;
     return;
@@ -368,6 +405,14 @@ std::string AccountsController::SelectionUnavailableReason() const {
 std::string AccountsController::AddUnavailableReason() const {
   std::string reason = SelectionUnavailableReason();
   if (!reason.empty()) return reason;
+  switch (network_block_) {
+    case LauncherNetworkBlock::kNone:
+      break;
+    case LauncherNetworkBlock::kConfig:
+      return _("Fix config.yaml first: it sets how Roblox is reached");
+    case LauncherNetworkBlock::kSystemProxy:
+      return _("The system proxy cannot be determined");
+  }
   if (checking_) return _("Wait until the saved accounts are checked");
   if (sign_in_ != nullptr) return _("A sign-in window is already open");
   return {};

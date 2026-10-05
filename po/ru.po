@@ -1637,6 +1637,21 @@ msgstr "Не удаётся прочитать сохранённые аккау
 msgid "Wait until the saved accounts are checked"
 msgstr "Дождитесь окончания проверки сохранённых аккаунтов"
 
+msgid "Fix config.yaml first: it sets how Roblox is reached"
+msgstr "Сначала исправьте config.yaml: от него зависит, как связываться с Roblox"
+
+msgid "The system proxy cannot be determined"
+msgstr "Не удаётся определить системный прокси"
+
+msgid "config.yaml does not load, so the proxy for Roblox is not known, and nothing is sent to Roblox from this window. Fix the file, then reload it."
+msgstr "config.yaml не загружается, поэтому неизвестно, через какой прокси связываться с Roblox, и это окно ничего не отправляет в Roblox. Исправьте файл и перечитайте его."
+
+msgid "The system proxy cannot be determined, so nothing is sent to Roblox from this window, and Roblox will not start until it can be."
+msgstr "Не удаётся определить системный прокси, поэтому это окно ничего не отправляет в Roblox, а сам Roblox не запустится, пока прокси не определится."
+
+msgid "Saved accounts are not checked"
+msgstr "Сохранённые аккаунты не проверены"
+
 msgid "A sign-in window is already open"
 msgstr "Окно входа уже открыто"
 

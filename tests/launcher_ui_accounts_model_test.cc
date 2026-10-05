@@ -448,6 +448,70 @@ TEST(LauncherUiAccountsModelTest, NetworkReportsABrokenConfig) {
   EXPECT_TRUE(plan.assignments.empty());
 }
 
+// main.cc refuses to start Roblox when the proxy cannot be worked out; the
+// window's own requests (the session check, names and avatars, signing
+// in) must not go out directly then either.
+TEST(LauncherUiAccountsModelTest, NetworkWaitsWhileTheProxyIsUnknown) {
+  const TemporaryDirectory directory;
+  bool asked = false;
+  const auto resolver = [&asked](runtime::SystemProxyResult result) {
+    return [&asked, result] {
+      asked = true;
+      return result;
+    };
+  };
+
+  // A typo anywhere in config.yaml hides network.proxy_host.
+  std::string yaml(runtime::DefaultRuntimeConfigYaml());
+  yaml = ReplaceOnce(yaml, "  # proxy_host: 127.0.0.1\n",
+                     "  proxy_host: 10.0.0.2\n");
+  yaml = ReplaceOnce(yaml, "  # proxy_port: 8080\n", "  proxy_port: 3128\n");
+  const std::filesystem::path proxied = directory.Write("proxied.yaml", yaml);
+  LauncherNetworkSetup setup = ResolveLauncherNetwork(
+      PlanLauncherNetwork(MapEnvironment(), proxied), nullptr);
+  EXPECT_EQ(setup.blocked, LauncherNetworkBlock::kNone);
+  EXPECT_EQ(setup.assignments.size(), 3U);
+  const std::filesystem::path broken = directory.Write(
+      "broken.yaml",
+      ReplaceOnce(yaml, "  # vsync: off\n", "  vsync: sometimes\n"));
+  setup = ResolveLauncherNetwork(PlanLauncherNetwork(MapEnvironment(), broken),
+                                 resolver({}));
+  EXPECT_EQ(setup.blocked, LauncherNetworkBlock::kConfig);
+  EXPECT_FALSE(setup.error.empty());
+  EXPECT_TRUE(setup.assignments.empty());
+  EXPECT_FALSE(asked);
+
+  // The system proxy cannot be resolved.
+  yaml = std::string(runtime::DefaultRuntimeConfigYaml());
+  yaml = ReplaceOnce(yaml, "  use_system_proxy: false\n",
+                     "  use_system_proxy: true\n");
+  const std::filesystem::path system = directory.Write("system.yaml", yaml);
+  const LauncherNetworkPlan plan =
+      PlanLauncherNetwork(MapEnvironment(), system);
+  setup = ResolveLauncherNetwork(
+      plan, resolver({std::nullopt, "proxy resolver unavailable"}));
+  EXPECT_TRUE(asked);
+  EXPECT_EQ(setup.blocked, LauncherNetworkBlock::kSystemProxy);
+  EXPECT_EQ(setup.error, "proxy resolver unavailable");
+  EXPECT_TRUE(setup.assignments.empty());
+
+  // Resolved: its proxy, or a direct connection.
+  runtime::NetworkProxyConfig proxy;
+  proxy.scheme = "socks5";
+  proxy.host = "10.0.0.3";
+  proxy.port = 1080;
+  setup = ResolveLauncherNetwork(plan, resolver({proxy, ""}));
+  EXPECT_EQ(setup.blocked, LauncherNetworkBlock::kNone);
+  const std::vector<std::pair<std::string, std::string>> expected = {
+      {"MOCKTAIL_HTTP_PROXY_HOST", "10.0.0.3"},
+      {"MOCKTAIL_HTTP_PROXY_PORT", "1080"},
+      {"MOCKTAIL_HTTP_PROXY_SCHEME", "socks5"}};
+  EXPECT_EQ(setup.assignments, expected);
+  setup = ResolveLauncherNetwork(plan, resolver({std::nullopt, ""}));
+  EXPECT_EQ(setup.blocked, LauncherNetworkBlock::kNone);
+  EXPECT_TRUE(setup.assignments.empty());
+}
+
 // ---- cancellable client
 // ----------------------------------------------------------
 

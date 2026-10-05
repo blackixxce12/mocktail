@@ -601,6 +601,10 @@ class AccountsPageView {
         AddDynamic(NewStatusRow(_("Saved accounts cannot be read"),
                                 controller.load_error()));
       }
+      if (!controller.network_blocked().empty()) {
+        AddDynamic(NewStatusRow(_("Saved accounts are not checked"),
+                                controller.network_blocked()));
+      }
       if (controller.checking()) {
         GtkWidget* row =
             // account_store.cc Reconcile asks only about sessions whose

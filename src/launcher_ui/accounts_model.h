@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 #include <utility>
@@ -12,6 +13,7 @@
 #include "runtime/account_store.h"
 #include "runtime/environment.h"
 #include "runtime/runtime_paths.h"
+#include "runtime/system_proxy.h"
 #include "services/http_client.h"
 
 // The GTK-free part of the Accounts page and the launch bar's account chip:
@@ -147,6 +149,32 @@ struct LauncherNetworkPlan {
 LauncherNetworkPlan PlanLauncherNetwork(
     const runtime::Environment& environment,
     const std::filesystem::path& config_file);
+
+// What the window's own requests may do. main.cc stops before Roblox starts
+// ([FATAL]) when config.yaml does not load or the system proxy cannot be
+// resolved, so a proxy the user may depend on is never bypassed; the window
+// sends nothing to Roblox in the same cases instead of going out directly.
+enum class LauncherNetworkBlock {
+  kNone,
+  // config.yaml does not load: network.* is not known.
+  kConfig,
+  // network.use_system_proxy is on and the resolver failed.
+  kSystemProxy,
+};
+
+struct LauncherNetworkSetup {
+  // The variables to set; empty while blocked.
+  std::vector<std::pair<std::string, std::string>> assignments;
+  LauncherNetworkBlock blocked = LauncherNetworkBlock::kNone;
+  // The loader's or the resolver's message (English, for the log).
+  std::string error;
+};
+
+// `plan` with the system proxy resolved by `resolve_system_proxy`
+// (runtime::ResolveSystemProxy in the window) when the plan asks for it.
+LauncherNetworkSetup ResolveLauncherNetwork(
+    const LauncherNetworkPlan& plan,
+    const std::function<runtime::SystemProxyResult()>& resolve_system_proxy);
 
 // An HttpClient for work that must be able to stop: once Cancel() is
 // called every new request fails at once without reaching the network, so a

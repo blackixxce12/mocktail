@@ -288,6 +288,39 @@ LauncherNetworkPlan PlanLauncherNetwork(
   return plan;
 }
 
+LauncherNetworkSetup ResolveLauncherNetwork(
+    const LauncherNetworkPlan& plan,
+    const std::function<runtime::SystemProxyResult()>& resolve_system_proxy) {
+  LauncherNetworkSetup setup;
+  if (!plan.error.empty()) {
+    setup.blocked = LauncherNetworkBlock::kConfig;
+    setup.error = plan.error;
+    return setup;
+  }
+  setup.assignments = plan.assignments;
+  if (!plan.system_proxy) return setup;
+  const runtime::SystemProxyResult system =
+      resolve_system_proxy ? resolve_system_proxy()
+                           : runtime::SystemProxyResult{
+                                 std::nullopt, "no system proxy resolver"};
+  if (!system) {
+    setup.assignments.clear();
+    setup.blocked = LauncherNetworkBlock::kSystemProxy;
+    setup.error = system.error;
+    return setup;
+  }
+  // No proxy means the resolver chose a direct connection.
+  if (system.proxy.has_value()) {
+    setup.assignments.emplace_back("MOCKTAIL_HTTP_PROXY_HOST",
+                                   system.proxy->host);
+    setup.assignments.emplace_back("MOCKTAIL_HTTP_PROXY_PORT",
+                                   std::to_string(system.proxy->port));
+    setup.assignments.emplace_back("MOCKTAIL_HTTP_PROXY_SCHEME",
+                                   system.proxy->scheme);
+  }
+  return setup;
+}
+
 services::HttpRequest CancellableHttpClient::Limit(
     const services::HttpRequest& request) const {
   services::HttpRequest limited = request;
