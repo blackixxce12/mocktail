@@ -21,7 +21,8 @@
 #   PLUS_EXTRA_CFLAGS, PLUS_EXTRA_CXXFLAGS
 #                     appended to CFLAGS / CXXFLAGS after the portable flags,
 #                     e.g. "-isystem DIR/usr/include" for headers that are not
-#                     installed system-wide (only for local test builds)
+#                     installed system-wide (only for local test builds); the
+#                     script stops if they choose another -march or -mtune
 #   MAKEPKG_CONF      system makepkg config to start from (/etc/makepkg.conf)
 #   Everything else (CMAKE_BUILD_PARALLEL_LEVEL, CMAKE_PREFIX_PATH, PACKAGER,
 #   GPGKEY, ...) reaches makepkg and the build unchanged.
@@ -90,6 +91,18 @@ done
 command -v makepkg >/dev/null || die 'makepkg not found'
 [[ -f ${here}/PKGBUILD ]] || die "no PKGBUILD in ${here}"
 
+# Checked before anything is created under --out.
+if [[ -n ${local_repo} ]]; then
+  local_repo=$(realpath -e -- "${local_repo}") ||
+    die "--local: no such directory '${local_repo}'"
+  # makepkg reads '#' and '?' in a source URL as fragment and query.
+  [[ ${local_repo} != *[\#\?]* ]] ||
+    die "--local: the path may not contain '#' or '?': ${local_repo}"
+  commit=$(git -C "${local_repo}" rev-parse --verify --quiet \
+    --end-of-options "${local_ref}^{commit}") ||
+    die "--local: '${local_ref}' is not a commit in ${local_repo}"
+fi
+
 out=$(realpath -m -- "${out}")
 mkdir -p -- "${out}"/{build,log,pkg}
 tmp=$(mktemp -d "${out}/.build-release.XXXXXX")
@@ -99,6 +112,8 @@ trap 'rm -rf -- "${tmp}"' EXIT
 
 # The same files makepkg itself reads without --config.
 base_conf=${MAKEPKG_CONF:-/etc/makepkg.conf}
+# The generated config sources it from makepkg's directory, not this one.
+[[ ${base_conf} == /* ]] || base_conf=${PWD}/${base_conf}
 [[ -r ${base_conf} ]] || die "${base_conf} not found"
 conf_files=("${base_conf}")
 for f in "${base_conf}.d"/*.conf; do
@@ -148,12 +163,24 @@ conf=${tmp}/makepkg.conf
   printf 'PKGEXT=%q\n' "${PKG_EXT}"
 } >"${conf}"
 
-for v in CFLAGS CXXFLAGS; do
+# Every CPU choice makepkg will pass must be the portable one, including any
+# from PLUS_EXTRA_* and from LDFLAGS/LTOFLAGS (with LTO, code is generated at
+# link time).
+for v in CFLAGS CXXFLAGS LDFLAGS LTOFLAGS; do
   value=$(system_value "${v}" "${conf}")
-  [[ " ${value} " == *" -march=${MARCH} "* ]] ||
-    die "${v} lost -march=${MARCH}: ${value}"
-  [[ ${value} != *-march=native* && ${value} != *-mtune=native* ]] ||
-    die "${v} still targets this CPU: ${value}"
+  read -r -d '' -a words <<<"${value}" || true
+  for word in "${words[@]}"; do
+    case ${word} in
+      "-march=${MARCH}" | "-mtune=${MTUNE}") ;;
+      -march=* | -mtune=* | -mcpu=*)
+        die "${v} targets another CPU with ${word}: ${value}"
+        ;;
+    esac
+  done
+  if [[ ${v} == C*FLAGS ]]; then
+    [[ " ${value} " == *" -march=${MARCH} "* ]] ||
+      die "${v} lost -march=${MARCH}: ${value}"
+  fi
 done
 
 # --- where makepkg runs ------------------------------------------------------
@@ -161,21 +188,12 @@ done
 srcdest=${out}/src
 workdir=${here}
 if [[ -n ${local_repo} ]]; then
-  local_repo=$(realpath -e -- "${local_repo}") ||
-    die "--local: no such directory '${local_repo}'"
-  # makepkg reads '#' and '?' in a source URL as fragment and query.
-  [[ ${local_repo} != *[\#\?]* ]] ||
-    die "--local: the path may not contain '#' or '?': ${local_repo}"
-  commit=$(git -C "${local_repo}" rev-parse --verify --quiet \
-    --end-of-options "${local_ref}^{commit}") ||
-    die "--local: '${local_ref}' is not a commit in ${local_repo}"
-
   # A temporary copy of the PKGBUILD whose mocktail source is the local commit.
   workdir=${tmp}/pkgbuild
   mkdir -p -- "${workdir}"
   cp -- "${here}/PKGBUILD" "${workdir}/PKGBUILD"
   {
-    printf '\n# --- build-release.sh --local: %s (%s) of %s ---\n' \
+    printf '\n# --- build-release.sh --local: %q (%s) of %q ---\n' \
       "${local_ref}" "${commit}" "${local_repo}"
     printf 'for _i in "${!source[@]}"; do\n'
     printf '  if [[ ${source[_i]} == mocktail::* ]]; then\n'
