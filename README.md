@@ -19,8 +19,8 @@ is upstream's.
   first start.
 - It is licensed under the [Apache License 2.0](LICENSE), like upstream.
 - The program is still called Mocktail: the command is `mocktail`, the app ID
-  is `space.bigrat.mocktail`, and it uses the same files as upstream
-  Mocktail.
+  is `space.bigrat.mocktail`, and it uses the same files as upstream's
+  native packages and AppImage.
 
 ![The settings window's Graphics page with a hint open](assets/screenshots/plus-settings-graphics.png)
 
@@ -32,11 +32,12 @@ Roblox APK -> signature and ABI checks -> Bionic + JNI -> SDL3 + Vulkan/OpenGL
 
 Mocktail provides the Android ABI and JNI pieces the client expects, then
 connects them to SDL3 and Vulkan or OpenGL on the Linux side. The APK is
-downloaded on first launch (`updates.source`; the provider chain currently
-starts with APKPure) and is checked before any native code is loaded. It is
+downloaded on first launch (`updates.source`; APKPure is currently the only
+download source) and is checked before any native code is loaded. It is
 not bundled with Mocktail. The last working copy is kept in case an update
-fails: with `updates.automatic` on, a new Roblox version passes two isolated
-test runs before it replaces the current one.
+fails: with `updates.automatic` on, a new Roblox version passes isolated test
+runs (two when Mocktail's compatibility list does not cover it yet) before it
+replaces the current one.
 
 ## What Plus changes
 
@@ -44,8 +45,8 @@ Plus is based on upstream `main` at
 [`273209b`](https://github.com/komaruworld/mocktail/commit/273209b)
 ("Fix angle platform selection"), 39 commits after the 1.0.4 release, so it
 already has upstream's fixes since 1.0.4, such as the chat text fixes. The
-list below is the notice of changes that section 4(b) of the Apache License
-asks for. `git log 273209b..main` shows every change, file by file.
+list below summarizes what Plus changes; `git log --stat 273209b..main`
+shows every change, file by file.
 
 **Settings window**
 
@@ -60,7 +61,7 @@ asks for. `git log 273209b..main` shows every change, file by file.
 - Changes are written to `config.yaml` only when you press Save or Play. The
   editor changes only the lines it has to, so comments and layout stay, and
   it keeps copies of the file before its first save, before Restore Backup
-  and before Reset All.
+  and before Reset All Settings.
 - A Fast Flags editor for `fflags.json` that points out the flags Mocktail
   manages itself.
 - Variables set by a desktop shortcut or a terminal can be moved into the
@@ -118,8 +119,8 @@ asks for. `git log 273209b..main` shows every change, file by file.
   upstream always used the NVIDIA card.
 - `engine.graphics_quality` chooses the graphics quality level that
   Mocktail's performance preset forces, or leaves it to Roblox's slider.
-- Vertical sync "On" now stays synchronized with Mesa's drivers (AMD, Intel,
-  NVK) when the frame rate limit is unlimited.
+- With direct Vulkan, vertical sync "On" now stays synchronized with Mesa's
+  drivers (AMD, Intel, NVK) when the frame rate limit is unlimited.
 - The session log names the graphics card the game renders on, and how much
   ETC2 texture decoding a session did.
 
@@ -135,7 +136,8 @@ asks for. `git log 273209b..main` shows every change, file by file.
 **Translations**
 
 - The settings window is in English and Russian and follows the system
-  language. The desktop entry and its actions have Russian names too.
+  language. The desktop entry's description and its actions are in Russian
+  too.
 
 ## Install
 
@@ -146,33 +148,39 @@ is no Flatpak, AppImage, AUR, DNF or APT package of Plus.
 Requirements:
 
 - CachyOS or Arch Linux on `x86_64`. The package is built for the x86-64-v3
-  level, so it needs an Intel Haswell or AMD Zen CPU, or newer.
+  level, so the CPU must support it (AVX2, BMI2, FMA and more; Intel Core
+  from Haswell on and AMD Zen are new enough, but some Pentium, Celeron and
+  Atom CPUs are not). `/lib/ld-linux-x86-64.so.2 --help` lists
+  `x86-64-v3 (supported, searched)` on a CPU that has it.
 - A Vulkan driver for the default `direct-vulkan` graphics backend, or
   OpenGL ES 3.0 for `graphics.backend: opengl`.
 
-Download `mocktail-plus-1.0.4.plus.1-1-x86_64.pkg.tar.zst` from the release
-and install it:
+Download `mocktail-plus-1.0.4.plus.1-1-x86_64.pkg.tar.zst` from the
+`v1.0.4-plus.1` release and install it:
 
 ```bash
 sudo pacman -U ./mocktail-plus-1.0.4.plus.1-1-x86_64.pkg.tar.zst
 ```
 
 The package conflicts with `mocktail`, `mocktail-bin`, `mocktail-git` and
-`mocktail-local`, and replaces whichever of them is installed: pacman offers
-to remove it. Start Mocktail from your application menu or with `mocktail`.
-The desktop entry also opens Roblox's `roblox:` and `roblox-player:` website
-links.
+`mocktail-local`, so it cannot be installed beside them: pacman offers to
+remove the one that is installed. Start Mocktail from your application menu
+or with `mocktail`. The desktop entry also opens Roblox's `roblox:` and
+`roblox-player:` website links.
 
 ### Build the package yourself
 
 - `packaging/plus/PKGBUILD` builds the tagged release: run `makepkg` in
   `packaging/plus`.
-- `packaging/plus/build-release.sh` builds the release package the way it is
-  published, for the x86-64-v3 level. Run it with `--help` for its options.
+- `packaging/plus/build-release.sh --out DIR` builds the release package
+  the way it is published, for the x86-64-v3 level, into `DIR/pkg`. Run it
+  with `--help` for its options.
 
 ### Going back to upstream Mocktail
 
-Plus and upstream use the same settings and data directories. Upstream
+Plus and upstream's native packages and AppImage use the same settings and
+data directories (upstream's Flatpak keeps its own under
+`~/.var/app/space.bigrat.mocktail`). Upstream
 Mocktail ignores the new `config.yaml` sections, so the file keeps working.
 The settings window moves the saved Roblox session into its account store
 (`~/.local/share/mocktail/auth/accounts/`), which upstream does not read, so
@@ -182,8 +190,8 @@ after switching back you may have to sign in again.
 
 Upstream Mocktail has its own install channels: Flathub, a nightly Flatpak,
 the AUR, DNF and APT repositories, and AppImage, DEB and RPM downloads. They
-install upstream Mocktail without the Plus changes, and they conflict with
-`mocktail-plus`. See the
+install upstream Mocktail without the Plus changes; its AUR packages conflict
+with `mocktail-plus`. See the
 [upstream README](https://github.com/komaruworld/mocktail#readme) and
 [mocktail.bigrat.space](https://mocktail.bigrat.space/) for the current
 instructions.
@@ -275,9 +283,10 @@ subtitles, `config.yaml` keys and variable names.
 **Saving.** Changes stay in the window until you press **Save** (Ctrl+S).
 **Play** (Ctrl+Enter) saves first. Closing the window with unsaved changes
 asks whether to save them; Ctrl+Q closes it without playing. If `config.yaml`
-has an error, the window shows the line, keeps the settings read-only and
-offers to open the file, reload it, restore the backup or use the defaults;
-Roblox cannot start until the file loads.
+has an error, the window says so (with the line, when the loader names one),
+keeps the settings read-only and offers to open the file or reload it, to
+restore the copy it kept before its first save, if there is one, and, for an
+empty file, to use the defaults; Roblox cannot start until the file loads.
 
 **Accounts.** Several Roblox accounts can be saved. Play and website joins
 start with the selected one, and switching needs no new sign-in. The account
@@ -319,9 +328,9 @@ still edit it by hand; the window notices when the file changes while it is
 open. [config/mocktail.example.yaml](config/mocktail.example.yaml) shows the
 whole file.
 
-Environment variables still override `config.yaml`: a variable that is set,
-even to an empty value, hides the value from the file (empty means the
-default). Plus adds these keys, in new top-level sections:
+Environment variables still override `config.yaml`. Plus adds these keys, in
+new top-level sections; for each of them a variable that is set, even to an
+empty value, hides the value from the file (empty means the default):
 
 | Key | Values (default first) | Variable | What it does |
 |---|---|---|---|
@@ -384,10 +393,11 @@ NVIDIA cards with direct Vulkan through XWayland. Plus uses native Wayland
 there when `display.server` is `auto` and all of these hold, checked in this
 order:
 
-1. `MOCKTAIL_PREFER_WAYLAND` is not `0`, and the surface-commit guard is on
-   (it is unless `MOCKTAIL_WAYLAND_COMMIT_GUARD=0`). The guard keeps SDL's
-   own surface commits from landing in the middle of NVIDIA's explicit-sync
-   present, which would be a fatal Wayland protocol error.
+1. `MOCKTAIL_PREFER_WAYLAND` is not `0` or `false`, and the surface-commit
+   guard is on (it is unless `MOCKTAIL_WAYLAND_COMMIT_GUARD` is `0`, `false`,
+   `off` or `no`). The guard keeps SDL's own surface commits from landing in
+   the middle of NVIDIA's explicit-sync present, which would be a fatal
+   Wayland protocol error.
 2. The NVIDIA driver is version 555 or newer (explicit sync in its Vulkan
    driver), and `__NV_DISABLE_EXPLICIT_SYNC` is unset or `0`.
 3. There is no Intel or AMD graphics card beside the NVIDIA one (presenting

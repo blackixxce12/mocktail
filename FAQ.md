@@ -49,8 +49,8 @@ open it again, use the **Mocktail Settings** action or `mocktail --launcher`.
 
 ## Signing in ends with "Load generic challenge failed". What now?
 
-Roblox's Android app may answer a sign-in with a user name and password with
-a Google Play Integrity device check (challenge type `deviceintegrity`).
+Roblox may answer a sign-in with a user name and password in its Android app
+with a Google Play Integrity device check (challenge type `deviceintegrity`).
 Nothing on Linux can pass it: Mocktail has no certified Android device to
 show. In upstream Mocktail the check's page waits about a minute and then
 shows "Load generic challenge failed".
@@ -59,8 +59,8 @@ Plus answers Roblox's integrity questions as "unavailable" (it makes up no
 token), and when Roblox asks for the check anyway, it opens roblox.com's
 sign-in page in a "Sign in to Roblox" window instead. Sign in there; Mocktail
 then restarts by itself and Roblox starts signed in. The session log shows
-such a check as `[webview] presenting login verification window
-type=deviceintegrity`.
+such a check as `[webview] Roblox asked for deviceintegrity verification,
+which Linux cannot provide; opening website sign-in instead`.
 
 Other ways in, on the settings window's **Accounts** page:
 
@@ -68,9 +68,9 @@ Other ways in, on the settings window's **Accounts** page:
   starts and saves the account.
 - **Sign in inside Roblox** starts Roblox signed out so you can use Quick
   Log In with a device where you are already signed in.
-- **Sign-in method: Website window** (`account.sign_in: browser`) always
-  opens Mocktail's roblox.com window when Roblox starts without a working
-  session.
+- **Sign-in method: Website window** (`account.sign_in: browser`) opens
+  Mocktail's roblox.com window when Roblox starts without a working session
+  (website joins excepted).
 
 ## How do I buy Robux?
 
@@ -88,7 +88,7 @@ browser. Buy Robux at roblox.com/upgrades/robux."
 
 ## Chat text is invisible while I type
 
-Fixed. Text typed into small text boxes such as the chat bar could stay
+Fixed. Text typed into text boxes such as the chat bar could stay
 invisible in the Mocktail 1.0.4 release. Upstream fixed this on `main` after
 1.0.4 (commits `0548ebd`, `1c11336` and `b37497d`), and Plus is built from
 that `main`, so chat text shows while you type. Plus also runs each call into
@@ -99,12 +99,14 @@ still does not show, attach `latest.log` to a bug report.
 ## Why does the game use XWayland, or native Wayland, on my NVIDIA card?
 
 NVIDIA's Wayland presentation is reliable only with explicit sync. Upstream
-Mocktail therefore always runs NVIDIA cards with direct Vulkan through
-XWayland on a Wayland session. Plus uses native Wayland automatically when
-the driver is 555 or newer with explicit sync left on
+Mocktail always runs NVIDIA cards with direct Vulkan through XWayland on a
+Wayland session that has XWayland. Plus uses native Wayland automatically
+when the driver is 555 or newer with explicit sync left on
 (`__NV_DISABLE_EXPLICIT_SYNC` unset or `0`), there is no Intel or AMD card
 beside the NVIDIA one, the compositor offers explicit sync, and either the
-compositor is Hyprland or vertical sync is off. Otherwise it keeps XWayland.
+compositor is Hyprland or the game does not wait for the display (vertical
+sync off, or Automatic with an unlimited frame rate). Otherwise it keeps
+XWayland.
 The full list is in the README's [NVIDIA](README.md#nvidia) section.
 
 To see what was chosen and why, look at the Display page's **Display
@@ -146,8 +148,8 @@ Performance page links there). Depending on your settings these are:
   forces a level (`engine.graphics_quality`, see the
   [README](README.md#configuration)).
 - Anti-aliasing, textures and level of detail: the performance preset
-  (`performance.physics_worker_mode: throughput`, the default, or
-  `multithreaded_rendering`) turns MSAA off, caps the texture budget at
+  (`performance.physics_worker_mode: throughput`, the default, or `auto`
+  with `multithreaded_rendering`) turns MSAA off, caps the texture budget at
   128 MB and uses low-end level of detail.
 - Roblox's **Maximum Frame Rate**, when `graphics.frame_rate_limit` sets a
   target.
