@@ -298,9 +298,12 @@ class RowBinding {
     if (!recommendation_line.empty()) lines.push_back(recommendation_line);
     const EnvOverride* env = context_->EffectiveOverride(spec_.key);
     if (env != nullptr) {
-      lines.push_back(Format(_("This launch uses %s=%s instead"),
-                             env->name.c_str(),
-                             RedactEnvironmentValue(env->value).c_str()));
+      // A zero-width space after "=" lets a narrow row break between the
+      // name and the value instead of inside the value ("dire" / "ct-
+      // vulkan"). Subtitles cannot be selected, so it is never copied.
+      lines.push_back(
+          Format(_("This launch uses %s=%s instead"), env->name.c_str(),
+                 ("\u200b" + RedactEnvironmentValue(env->value)).c_str()));
     }
     if (!unavailable.empty()) lines.push_back(unavailable);
     const std::string warning =
