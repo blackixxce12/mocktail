@@ -491,69 +491,10 @@ GtkWidget* BuildGameModeRow(LauncherContext* context,
        false,
        false},
   };
-  GtkWidget* row = BindComboRow(context, std::move(spec), std::move(combo));
-
-  // The detection badge, first among the row's suffixes.
-  GtkWidget* badge = gtk_label_new(nullptr);
-  gtk_widget_add_css_class(badge, "caption-heading");
-  gtk_widget_set_valign(badge, GTK_ALIGN_CENTER);
-  adw_action_row_add_suffix(ADW_ACTION_ROW(row), badge);
-  if (GtkWidget* box = gtk_widget_get_parent(badge); GTK_IS_BOX(box)) {
-    gtk_box_reorder_child_after(GTK_BOX(box), badge, nullptr);
-  }
-  const auto update = [context, probe, badge] {
-    const MachineProfile& machine = context->machine();
-    const char* text = nullptr;
-    const char* style = nullptr;
-    if (machine.detected && !machine.gamemode_library) {
-      text = _("Not found");
-      style = "dim-label";
-    } else if (probe->service() == GameModeService::kMissing) {
-      text = _("No service");
-      style = "warning";
-    } else if (machine.detected && probe->portal() &&
-               (probe->service() == GameModeService::kRunning ||
-                probe->service() == GameModeService::kActivatable)) {
-      text = _("Portal");
-      style = "dim-label";
-    } else if (machine.detected &&
-               (probe->service() == GameModeService::kRunning ||
-                probe->service() == GameModeService::kActivatable ||
-                probe->service() == GameModeService::kNoBus)) {
-      text = _("Installed");
-      style = "success";
-    }
-    // A narrow window keeps the room for the title; the subtitle says the
-    // same.
-    gtk_widget_set_visible(badge, text != nullptr && !context->narrow());
-    if (text == nullptr) return;
-    gtk_label_set_text(GTK_LABEL(badge), text);
-    for (const char* css : {"dim-label", "warning", "success"}) {
-      gtk_widget_remove_css_class(badge, css);
-    }
-    gtk_widget_add_css_class(badge, style);
-    gtk_accessible_update_property(GTK_ACCESSIBLE(badge),
-                                   GTK_ACCESSIBLE_PROPERTY_LABEL,
-                                   Format(_("GameMode: %s"), text).c_str(), -1);
-  };
-  struct Listeners {
-    LauncherContext* context;
-    LauncherContext::ListenerId machine;
-    LauncherContext::ListenerId layout;
-  };
-  // The badge dies with the row; stop updating it then.
-  g_object_set_data_full(
-      G_OBJECT(badge), "mocktail-listeners",
-      new Listeners{context, context->OnMachineChanged(update),
-                    context->OnLayoutChanged([update](bool) { update(); })},
-      [](gpointer data) {
-        auto* listeners = static_cast<Listeners*>(data);
-        listeners->context->RemoveListener(listeners->machine);
-        listeners->context->RemoveListener(listeners->layout);
-        delete listeners;
-      });
-  update();
-  return row;
+  // No detection badge ("Installed", "No service") among the suffixes: the
+  // subtitle (GameModeStatus) says the same and a missing service is also
+  // the row's warning, so the badge was the third copy on one row.
+  return BindComboRow(context, std::move(spec), std::move(combo));
 }
 
 // performance.memory_limit_mb (memory_limit.h/.cc: an RSS + swap watchdog;

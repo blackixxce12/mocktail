@@ -1424,22 +1424,6 @@ msgstr "Просит у GameMode больше производительност
 msgid "The same request; the log warns when GameMode is missing"
 msgstr "Тот же запрос; если GameMode нет, в журнале будет предупреждение"
 
-msgid "Not found"
-msgstr "Не найден"
-
-msgid "No service"
-msgstr "Нет службы"
-
-msgid "Portal"
-msgstr "Портал"
-
-msgid "Installed"
-msgstr "Установлен"
-
-#, c-format
-msgid "GameMode: %s"
-msgstr "GameMode: %s"
-
 msgid "Limit"
 msgstr "Предел"
 
