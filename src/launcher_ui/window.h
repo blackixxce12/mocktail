@@ -61,6 +61,7 @@ class LauncherWindow final : public LauncherShell {
   GtkWidget* BuildLaunchBar();
   void InstallActions(AdwApplication* application);
   void InstallBreakpoint();
+  void FitSidebarWidth();
   void UpdateMonitor();
   void ShowSearchResults(const std::string& query);
   void LeaveSearch();
@@ -97,6 +98,7 @@ class LauncherWindow final : public LauncherShell {
   GtkWidget* warning_probe_ = nullptr;
   std::array<GtkWidget*, kSectionCount> pages_{};
   std::array<guint, kSectionCount> sidebar_index_{};
+  std::vector<std::string> sidebar_titles_;
   Section current_ = Section::kGraphics;
   bool narrow_ = false;
   bool searching_ = false;

@@ -119,6 +119,7 @@ GtkWidget* LauncherWindow::BuildSidebar() {
   for (int group = 0; group < 3; ++group) {
     for (const SectionInfo& info : Sections()) {
       if (info.sidebar_group != group) continue;
+      sidebar_titles_.emplace_back(_(info.title));
       AdwSidebarItem* item = adw_sidebar_item_new(_(info.title));
       adw_sidebar_item_set_icon_name(item, info.icon);
       adw_sidebar_section_append(groups[group], item);
@@ -196,6 +197,37 @@ GtkWidget* LauncherWindow::BuildSidebar() {
   adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(toolbar), search_bar_);
   adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(toolbar), sidebar_);
   return toolbar;
+}
+
+// AdwSidebar lays an item out as the row's margin (6 px), the box's
+// padding (14 px), the icon (16 px), the spacing (12 px), the title, and
+// the padding and margin again (libadwaita 1.9 gtk.css:
+// ".navigation-sidebar > row" and "sidebar .navigation-sidebar > row >
+// box"), 68 px around the title. With the split view's own minimum of 200
+// px and a quarter of the window, titles were cut in windows between the
+// breakpoint and about 880 px ("Производитель…", "Network & Updat…"), the
+// size cosmic-comp gives a new window at 160 %. The sidebar is now at
+// least as wide as its widest title, in the font it is shown in.
+void LauncherWindow::FitSidebarWidth() {
+  constexpr int kAroundTitle = 68;
+  // Fractional scales round each part of the row separately.
+  constexpr int kSlack = 4;
+  constexpr int kMinimum = 200;
+  constexpr int kMaximum = 260;
+  int widest = 0;
+  for (const std::string& title : sidebar_titles_) {
+    PangoLayout* layout =
+        gtk_widget_create_pango_layout(sidebar_, title.c_str());
+    int width = 0;
+    pango_layout_get_pixel_size(layout, &width, nullptr);
+    g_object_unref(layout);
+    widest = std::max(widest, width);
+  }
+  const int needed = std::max(kMinimum, widest + kAroundTitle + kSlack);
+  auto* split = ADW_NAVIGATION_SPLIT_VIEW(split_view_);
+  adw_navigation_split_view_set_min_sidebar_width(split, needed);
+  adw_navigation_split_view_set_max_sidebar_width(split,
+                                                  std::max(kMaximum, needed));
 }
 
 void LauncherWindow::OnSidebarActivated(AdwSidebar*, guint index,
@@ -767,6 +799,8 @@ void LauncherWindow::OnMap(GtkWidget* widget, gpointer data) {
                      self);
   }
   self->UpdateMonitor();
+  // The font is known once the window is styled.
+  self->FitSidebarWidth();
   GdkRGBA warning = {};
   gtk_widget_get_color(self->warning_probe_, &warning);
   if (warning.alpha > 0.0F) {
