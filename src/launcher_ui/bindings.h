@@ -89,6 +89,11 @@ struct Hint {
   // settings the game reads this launch.
   std::function<std::optional<RobloxOverrideNote>(LauncherContext& context)>
       overrides_roblox;
+  // Whether overrides_roblox shows the badge. Off for a row that only
+  // refines the row above it (the custom level or frame rate under the list
+  // that chose "Custom"), which already carries the same badge for the
+  // same key; Learn more still says what is overridden.
+  bool override_badge = true;
 };
 
 struct RowSpec {

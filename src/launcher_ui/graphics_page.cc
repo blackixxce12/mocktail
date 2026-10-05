@@ -1097,6 +1097,8 @@ GtkWidget* BuildQualityLevelRow(LauncherContext* context) {
         "experience. Choose “Roblox in-game slider” above to let Roblox "
         "pick the level again.");
   spec.hint.overrides_roblox = RobloxOverrideHint(kQualityKey);
+  // Graphics quality, right above, shows the badge.
+  spec.hint.override_badge = false;
   SpinSpec spin;
   spin.minimum = 1;
   spin.maximum = 21;
@@ -1341,6 +1343,8 @@ GtkWidget* BuildCustomFrameRateRow(LauncherContext* context) {
       _("Pick the refresh rate of your screen, or a lower number to save "
         "power and heat. 240 is the highest rate Roblox's own menu offers.");
   spec.hint.overrides_roblox = RobloxOverrideHint(kFrameRateKey);
+  // The frame rate limit, right above, shows the badge.
+  spec.hint.override_badge = false;
   SpinSpec spin;
   spin.minimum = 1;
   spin.maximum = 1000;

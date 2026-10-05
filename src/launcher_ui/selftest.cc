@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <map>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <system_error>
@@ -894,9 +895,11 @@ guint Selftest::ShowRobloxDecides() {
   if (FindOverrideConflicts(settings).size() != 1) {
     Error("level 12 under the preset is not reported as a conflict");
   }
-  // Every row whose value causes an override shows the badge, and only
-  // those.
+  // Every key whose value causes an override shows the badge on a row
+  // (a custom level or frame rate under its list leaves it to the list),
+  // and no other row shows it.
   int badges = 0;
+  std::map<std::string, bool> badge_for_key;
   for (const RowRecord& record : context_->rows()) {
     // The self-test's own rows have no hints.
     if (record.row == nullptr || record.kind == RowKind::kAction ||
@@ -907,9 +910,10 @@ guint Selftest::ShowRobloxDecides() {
     GtkWidget* badge = FindByClass(record.row, "override-badge");
     const bool shown = badge != nullptr && gtk_widget_get_visible(badge);
     const bool expected = RobloxOverrideOf(settings, record.key).has_value();
-    if (shown != expected) {
-      Error("the override badge of " + record.key + " is " +
-            (shown ? "shown" : "hidden"));
+    if (expected) {
+      badge_for_key[record.key] = badge_for_key[record.key] || shown;
+    } else if (shown) {
+      Error("the override badge of " + record.key + " is shown");
     }
     if (shown) ++badges;
     // Under the subtitle, in the box of the row's title and subtitle.
@@ -922,6 +926,9 @@ guint Selftest::ShowRobloxDecides() {
         warnings_.push_back("the override badge is among the row's suffixes");
       }
     }
+  }
+  for (const auto& [key, shown] : badge_for_key) {
+    if (!shown) Error("no row shows the override badge of " + key);
   }
   Note("override_badges", std::to_string(badges));
   GtkWidget* first = nullptr;

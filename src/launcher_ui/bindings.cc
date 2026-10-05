@@ -326,7 +326,8 @@ class RowBinding {
     const std::optional<RobloxOverrideNote> takeover =
         spec_.hint.overrides_roblox ? spec_.hint.overrides_roblox(*context_)
                                     : std::nullopt;
-    gtk_widget_set_visible(override_badge_, takeover.has_value());
+    gtk_widget_set_visible(override_badge_,
+                           takeover.has_value() && spec_.hint.override_badge);
     if (takeover.has_value()) {
       SetRobloxOverrideBadgeSummary(override_badge_, takeover->summary);
     }
