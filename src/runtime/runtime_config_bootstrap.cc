@@ -142,8 +142,10 @@ window:
 
 display:
   # String (default: auto): display server for the game window: auto, wayland,
-  # or x11. auto prefers Wayland but uses X11 (XWayland) for NVIDIA with direct
-  # Vulkan. SDL_VIDEODRIVER, when set, still takes precedence.
+  # or x11. auto prefers Wayland. NVIDIA with direct Vulkan gets it only with
+  # driver 555 or newer, a desktop that offers explicit sync and no second
+  # GPU, and X11 (XWayland) otherwise. SDL_VIDEODRIVER, when set, still takes
+  # precedence.
   server: auto
   # String (default: remember): window state at start: remember (the mode the
   # last session ended in), windowed, maximized, or fullscreen.

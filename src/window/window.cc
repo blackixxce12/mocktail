@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -25,6 +26,7 @@
 #include "mocktail/platform/sdl_application_metadata.h"
 #include "mocktail/platform/sdl_event_converter.h"
 #include "mocktail/platform/sdl_window_icon.h"
+#include "runtime/graphics_launch_policy.h"
 #include "runtime/runtime_config.h"
 #include "window/input_pump_pacer.h"
 #include "window/main_thread_command_gate.h"
@@ -32,6 +34,7 @@
 #include "window/video_driver_policy.h"
 #include "window/vulkan_present_progress_gate.h"
 #include "window/vulkan_surface_recovery_gate.h"
+#include "window/wayland_global_probe.h"
 #include "window/wayland_surface_commit_guard.h"
 #include "window/web_surface_fullscreen_guard.h"
 #include "window/window_fullscreen_request_gate.h"
@@ -491,8 +494,46 @@ bool HasWaylandSession() {
          GetEnvNonEmpty("XDG_RUNTIME_DIR") != nullptr;
 }
 
-VideoDriverChoice ResolveConfiguredVideoDriverChoice() {
+struct ConfiguredVideoDriver {
   VideoDriverPolicyInput input;
+  VideoDriverChoice choice = VideoDriverChoice::kSdlDefault;
+  std::string nvidia_driver_version;
+};
+
+// The registry probe is a second, short-lived connection to the compositor.
+constexpr std::chrono::milliseconds kWaylandProbeTimeout{500};
+constexpr unsigned int kNvidiaPciVendor = 0x10de;
+
+// Reads what the NVIDIA rule needs only while it applies; the registry probe
+// runs only when the compositor's answer is the last thing left to know.
+void ResolveNvidiaWaylandEvidence(ConfiguredVideoDriver* resolved) {
+  VideoDriverPolicyInput& input = resolved->input;
+  if (!NvidiaDirectVulkanRuleApplies(input)) {
+    return;
+  }
+  resolved->nvidia_driver_version = NvidiaDriverVersion();
+  input.nvidia_driver_major =
+      NvidiaDriverMajorVersion(resolved->nvidia_driver_version);
+  for (const runtime::HostGpu& gpu : runtime::DetectHostGpus()) {
+    if (gpu.vendor == kNvidiaPciVendor) {
+      ++input.nvidia_gpu_count;
+    } else {
+      ++input.other_gpu_count;
+    }
+  }
+  input.surface_commit_guard = SurfaceCommitGuardAllowed();
+  if (NeedsWaylandExplicitSyncProbe(input)) {
+    const WaylandGlobals globals = ProbeWaylandGlobals(kWaylandProbeTimeout);
+    input.wayland_explicit_sync =
+        !globals.listed      ? WaylandExplicitSync::kUnknown
+        : globals.drm_syncobj ? WaylandExplicitSync::kOffered
+                              : WaylandExplicitSync::kAbsent;
+  }
+}
+
+ConfiguredVideoDriver ResolveConfiguredVideoDriverChoice() {
+  ConfiguredVideoDriver resolved;
+  VideoDriverPolicyInput& input = resolved.input;
   input.has_explicit_sdl_driver =
       GetEnvNonEmpty("SDL_VIDEODRIVER") != nullptr ||
       GetEnvNonEmpty("SDL_VIDEO_DRIVER") != nullptr;
@@ -514,7 +555,64 @@ VideoDriverChoice ResolveConfiguredVideoDriverChoice() {
   }
   input.vulkan_drivers_exclude_nvidia =
       driver_files != nullptr && VulkanDriverFilesExcludeNvidia(driver_files);
-  return ResolveVideoDriverChoice(input);
+  ResolveNvidiaWaylandEvidence(&resolved);
+  resolved.choice = ResolveVideoDriverChoice(input);
+  return resolved;
+}
+
+void LogNvidiaVideoDriverChoice(const ConfiguredVideoDriver& resolved) {
+  const char* version = resolved.nvidia_driver_version.empty()
+                            ? "(unknown)"
+                            : resolved.nvidia_driver_version.c_str();
+  if (resolved.choice == VideoDriverChoice::kNvidiaDirectVulkanWayland) {
+    fprintf(stderr,
+            "  [window] NVIDIA %s direct Vulkan on Wayland: the compositor "
+            "offers explicit sync (wp_linux_drm_syncobj_manager_v1); using the "
+            "native Wayland WSI with the surface-commit guard; set "
+            "display.server: x11 or SDL_VIDEODRIVER=x11 to override\n",
+            version);
+    return;
+  }
+  if (resolved.choice != VideoDriverChoice::kNvidiaDirectVulkanX11) {
+    return;
+  }
+  std::string reason;
+  switch (NvidiaNativeWaylandBlocker(resolved.input)) {
+    case NvidiaWaylandBlocker::kWaylandNotPreferred:
+      reason = "MOCKTAIL_PREFER_WAYLAND=0";
+      break;
+    case NvidiaWaylandBlocker::kCommitGuardOff:
+      reason = "the surface-commit guard is off "
+               "(MOCKTAIL_WAYLAND_COMMIT_GUARD=0)";
+      break;
+    case NvidiaWaylandBlocker::kDriverVersionUnknown:
+      reason = "NVIDIA driver version unknown";
+      break;
+    case NvidiaWaylandBlocker::kDriverWithoutExplicitSync:
+      reason = std::string("driver ") + version + " has no explicit sync; " +
+               std::to_string(kNvidiaExplicitSyncDriverMajor) +
+               " or newer needed";
+      break;
+    case NvidiaWaylandBlocker::kOtherGpu:
+      reason = "NVIDIA with another GPU";
+      break;
+    case NvidiaWaylandBlocker::kNoNvidiaGpuListed:
+      reason = "no NVIDIA card under /sys/class/drm";
+      break;
+    case NvidiaWaylandBlocker::kExplicitSyncUnknown:
+      reason = "the Wayland registry probe failed";
+      break;
+    case NvidiaWaylandBlocker::kCompositorWithoutExplicitSync:
+      reason = "the compositor has no wp_linux_drm_syncobj_manager_v1";
+      break;
+    case NvidiaWaylandBlocker::kNone:
+      break;
+  }
+  fprintf(stderr,
+          "  [window] NVIDIA direct Vulkan on Wayland session: using "
+          "X11/XWayland WSI (%s); set display.server: wayland or "
+          "SDL_VIDEODRIVER=wayland to override\n",
+          reason.c_str());
 }
 
 std::vector<std::string_view> AvailableSdlVideoDrivers() {
@@ -694,19 +792,15 @@ bool ConfigureGraphicsBackendBeforeSDL() {
     setenv("DISABLE_LAYER_MESA_ANTI_LAG", "1", 0);
   }
 
-  const VideoDriverChoice video_driver_choice =
+  const ConfiguredVideoDriver video_driver_choice =
       ResolveConfiguredVideoDriverChoice();
-  const char* video_driver = VideoDriverChoiceName(video_driver_choice);
+  const char* video_driver = VideoDriverChoiceName(video_driver_choice.choice);
   if (video_driver != nullptr) {
     // Preserve any non-empty user override.
     setenv("SDL_VIDEODRIVER", video_driver, 1);
     SDL_SetHint(SDL_HINT_VIDEO_DRIVER, video_driver);
   }
-  if (video_driver_choice == VideoDriverChoice::kNvidiaDirectVulkanX11) {
-    fprintf(stderr,
-            "  [window] NVIDIA direct Vulkan on Wayland session: using "
-            "X11/XWayland WSI; set SDL_VIDEODRIVER=wayland to override\n");
-  }
+  LogNvidiaVideoDriverChoice(video_driver_choice);
 
   const GraphicsLibraries libraries = ResolveGraphicsLibraries();
   const char* egl_library =

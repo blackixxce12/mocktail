@@ -80,7 +80,8 @@ inline constexpr std::chrono::milliseconds kHostWsiGuardTimeout{250};
 // The guard for the game window's surface.
 SurfaceCommitGuard& GameSurfaceCommitGuard();
 
-// MOCKTAIL_WAYLAND_COMMIT_GUARD=0 turns the guard off (for A/B checks).
+// MOCKTAIL_WAYLAND_COMMIT_GUARD=0 turns the guard off (for A/B checks); the
+// automatic display server then keeps NVIDIA's direct Vulkan on XWayland.
 bool SurfaceCommitGuardAllowed(const char* value);
 bool SurfaceCommitGuardAllowed();
 

@@ -31,9 +31,193 @@ VideoDriverPolicyInput NvidiaWaylandDirectVulkan() {
   return input;
 }
 
+// Everything the native Wayland path needs: driver 555 or newer, a single
+// NVIDIA card, the surface-commit guard and a compositor with explicit sync.
+VideoDriverPolicyInput NvidiaReadyForNativeWayland() {
+  VideoDriverPolicyInput input = NvidiaWaylandDirectVulkan();
+  input.nvidia_driver_major = 615;
+  input.nvidia_gpu_count = 1;
+  input.surface_commit_guard = true;
+  input.wayland_explicit_sync = WaylandExplicitSync::kOffered;
+  return input;
+}
+
 TEST(VideoDriverPolicyTest, UsesXwaylandForNvidiaDirectVulkanByDefault) {
+  // Nothing known about the driver or the compositor yet.
   EXPECT_EQ(ResolveVideoDriverChoice(NvidiaWaylandDirectVulkan()),
             VideoDriverChoice::kNvidiaDirectVulkanX11);
+  EXPECT_EQ(NvidiaNativeWaylandBlocker(NvidiaWaylandDirectVulkan()),
+            NvidiaWaylandBlocker::kCommitGuardOff);
+}
+
+TEST(VideoDriverPolicyTest, UsesNativeWaylandForNvidiaWithExplicitSync) {
+  const VideoDriverPolicyInput input = NvidiaReadyForNativeWayland();
+  EXPECT_TRUE(NvidiaDirectVulkanRuleApplies(input));
+  EXPECT_EQ(NvidiaNativeWaylandBlocker(input), NvidiaWaylandBlocker::kNone);
+  EXPECT_EQ(ResolveVideoDriverChoice(input),
+            VideoDriverChoice::kNvidiaDirectVulkanWayland);
+  EXPECT_STREQ(VideoDriverChoiceName(ResolveVideoDriverChoice(input)),
+               "wayland");
+}
+
+TEST(VideoDriverPolicyTest, NeedsDriver555ForNativeWayland) {
+  VideoDriverPolicyInput input = NvidiaReadyForNativeWayland();
+  input.nvidia_driver_major = 555;
+  EXPECT_EQ(ResolveVideoDriverChoice(input),
+            VideoDriverChoice::kNvidiaDirectVulkanWayland);
+
+  for (const int major : {554, 550, 470}) {
+    input.nvidia_driver_major = major;
+    EXPECT_EQ(NvidiaNativeWaylandBlocker(input),
+              NvidiaWaylandBlocker::kDriverWithoutExplicitSync)
+        << major;
+    EXPECT_EQ(ResolveVideoDriverChoice(input),
+              VideoDriverChoice::kNvidiaDirectVulkanX11)
+        << major;
+  }
+
+  input.nvidia_driver_major = 0;
+  EXPECT_EQ(NvidiaNativeWaylandBlocker(input),
+            NvidiaWaylandBlocker::kDriverVersionUnknown);
+  EXPECT_EQ(ResolveVideoDriverChoice(input),
+            VideoDriverChoice::kNvidiaDirectVulkanX11);
+}
+
+TEST(VideoDriverPolicyTest, KeepsXwaylandWithoutCompositorExplicitSync) {
+  VideoDriverPolicyInput input = NvidiaReadyForNativeWayland();
+  input.wayland_explicit_sync = WaylandExplicitSync::kAbsent;
+  EXPECT_EQ(NvidiaNativeWaylandBlocker(input),
+            NvidiaWaylandBlocker::kCompositorWithoutExplicitSync);
+  EXPECT_EQ(ResolveVideoDriverChoice(input),
+            VideoDriverChoice::kNvidiaDirectVulkanX11);
+
+  // The registry probe failed or never ran.
+  input.wayland_explicit_sync = WaylandExplicitSync::kUnknown;
+  EXPECT_EQ(NvidiaNativeWaylandBlocker(input),
+            NvidiaWaylandBlocker::kExplicitSyncUnknown);
+  EXPECT_EQ(ResolveVideoDriverChoice(input),
+            VideoDriverChoice::kNvidiaDirectVulkanX11);
+}
+
+TEST(VideoDriverPolicyTest, KeepsXwaylandOnHybridAndUnlistedGraphics) {
+  VideoDriverPolicyInput input = NvidiaReadyForNativeWayland();
+  input.other_gpu_count = 1;
+  EXPECT_EQ(NvidiaNativeWaylandBlocker(input), NvidiaWaylandBlocker::kOtherGpu);
+  EXPECT_EQ(ResolveVideoDriverChoice(input),
+            VideoDriverChoice::kNvidiaDirectVulkanX11);
+
+  input.other_gpu_count = 0;
+  input.nvidia_gpu_count = 0;
+  EXPECT_EQ(NvidiaNativeWaylandBlocker(input),
+            NvidiaWaylandBlocker::kNoNvidiaGpuListed);
+  EXPECT_EQ(ResolveVideoDriverChoice(input),
+            VideoDriverChoice::kNvidiaDirectVulkanX11);
+}
+
+TEST(VideoDriverPolicyTest, KeepsXwaylandWithoutTheCommitGuard) {
+  VideoDriverPolicyInput input = NvidiaReadyForNativeWayland();
+  input.surface_commit_guard = false;
+  EXPECT_EQ(NvidiaNativeWaylandBlocker(input),
+            NvidiaWaylandBlocker::kCommitGuardOff);
+  EXPECT_EQ(ResolveVideoDriverChoice(input),
+            VideoDriverChoice::kNvidiaDirectVulkanX11);
+}
+
+TEST(VideoDriverPolicyTest, KeepsXwaylandWhenWaylandIsNotPreferred) {
+  VideoDriverPolicyInput input = NvidiaReadyForNativeWayland();
+  input.prefer_wayland = false;
+  EXPECT_EQ(NvidiaNativeWaylandBlocker(input),
+            NvidiaWaylandBlocker::kWaylandNotPreferred);
+  EXPECT_EQ(ResolveVideoDriverChoice(input),
+            VideoDriverChoice::kNvidiaDirectVulkanX11);
+}
+
+TEST(VideoDriverPolicyTest, ExplicitChoicesBeatTheNvidiaEvidence) {
+  VideoDriverPolicyInput input = NvidiaReadyForNativeWayland();
+  input.force_x11 = true;
+  EXPECT_FALSE(NvidiaDirectVulkanRuleApplies(input));
+  EXPECT_EQ(ResolveVideoDriverChoice(input), VideoDriverChoice::kX11);
+
+  input = NvidiaWaylandDirectVulkan();
+  input.force_wayland = true;
+  EXPECT_FALSE(NvidiaDirectVulkanRuleApplies(input));
+  EXPECT_EQ(ResolveVideoDriverChoice(input), VideoDriverChoice::kWayland);
+
+  for (VideoDriverPolicyInput explicit_input :
+       {NvidiaReadyForNativeWayland(), NvidiaWaylandDirectVulkan()}) {
+    explicit_input.has_explicit_sdl_driver = true;
+    EXPECT_FALSE(NvidiaDirectVulkanRuleApplies(explicit_input));
+    EXPECT_EQ(ResolveVideoDriverChoice(explicit_input),
+              VideoDriverChoice::kSdlDefault);
+  }
+}
+
+TEST(VideoDriverPolicyTest, LeavesNativeWaylandAloneWithoutXwayland) {
+  VideoDriverPolicyInput input = NvidiaWaylandDirectVulkan();
+  input.has_x11_display = false;
+  EXPECT_FALSE(NvidiaDirectVulkanRuleApplies(input));
+  EXPECT_FALSE(NeedsWaylandExplicitSyncProbe(input));
+  EXPECT_EQ(ResolveVideoDriverChoice(input), VideoDriverChoice::kWayland);
+}
+
+TEST(VideoDriverPolicyTest, ProbesTheCompositorOnlyAsTheLastQuestion) {
+  VideoDriverPolicyInput input = NvidiaReadyForNativeWayland();
+  input.wayland_explicit_sync = WaylandExplicitSync::kUnknown;
+  EXPECT_TRUE(NeedsWaylandExplicitSyncProbe(input));
+
+  VideoDriverPolicyInput answered = input;
+  answered.wayland_explicit_sync = WaylandExplicitSync::kAbsent;
+  EXPECT_FALSE(NeedsWaylandExplicitSyncProbe(answered));
+
+  VideoDriverPolicyInput old_driver = input;
+  old_driver.nvidia_driver_major = 550;
+  EXPECT_FALSE(NeedsWaylandExplicitSyncProbe(old_driver));
+
+  VideoDriverPolicyInput hybrid = input;
+  hybrid.other_gpu_count = 1;
+  EXPECT_FALSE(NeedsWaylandExplicitSyncProbe(hybrid));
+
+  VideoDriverPolicyInput guard_off = input;
+  guard_off.surface_commit_guard = false;
+  EXPECT_FALSE(NeedsWaylandExplicitSyncProbe(guard_off));
+
+  VideoDriverPolicyInput explicit_driver = input;
+  explicit_driver.has_explicit_sdl_driver = true;
+  EXPECT_FALSE(NeedsWaylandExplicitSyncProbe(explicit_driver));
+
+  VideoDriverPolicyInput integrated = input;
+  integrated.vulkan_drivers_exclude_nvidia = true;
+  EXPECT_FALSE(NeedsWaylandExplicitSyncProbe(integrated));
+}
+
+TEST(VideoDriverPolicyTest, ParsesNvidiaDriverVersions) {
+  EXPECT_EQ(ParseNvidiaDriverVersion(
+                "NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  "
+                "615.71.09  Release Build  (dvs-builder@U16-I1-N08-12-1)  "
+                "Thu Sep 18 20:02:43 UTC 2026"),
+            "615.71.09");
+  EXPECT_EQ(ParseNvidiaDriverVersion(
+                "NVRM version: NVIDIA UNIX x86_64 Kernel Module  550.120  Fri "
+                "Sep 13 10:10:01 UTC 2024"),
+            "550.120");
+  EXPECT_EQ(ParseNvidiaDriverVersion(
+                "NVRM version: NVIDIA UNIX x86_64 Kernel Module  470.256.02  "
+                "Thu May  2 14:37:44 UTC 2024"),
+            "470.256.02");
+  EXPECT_EQ(ParseNvidiaDriverVersion("615.71.09\n"), "615.71.09");
+  for (const char* garbage :
+       {"", "\n", "GCC version:  gcc version 14.2.1 20240910 (GCC)",
+        "NVRM version: NVIDIA UNIX Open Kernel Module for x86_64",
+        "615", "61.5", "615.", ".615.1", "v615.71"}) {
+    EXPECT_EQ(ParseNvidiaDriverVersion(garbage), "") << garbage;
+  }
+
+  EXPECT_EQ(NvidiaDriverMajorVersion("615.71.09"), 615);
+  EXPECT_EQ(NvidiaDriverMajorVersion("550.120"), 550);
+  EXPECT_EQ(NvidiaDriverMajorVersion("1000.1"), 1000);
+  for (const char* invalid : {"", "615", "61.5", "abc", " 615.71", "615.x"}) {
+    EXPECT_EQ(NvidiaDriverMajorVersion(invalid), 0) << invalid;
+  }
 }
 
 TEST(VideoDriverPolicyTest, ExplicitSdlDriverRemainsAuthoritative) {
@@ -195,6 +379,29 @@ TEST_F(NvidiaDriverDetectionTest, HybridGpuUsesXwaylandWhenProcIsHidden) {
   EXPECT_EQ(ResolveVideoDriverChoice(input), VideoDriverChoice::kWayland);
   input.has_explicit_sdl_driver = true;
   EXPECT_EQ(ResolveVideoDriverChoice(input), VideoDriverChoice::kSdlDefault);
+}
+
+TEST_F(NvidiaDriverDetectionTest, ReadsTheDriverVersionFromProcThenSysfs) {
+  const std::filesystem::path module_version =
+      root_ / "sys/module/nvidia/version";
+  EXPECT_EQ(NvidiaDriverVersion(proc_version_, module_version), "");
+
+  // Flatpak: /proc/driver hidden, /sys/module still there on the host.
+  std::filesystem::create_directories(module_version.parent_path());
+  std::ofstream(module_version) << "615.71.09\n";
+  EXPECT_EQ(NvidiaDriverVersion(proc_version_, module_version), "615.71.09");
+
+  std::filesystem::create_directories(proc_version_.parent_path());
+  std::ofstream(proc_version_)
+      << "NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  "
+         "570.86.16  Release Build  (dvs-builder@U16-I1-N08-12-1)\n"
+         "GCC version:  gcc version 14.2.1 20240910 (GCC)\n";
+  EXPECT_EQ(NvidiaDriverVersion(proc_version_, module_version), "570.86.16");
+
+  // Only procfs's first line names the module; an unreadable one falls back.
+  std::ofstream(proc_version_) << "NVRM version: unknown\n"
+                                  "GCC version:  gcc version 123.4 (GCC)\n";
+  EXPECT_EQ(NvidiaDriverVersion(proc_version_, module_version), "615.71.09");
 }
 
 TEST_F(NvidiaDriverDetectionTest, DoesNotTreatNouveauAsTheNvidiaDriver) {

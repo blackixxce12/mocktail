@@ -66,7 +66,8 @@ struct DiscordRpcConfig {
 };
 
 // display.server. Auto keeps the window policy's own choice (XWayland for
-// NVIDIA with direct Vulkan); the others force that SDL video driver.
+// NVIDIA with direct Vulkan unless the driver and the compositor support
+// explicit sync); the others force that SDL video driver.
 enum class DisplayServer {
   kAuto,
   kWayland,

@@ -180,9 +180,11 @@ TEST(RuntimeConfigBootstrapTest,
             "# Boolean (default: false): render at physical display-pixel density instead\n  "
             "# of the logical desktop resolution. Enable only for sharper high-DPI output.\n  "
             "high_dpi: false",
-           "# or x11. auto prefers Wayland but uses X11 (XWayland) for NVIDIA "
-           "with direct\n  # Vulkan. SDL_VIDEODRIVER, when set, still takes "
-           "precedence.\n  server: auto",
+           "# or x11. auto prefers Wayland. NVIDIA with direct Vulkan gets it "
+           "only with\n  # driver 555 or newer, a desktop that offers explicit "
+           "sync and no second\n  # GPU, and X11 (XWayland) otherwise. "
+           "SDL_VIDEODRIVER, when set, still takes\n  # precedence.\n  "
+           "server: auto",
            "# String (default: remember): window state at start: remember (the "
            "mode the\n  # last session ended in), windowed, maximized, or "
            "fullscreen.\n  start_mode: remember",
