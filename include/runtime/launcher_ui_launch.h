@@ -82,7 +82,11 @@ struct LauncherUiLaunchOptions {
 // the MOCKTAIL_CONFIG_FILE, MOCKTAIL_LAUNCHER_ENV_OVERRIDES,
 // MOCKTAIL_LAUNCHER_CONFIG_CREATED and MOCKTAIL_LAUNCHER_RESULT_FD entries.
 // MOCKTAIL_* paths and the user's own variables stay: the window needs them
-// to find helpers and to show what overrides a setting.
+// to find helpers and to show what overrides a setting. Two never reach it:
+// MOCKTAIL_LAUNCHER_DONE (launcher_policy.h), which only mocktail's own
+// re-executions may inherit, and the session in a non-empty
+// MOCKTAIL_ROBLOX_COOKIES, which becomes "1" (the window only checks that
+// one is given).
 std::vector<std::string> BuildLauncherUiEnvironment(
     const char* const* current_environment,
     const LauncherUiLaunchOptions& options);

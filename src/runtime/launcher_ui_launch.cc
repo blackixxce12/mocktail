@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "runtime/host_launch_environment.h"
+#include "runtime/launcher_policy.h"
 
 #ifndef MOCKTAIL_INSTALL_LIBDIR
 #define MOCKTAIL_INSTALL_LIBDIR "lib"
@@ -38,6 +39,12 @@ constexpr std::size_t kMaximumLineBytes = 64;
 constexpr int kExitPollMilliseconds = 200;
 
 constexpr std::string_view kMocktailPrefix = "MOCKTAIL_";
+// A Roblox session given directly (research/auth.md 5.5.6). The window only
+// checks that it is set (accounts_model.cc AccountOverrideVariables), so it
+// gets a stand-in: everything the window opens starts from its environment
+// and would keep the session long after Mocktail exits.
+constexpr std::string_view kSessionVariable = "MOCKTAIL_ROBLOX_COOKIES";
+constexpr std::string_view kSessionStandIn = "MOCKTAIL_ROBLOX_COOKIES=1";
 
 bool IsExecutableRegularFile(const std::filesystem::path& path) {
   std::error_code error;
@@ -159,6 +166,10 @@ std::vector<std::string> BuildLauncherUiEnvironment(
       kLauncherUiEnvOverridesVariable,
       kLauncherUiConfigCreatedVariable,
       kLauncherUiResultFdVariable,
+      // Only mocktail's own re-executions must see it. A program the window
+      // opens would pass it on, and a mocktail started from there would
+      // skip the window even with --launcher (DecideLauncher).
+      kLauncherDecidedVariable,
   };
   std::vector<std::string> environment;
   for (const char* const* entry = current_environment;
@@ -168,6 +179,10 @@ std::vector<std::string> BuildLauncherUiEnvironment(
     if (name.empty() ||
         std::find(std::begin(replaced), std::end(replaced), name) !=
             std::end(replaced)) {
+      continue;
+    }
+    if (name == kSessionVariable && text.size() > kSessionVariable.size() + 1) {
+      environment.emplace_back(kSessionStandIn);
       continue;
     }
     if (IsGameOnlyVariable(name)) {

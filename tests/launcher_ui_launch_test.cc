@@ -318,6 +318,39 @@ TEST(LauncherUiLaunchTest, BuildsTheHelperEnvironment) {
   EXPECT_TRUE(Contains(plain, "MOCKTAIL_LAUNCHER_CONFIG_CREATED=0"));
 }
 
+// Whatever the window opens (a file manager, an editor) starts from its
+// environment. Mocktail's "already decided" marker made a mocktail started
+// from such a program skip the window, even with --launcher; the session
+// given in MOCKTAIL_ROBLOX_COOKIES stayed in it after Mocktail exited.
+TEST(LauncherUiLaunchTest, LeavesOutTheDecisionAndTheSessionValue) {
+  const char* current[] = {
+      "PATH=/usr/bin",
+      "MOCKTAIL_LAUNCHER_DONE=1",
+      "MOCKTAIL_ROBLOX_COOKIES=.ROBLOSECURITY=test-session-value",
+      nullptr,
+  };
+  LauncherUiLaunchOptions options;
+  options.config_file = "/tmp/config.yaml";
+  options.original_environment = {
+      "PATH=/usr/bin",
+      "MOCKTAIL_ROBLOX_COOKIES=.ROBLOSECURITY=test-session-value",
+  };
+  const std::vector<std::string> environment =
+      BuildLauncherUiEnvironment(current, options);
+  EXPECT_FALSE(HasName(environment, "MOCKTAIL_LAUNCHER_DONE"));
+  // The window only needs to know that a session is given
+  // (accounts_model.cc AccountOverrideVariables).
+  EXPECT_TRUE(Contains(environment, "MOCKTAIL_ROBLOX_COOKIES=1"));
+  for (const std::string& entry : environment) {
+    EXPECT_EQ(entry.find("test-session-value"), std::string::npos) << entry;
+  }
+
+  // An empty value gives no session, and stays empty.
+  const char* empty[] = {"MOCKTAIL_ROBLOX_COOKIES=", nullptr};
+  EXPECT_TRUE(Contains(BuildLauncherUiEnvironment(empty, options),
+                       "MOCKTAIL_ROBLOX_COOKIES="));
+}
+
 TEST(LauncherUiLaunchTest, HelperReceivesTheEnvironment) {
   FakeLauncherHelper fake;
   const char* current[] = {"PATH=/usr/bin:/bin", "FAKE_MODE=quit", nullptr};
